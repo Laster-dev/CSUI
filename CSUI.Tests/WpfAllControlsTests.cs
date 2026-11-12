@@ -18,8 +18,10 @@ using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using static CSUI.Tests.TestHelpers;
 
@@ -64,6 +66,7 @@ internal static class WpfAllControlsTests
         TestBatch6NavigationInkDocumentsAndHosting();
         TestBatch7MessageBoxFileDialogsGlyphsAndRibbon();
         TestAero2AuthenticDefaultThemes();
+        TestAero2BehaviorAndTriggers();
     }
 
     private static void TestShapesAndGpuRendering()
@@ -703,6 +706,275 @@ internal static class WpfAllControlsTests
         Assert(FindVisualPart<ContentPresenter>(exp, "ExpandSite") != null, "Aero2 Expander resolves 'ExpandSite'");
 
         Pass("CTRL-9. Authentic Aero2 Default Themes & ControlTemplate PART_* Wiring");
+    }
+
+    private sealed class TestToggleCommand : ICommand
+    {
+        private bool _canExecute;
+
+        public TestToggleCommand(bool canExecute) => _canExecute = canExecute;
+
+        public bool CanExecuteResult
+        {
+            get => _canExecute;
+            set
+            {
+                if (_canExecute != value)
+                {
+                    _canExecute = value;
+                    CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+                }
+            }
+        }
+
+        public event EventHandler? CanExecuteChanged;
+        public bool CanExecute(object? parameter) => _canExecute;
+        public void Execute(object? parameter) { }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private static void PumpDispatcher(int milliseconds = 25)
+    {
+        var frame = new DispatcherFrame();
+        var timer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(milliseconds),
+            DispatcherPriority.Background,
+            (s, _) =>
+            {
+                ((DispatcherTimer)s!).Stop();
+                frame.Continue = false;
+            },
+            Dispatcher.CurrentDispatcher);
+        timer.Start();
+        Dispatcher.PushFrame(frame);
+    }
+
+    private static void TestAero2BehaviorAndTriggers()
+    {
+        // 1. TextBox: auto-sizing inside Grid (300x100) must not stretch to 300px when auto-sized
+        var grid = new Grid { Width = 300, Height = 100 };
+        var tbAuto = new TextBox
+        {
+            Text = "Hi",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top
+        };
+        grid.Children.Add(tbAuto);
+        grid.Measure(new Size(300, 100));
+        grid.Arrange(new Rect(0, 0, 300, 100));
+        Assert(tbAuto.ActualWidth > 0 && tbAuto.ActualWidth < 200,
+            $"Auto-sized TextBox in 300x100 Grid should not stretch to 300px, got ActualWidth={tbAuto.ActualWidth}");
+
+        var host = new StackPanel();
+        T LayoutControl<T>(T c, double w, double h) where T : FrameworkElement
+        {
+            host.Children.Add(c);
+            c.Measure(new Size(w, h));
+            c.Arrange(new Rect(0, 0, w, h));
+            return c;
+        }
+
+        // Border Padding applied & SelectionBrush / SelectionTextBrush non-null
+        var tbPadded = LayoutControl(new TextBox
+        {
+            Text = "Hello",
+            Padding = new Thickness(10, 6, 10, 6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top
+        }, 300, 100);
+        var tbBorder = FindVisualPart<Border>(tbPadded, "border");
+        Assert(tbBorder != null, "TextBox template must contain 'border'");
+        AssertEqual(tbBorder!.Padding, new Thickness(10, 6, 10, 6), "TextBox Border Padding");
+        Assert(tbPadded.SelectionBrush != null, "TextBox SelectionBrush must be non-null");
+        Assert(tbPadded.SelectionTextBrush != null, "TextBox SelectionTextBrush must be non-null");
+
+        // IsEnabled=false sets border Opacity=0.56
+        tbPadded.IsEnabled = false;
+        AssertNear(tbBorder.Opacity, 0.56, 0.001, "Disabled TextBox border Opacity == 0.56");
+        tbPadded.IsEnabled = true;
+
+        // TextWrapping="Wrap" wraps text to narrower height > single line
+        string longText = "The quick brown fox jumps over the lazy dog repeatedly in a narrow box.";
+        var tbSingle = new TextBox { Text = longText, TextWrapping = TextWrapping.NoWrap, Width = 100 };
+        var tbWrap = new TextBox { Text = longText, TextWrapping = TextWrapping.Wrap, Width = 100 };
+        host.Children.Add(tbSingle);
+        host.Children.Add(tbWrap);
+        tbSingle.Measure(new Size(100, 1000));
+        tbWrap.Measure(new Size(100, 1000));
+        Assert(tbWrap.DesiredSize.Height > tbSingle.DesiredSize.Height,
+            $"Wrapped TextBox height ({tbWrap.DesiredSize.Height}) should exceed single-line height ({tbSingle.DesiredSize.Height})");
+
+        // IsMouseOver / IsKeyboardFocused triggers update border.BorderBrush to #FF7EB4EA / #FF569DE5
+        var hwndParams = new HwndSourceParameters("CTRL10_Host")
+        {
+            Width = 320,
+            Height = 200,
+            PositionX = -32000,
+            PositionY = -32000,
+            WindowStyle = unchecked((int)0x90000000) // WS_POPUP | WS_VISIBLE (offscreen)
+        };
+        using (var hwndSource = new HwndSource(hwndParams))
+        {
+            var hostGrid = new Grid { Width = 300, Height = 180 };
+            var tbTrigger = new TextBox
+            {
+                Text = "FocusAndHover",
+                Width = 160,
+                Height = 30,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            var rtb = new RichTextBox
+            {
+                Width = 160,
+                Height = 60,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 40, 0, 0)
+            };
+            rtb.AppendText("RichTextBox content");
+            hostGrid.Children.Add(tbTrigger);
+            hostGrid.Children.Add(rtb);
+            hwndSource.RootVisual = hostGrid;
+            PumpDispatcher();
+
+            var trigBorder = FindVisualPart<Border>(tbTrigger, "border");
+            Assert(trigBorder != null, "Trigger TextBox must have 'border'");
+
+            // Simulate mouse move over tbTrigger center (80, 15) -> WM_SETCURSOR (0x0020) + WM_MOUSEMOVE (0x0200)
+            SendMessage(hwndSource.Handle, 0x0020, hwndSource.Handle, new IntPtr((0x0200 << 16) | 1));
+            IntPtr lParam = new IntPtr((15 << 16) | 80);
+            SendMessage(hwndSource.Handle, 0x0200, IntPtr.Zero, lParam);
+            PumpDispatcher(10);
+            if (tbTrigger.IsMouseOver)
+            {
+                var hoverBrush = trigBorder!.BorderBrush as SolidColorBrush;
+                Assert(hoverBrush != null && hoverBrush.Color == Color.FromArgb(0xFF, 0x7E, 0xB4, 0xEA),
+                    $"Expected MouseOver BorderBrush #FF7EB4EA, got {hoverBrush?.Color}");
+            }
+
+            // Keyboard focus -> IsKeyboardFocused trigger updates BorderBrush to #FF569DE5
+            bool focused = tbTrigger.Focus();
+            Assert(focused || tbTrigger.IsKeyboardFocused, "TextBox.Focus() should succeed inside HwndSource");
+            Assert(tbTrigger.IsKeyboardFocused, "TextBox.IsKeyboardFocused should be true after Focus()");
+            var focusBrush = trigBorder!.BorderBrush as SolidColorBrush;
+            Assert(focusBrush != null && focusBrush.Color == Color.FromArgb(0xFF, 0x56, 0x9D, 0xE5),
+                $"Expected KeyboardFocused BorderBrush #FF569DE5, got {focusBrush?.Color}");
+
+            // RichTextBox Focus + hit-test
+            Assert(rtb.Focusable, "RichTextBox must be Focusable");
+            rtb.Focus();
+            Assert(rtb.IsKeyboardFocused, "RichTextBox.IsKeyboardFocused should be true after Focus()");
+            HitTestResult? rtbHit = VisualTreeHelper.HitTest(rtb, new Point(20, 20));
+            Assert(rtbHit != null, "VisualTreeHelper.HitTest on RichTextBox must return non-null");
+            IInputElement? rtbInputHit = rtb.InputHitTest(new Point(20, 20));
+            Assert(rtbInputHit != null, "RichTextBox.InputHitTest must return non-null");
+            Assert(rtb.GetPositionFromPoint(new Point(20, 20), true) != null, "RichTextBox.GetPositionFromPoint must return non-null");
+        }
+
+        // PasswordBox CaretIndex & SelectAll
+        var pb = new PasswordBox { Password = "secret", Width = 140, Height = 28 };
+        pb.Measure(new Size(140, 28));
+        pb.Arrange(new Rect(0, 0, 140, 28));
+        pb.CaretIndex = 3;
+        AssertEqual(pb.CaretIndex, 3, "PasswordBox CaretIndex set to 3");
+        pb.CaretIndex = 99;
+        AssertEqual(pb.CaretIndex, 6, "PasswordBox CaretIndex clamps to Password.Length");
+        pb.SelectAll();
+        AssertEqual(pb.CaretIndex, 6, "PasswordBox SelectAll moves CaretIndex to end");
+
+        // 2. ButtonBase / Button: IsEnabledCore respects CommandDisabled without clobbering local IsEnabled
+        var cmd = new TestToggleCommand(false);
+        var cmdBtn = new Button { Content = "Cmd", Command = cmd, Width = 100, Height = 30 };
+        cmdBtn.Measure(new Size(100, 30));
+        cmdBtn.Arrange(new Rect(0, 0, 100, 30));
+        Assert(!cmdBtn.IsEnabled, "Button should be disabled when Command.CanExecute() == false");
+        cmd.CanExecuteResult = true;
+        Assert(cmdBtn.IsEnabled, "Button should re-enable when Command.CanExecute() becomes true (local IsEnabled preserved)");
+        cmdBtn.IsEnabled = false;
+        cmd.CanExecuteResult = false;
+        cmd.CanExecuteResult = true;
+        Assert(!cmdBtn.IsEnabled, "Button with local IsEnabled=false must stay disabled even when Command.CanExecute() == true");
+
+        // ToggleButton IsChecked triggers state
+        var toggle = new ToggleButton { Content = "Toggle", Width = 100, Height = 30 };
+        int checkedCount = 0;
+        toggle.Checked += (_, _) => checkedCount++;
+        LayoutControl(toggle, 100, 30);
+        toggle.IsChecked = true;
+        AssertEqual(toggle.IsChecked, true, "ToggleButton IsChecked == true");
+        AssertEqual(checkedCount, 1, "ToggleButton Checked event fired");
+
+        var chk = LayoutControl(new CheckBox { Content = "Check", Width = 100, Height = 30 }, 100, 30);
+        var optMark = FindVisualPart<System.Windows.Shapes.Path>(chk, "optionMark");
+        Assert(optMark != null, "CheckBox must resolve 'optionMark'");
+        AssertNear(optMark!.Opacity, 0.0, 0.001, "Unchecked CheckBox optionMark Opacity == 0");
+        chk.IsChecked = true;
+        AssertNear(optMark.Opacity, 1.0, 0.001, "Checked CheckBox optionMark Opacity == 1");
+
+        // ProgressBar PART_Indicator ActualWidth/Width reflects Value/Maximum (50/100 -> ~half width)
+        var prog = LayoutControl(new ProgressBar { Minimum = 0, Maximum = 100, Value = 50, Width = 200, Height = 20 }, 200, 20);
+        var progTrack = FindVisualPart<FrameworkElement>(prog, "PART_Track");
+        var progIndicator = FindVisualPart<FrameworkElement>(prog, "PART_Indicator");
+        Assert(progTrack != null && progIndicator != null, "ProgressBar PART_Track and PART_Indicator must exist");
+        Assert(progTrack!.ActualWidth > 150, $"ProgressBar PART_Track ActualWidth expected > 150, got {progTrack.ActualWidth}");
+        AssertNear(progIndicator!.Width, progTrack.ActualWidth * 0.5, 2.0, "ProgressBar PART_Indicator.Width == ~half track width");
+        AssertNear(progIndicator.ActualWidth, progTrack.ActualWidth * 0.5, 2.0, "ProgressBar PART_Indicator.ActualWidth == ~half track width");
+
+        // Slider PART_SelectionRange updates when IsSelectionRangeEnabled=true and Thumb drag with IsSnapToTickEnabled=true accumulates deltas
+        var slider = LayoutControl(new Slider
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Value = 0,
+            SelectionStart = 20,
+            SelectionEnd = 60,
+            IsSelectionRangeEnabled = true,
+            TickFrequency = 10,
+            IsSnapToTickEnabled = true,
+            Width = 200,
+            Height = 30
+        }, 200, 30);
+        var selRange = FindVisualPart<FrameworkElement>(slider, "PART_SelectionRange");
+        Assert(selRange != null, "Slider PART_SelectionRange must exist");
+        AssertEqual(selRange!.Visibility, Visibility.Visible, "Slider PART_SelectionRange Visible when IsSelectionRangeEnabled=true");
+        Assert(selRange.Width > 0, $"Slider PART_SelectionRange.Width expected > 0, got {selRange.Width}");
+
+        var sliderTrack = FindVisualPart<Track>(slider, "PART_Track");
+        Assert(sliderTrack?.Thumb != null, "Slider PART_Track.Thumb must exist");
+        var thumb = sliderTrack!.Thumb!;
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        // Each 8px delta on ~190px track is ~4.2 units; 3 deltas (~12.6 units) must accumulate past TickFrequency=10 and snap to 10
+        thumb.RaiseEvent(new DragDeltaEventArgs(8, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(8, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(8, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragCompletedEventArgs(24, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        AssertNear(slider.Value, 10.0, 0.001, "Slider Thumb drag with IsSnapToTickEnabled=true accumulates deltas cleanly to snap to 10");
+
+        // ScrollBar has VisualChildrenCount == 1 when templated
+        var sbar = LayoutControl(new ScrollBar { Orientation = Orientation.Vertical, Maximum = 100, Width = 20, Height = 140 }, 20, 140);
+        AssertEqual(VisualTreeHelper.GetChildrenCount(sbar), 1, "Templated ScrollBar VisualChildrenCount == 1");
+
+        // 3. DataTrigger / PropertyPath: Aero2 DataTriggers with static CLR properties and Storyboard PropertyPath DP parameters
+        var pp1 = new PropertyPath("(Border.Background).(SolidColorBrush.Color)");
+        var pp2 = new PropertyPath("(0).(1)", Control.BackgroundProperty, SolidColorBrush.ColorProperty);
+        Assert(pp1.Path == "(Border.Background).(SolidColorBrush.Color)", "PropertyPath string resolves");
+        Assert(pp2.PathParameters.Count == 2, "PropertyPath DP parameters resolve");
+
+        var sb = new Storyboard();
+        var anim = new ColorAnimation(Colors.Red, Colors.Blue, TimeSpan.FromMilliseconds(100));
+        Storyboard.SetTargetProperty(anim, pp2);
+        sb.Children.Add(anim);
+        AssertEqual(sb.Children.Count, 1, "Storyboard with PropertyPath DP parameters constructed without throwing");
+
+        // Verify Aero2 TextBox & Button styles (which contain DataTriggers with static CLR properties) instantiate cleanly
+        var dtTb = LayoutControl(new TextBox { Text = "DataTriggerTest" }, 120, 30);
+        var dtBtn = LayoutControl(new Button { Content = "DataTriggerBtn" }, 120, 30);
+        Assert(dtTb.Template != null && dtBtn.Template != null, "Aero2 TextBox and Button styles with DataTriggers resolve without throwing");
+
+        Pass("CTRL-10. Aero2 Visual/Trigger Behavior, Layout, Input, ProgressBar, Slider, ScrollBar & PropertyPath");
     }
 
     private static bool HasNonBackgroundPixels(byte[] pixels, int width, int height, int stride)
