@@ -4,6 +4,7 @@
 #nullable disable
 
 using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -138,12 +139,14 @@ namespace System.Windows.Controls
                 if (e.DeltaPan.Y != 0 && sv.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
                 {
                     double target = Math.Clamp(sv.VerticalOffset - e.DeltaPan.Y, 0, Math.Max(0, sv.ExtentHeight - sv.ViewportHeight));
+                    sv._targetVerticalOffset = target;
                     sv.ApplyVerticalOffset(target);
                     e.Handled = true;
                 }
                 if (e.DeltaPan.X != 0 && sv.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled)
                 {
                     double target = Math.Clamp(sv.HorizontalOffset - e.DeltaPan.X, 0, Math.Max(0, sv.ExtentWidth - sv.ViewportWidth));
+                    sv._targetHorizontalOffset = target;
                     sv.ApplyHorizontalOffset(target);
                     e.Handled = true;
                 }
@@ -230,7 +233,10 @@ namespace System.Windows.Controls
         // Smooth physics inertia state
         private double _targetVerticalOffset;
         private double _targetHorizontalOffset;
-        private DispatcherTimer _smoothTimer;
+        private bool _isSmoothScrollingActive;
+        private bool _isFirstSmoothFrame;
+        private long _lastSmoothTickTimestamp;
+        private RectangleGeometry _contentClip;
 
         public ScrollViewer()
         {
@@ -242,8 +248,14 @@ namespace System.Windows.Controls
 
             _hScrollBar.Scroll += OnHScroll;
             _vScrollBar.Scroll += OnVScroll;
+            Unloaded += OnScrollViewerUnloaded;
 
             ClipToBounds = true;
+        }
+
+        private void OnScrollViewerUnloaded(object sender, RoutedEventArgs e)
+        {
+            StopSmoothScroll();
         }
 
         protected override void OnContentChanged(object oldContent, object newContent)
@@ -449,7 +461,20 @@ namespace System.Windows.Controls
                     double arrangeW = Math.Max(vpW, ExtentWidth);
                     double arrangeH = Math.Max(vpH, ExtentHeight);
                     content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, arrangeW, arrangeH));
-                    content.Clip = new RectangleGeometry(new Rect(HorizontalOffset, VerticalOffset, vpW, vpH));
+
+                    Rect clipRect = new Rect(HorizontalOffset, VerticalOffset, vpW, vpH);
+                    if (_contentClip == null)
+                    {
+                        _contentClip = new RectangleGeometry(clipRect);
+                    }
+                    else if (_contentClip.Rect != clipRect)
+                    {
+                        _contentClip.Rect = clipRect;
+                    }
+                    if (!ReferenceEquals(content.Clip, _contentClip))
+                    {
+                        content.Clip = _contentClip;
+                    }
                 }
             }
 
@@ -467,11 +492,37 @@ namespace System.Windows.Controls
 
         private void OnHScroll(object sender, ScrollEventArgs e)
         {
+            if (e.ScrollEventType == ScrollEventType.ThumbTrack ||
+                e.ScrollEventType == ScrollEventType.ThumbPosition ||
+                e.ScrollEventType == ScrollEventType.EndScroll)
+            {
+                double clamped = Math.Clamp(e.NewValue, 0, Math.Max(0, ExtentWidth - ViewportWidth));
+                _targetHorizontalOffset = clamped;
+                ApplyHorizontalOffset(clamped);
+                if (Math.Abs(_targetVerticalOffset - VerticalOffset) < 0.5)
+                {
+                    StopSmoothScroll();
+                }
+                return;
+            }
             ScrollToHorizontalOffset(e.NewValue);
         }
 
         private void OnVScroll(object sender, ScrollEventArgs e)
         {
+            if (e.ScrollEventType == ScrollEventType.ThumbTrack ||
+                e.ScrollEventType == ScrollEventType.ThumbPosition ||
+                e.ScrollEventType == ScrollEventType.EndScroll)
+            {
+                double clamped = Math.Clamp(e.NewValue, 0, Math.Max(0, ExtentHeight - ViewportHeight));
+                _targetVerticalOffset = clamped;
+                ApplyVerticalOffset(clamped);
+                if (Math.Abs(_targetHorizontalOffset - HorizontalOffset) < 0.5)
+                {
+                    StopSmoothScroll();
+                }
+                return;
+            }
             ScrollToVerticalOffset(e.NewValue);
         }
 
@@ -481,7 +532,14 @@ namespace System.Windows.Controls
             if (IsSmoothScrollingEnabled)
             {
                 _targetVerticalOffset = offset;
-                StartSmoothTimer();
+                if (Math.Abs(offset - VerticalOffset) >= 0.5)
+                {
+                    StartSmoothScroll();
+                }
+                else
+                {
+                    ApplyVerticalOffset(offset);
+                }
             }
             else
             {
@@ -496,7 +554,14 @@ namespace System.Windows.Controls
             if (IsSmoothScrollingEnabled)
             {
                 _targetHorizontalOffset = offset;
-                StartSmoothTimer();
+                if (Math.Abs(offset - HorizontalOffset) >= 0.5)
+                {
+                    StartSmoothScroll();
+                }
+                else
+                {
+                    ApplyHorizontalOffset(offset);
+                }
             }
             else
             {
@@ -566,12 +631,25 @@ namespace System.Windows.Controls
             if (e.Handled) return;
 
             double delta = e.Delta;
-            double step = (delta / 120.0) * 48.0;
+            double step = (delta / 120.0) * 64.0;
 
             if (IsSmoothScrollingEnabled)
             {
-                _targetVerticalOffset = Math.Clamp(_targetVerticalOffset - step, 0, Math.Max(0, ExtentHeight - ViewportHeight));
-                StartSmoothTimer();
+                if (!_isSmoothScrollingActive)
+                {
+                    _targetVerticalOffset = VerticalOffset;
+                }
+                double maxV = Math.Max(0, ExtentHeight - ViewportHeight);
+                double nextTarget = Math.Clamp(_targetVerticalOffset - step, 0, maxV);
+                _targetVerticalOffset = nextTarget;
+                if (Math.Abs(nextTarget - VerticalOffset) >= 0.5)
+                {
+                    StartSmoothScroll();
+                }
+                else if (nextTarget != VerticalOffset)
+                {
+                    ApplyVerticalOffset(nextTarget);
+                }
             }
             else
             {
@@ -581,46 +659,100 @@ namespace System.Windows.Controls
             e.Handled = true;
         }
 
-        private void StartSmoothTimer()
+        private void StartSmoothScroll()
         {
-            if (_smoothTimer == null)
+            if (!_isSmoothScrollingActive)
             {
-                _smoothTimer = new DispatcherTimer(DispatcherPriority.Render)
-                {
-                    Interval = TimeSpan.FromMilliseconds(16) // 60 FPS tick
-                };
-                _smoothTimer.Tick += OnSmoothTick;
+                _isSmoothScrollingActive = true;
+                _isFirstSmoothFrame = true;
+                _lastSmoothTickTimestamp = Stopwatch.GetTimestamp();
+                CompositionTarget.Rendering += OnSmoothRenderFrame;
             }
+            MediaContext.From(Dispatcher)?.PostRender();
+        }
 
-            if (!_smoothTimer.IsEnabled)
+        private void StopSmoothScroll()
+        {
+            if (_isSmoothScrollingActive)
             {
-                _smoothTimer.Start();
+                _isSmoothScrollingActive = false;
+                CompositionTarget.Rendering -= OnSmoothRenderFrame;
             }
         }
 
-        private void OnSmoothTick(object sender, EventArgs e)
+        private void OnSmoothRenderFrame(object sender, EventArgs e)
         {
+            if (!_isSmoothScrollingActive)
+            {
+                return;
+            }
+
+            long now = Stopwatch.GetTimestamp();
+            double dt;
+            if (_isFirstSmoothFrame)
+            {
+                _isFirstSmoothFrame = false;
+                dt = 1.0 / 60.0;
+            }
+            else
+            {
+                dt = (double)(now - _lastSmoothTickTimestamp) / Stopwatch.Frequency;
+                if (dt <= 0.0005)
+                {
+                    dt = 1.0 / 60.0;
+                }
+                else if (dt > 0.05)
+                {
+                    dt = 0.05;
+                }
+            }
+            _lastSmoothTickTimestamp = now;
+
+            double maxV = Math.Max(0.0, ExtentHeight - ViewportHeight);
+            double maxH = Math.Max(0.0, ExtentWidth - ViewportWidth);
+            double targetV = Math.Clamp(_targetVerticalOffset, 0.0, maxV);
+            double targetH = Math.Clamp(_targetHorizontalOffset, 0.0, maxH);
+            _targetVerticalOffset = targetV;
+            _targetHorizontalOffset = targetH;
+
             double curV = VerticalOffset;
             double curH = HorizontalOffset;
-            double diffV = _targetVerticalOffset - curV;
-            double diffH = _targetHorizontalOffset - curH;
+            double diffV = targetV - curV;
+            double diffH = targetH - curH;
 
             double friction = Math.Clamp(Friction, 0.1, 0.95);
-            double stepV = diffV * (1.0 - friction);
-            double stepH = diffH * (1.0 - friction);
+            double alpha = 1.0 - Math.Pow(friction, dt * 60.0);
 
-            bool doneV = Math.Abs(diffV) < 0.3;
-            bool doneH = Math.Abs(diffH) < 0.3;
+            bool doneV = Math.Abs(diffV) < 0.5;
+            bool doneH = Math.Abs(diffH) < 0.5;
 
-            double nextV = doneV ? _targetVerticalOffset : curV + stepV;
-            double nextH = doneH ? _targetHorizontalOffset : curH + stepH;
+            double nextV = doneV ? targetV : curV + (diffV * alpha);
+            double nextH = doneH ? targetH : curH + (diffH * alpha);
 
-            if (nextV != curV) ApplyVerticalOffset(nextV);
-            if (nextH != curH) ApplyHorizontalOffset(nextH);
+            bool changed = false;
+            if (nextV != curV)
+            {
+                ApplyVerticalOffset(nextV);
+                changed = true;
+            }
+            if (nextH != curH)
+            {
+                ApplyHorizontalOffset(nextH);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                UpdateLayout();
+            }
 
             if (doneV && doneH)
             {
-                _smoothTimer.Stop();
+                StopSmoothScroll();
+            }
+            else
+            {
+                MediaContext.From(Dispatcher)?.PostRender();
             }
         }
     }

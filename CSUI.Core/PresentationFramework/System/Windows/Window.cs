@@ -5033,7 +5033,7 @@ namespace System.Windows
                                 // activated and transitioning from activated to non-activated would be weird.
                                 //
                                 NativeMethods.WINDOWPLACEMENT placement = new NativeMethods.WINDOWPLACEMENT();
-                                placement.length = Marshal.SizeOf(placement);
+                                placement.length = Marshal.SizeOf<NativeMethods.WINDOWPLACEMENT>();
                                 UnsafeNativeMethods.GetWindowPlacement(hr, ref placement);
 
                                 if ((placement.flags & NativeMethods.WPF_RESTORETOMAXIMIZED) == NativeMethods.WPF_RESTORETOMAXIMIZED)
@@ -5809,10 +5809,7 @@ namespace System.Windows
 
             if (hMonitor != IntPtr.Zero)
             {
-                NativeMethods.MONITORINFOEX monitorInfo = new NativeMethods.MONITORINFOEX
-                {
-                    cbSize = Marshal.SizeOf<NativeMethods.MONITORINFOEX>()
-                };
+                NativeMethods.MONITORINFOEX monitorInfo = new NativeMethods.MONITORINFOEX();
 
                 SafeNativeMethods.GetMonitorInfo(new HandleRef(this, hMonitor), monitorInfo);
                 NativeMethods.RECT workAreaRect = monitorInfo.rcWork;
@@ -6780,10 +6777,7 @@ namespace System.Windows
                     get
                     {
                         IntPtr monitor;
-                        NativeMethods.MONITORINFOEX monitorInfo = new NativeMethods.MONITORINFOEX
-                        {
-                            cbSize = Marshal.SizeOf<NativeMethods.MONITORINFOEX>()
-                        };
+                        NativeMethods.MONITORINFOEX monitorInfo = new NativeMethods.MONITORINFOEX();
 
                         monitor = SafeNativeMethods.MonitorFromWindow( new HandleRef( this, Handle), NativeMethods.MONITOR_DEFAULTTONEAREST  );
                         if ( monitor != IntPtr.Zero )

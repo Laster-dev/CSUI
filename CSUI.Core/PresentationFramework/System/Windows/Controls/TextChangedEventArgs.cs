@@ -14,5 +14,17 @@ namespace System.Windows.Controls
         {
             RoutedEvent = id;
         }
+
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            if (genericHandler is TextChangedEventHandler handler)
+            {
+                handler(genericTarget, this);
+            }
+            else
+            {
+                base.InvokeEventHandler(genericHandler, genericTarget);
+            }
+        }
     }
 }

@@ -25,6 +25,18 @@ namespace System.Windows.Controls.Primitives
             VerticalOffset = verticalOffset;
             RoutedEvent = Thumb.DragStartedEvent;
         }
+
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            if (genericHandler is DragStartedEventHandler handler)
+            {
+                handler(genericTarget, this);
+            }
+            else
+            {
+                base.InvokeEventHandler(genericHandler, genericTarget);
+            }
+        }
     }
 
     public class DragDeltaEventArgs : RoutedEventArgs
@@ -37,6 +49,18 @@ namespace System.Windows.Controls.Primitives
             HorizontalChange = horizontalChange;
             VerticalChange = verticalChange;
             RoutedEvent = Thumb.DragDeltaEvent;
+        }
+
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            if (genericHandler is DragDeltaEventHandler handler)
+            {
+                handler(genericTarget, this);
+            }
+            else
+            {
+                base.InvokeEventHandler(genericHandler, genericTarget);
+            }
         }
     }
 
@@ -52,6 +76,18 @@ namespace System.Windows.Controls.Primitives
             VerticalChange = verticalChange;
             Canceled = canceled;
             RoutedEvent = Thumb.DragCompletedEvent;
+        }
+
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            if (genericHandler is DragCompletedEventHandler handler)
+            {
+                handler(genericTarget, this);
+            }
+            else
+            {
+                base.InvokeEventHandler(genericHandler, genericTarget);
+            }
         }
     }
 
@@ -80,6 +116,7 @@ namespace System.Windows.Controls.Primitives
             EventManager.RegisterRoutedEvent(nameof(DragCompleted), RoutingStrategy.Bubble, typeof(DragCompletedEventHandler), typeof(Thumb));
 
         private Point _originThumbPoint;
+        private Point _originScreenCoordPosition;
         private Point _previousScreenCoordPosition;
 
         public bool IsDragging
@@ -123,6 +160,13 @@ namespace System.Windows.Controls.Primitives
             }
         }
 
+        private Point GetDragPosition(MouseEventArgs e)
+        {
+            return PresentationSource.CriticalFromVisual(this) != null
+                ? PointToScreen(e.GetPosition(this))
+                : e.GetPosition(null);
+        }
+
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
             if (!IsDragging)
@@ -132,7 +176,8 @@ namespace System.Windows.Controls.Primitives
                 CaptureMouse();
                 IsDragging = true;
                 _originThumbPoint = e.GetPosition(this);
-                _previousScreenCoordPosition = _originThumbPoint;
+                _originScreenCoordPosition = GetDragPosition(e);
+                _previousScreenCoordPosition = _originScreenCoordPosition;
 
                 try
                 {
@@ -152,7 +197,7 @@ namespace System.Windows.Controls.Primitives
             {
                 if (e.MouseDevice.LeftButton == MouseButtonState.Pressed)
                 {
-                    Point currentPosition = e.GetPosition(this);
+                    Point currentPosition = GetDragPosition(e);
                     double horizontalChange = currentPosition.X - _previousScreenCoordPosition.X;
                     double verticalChange = currentPosition.Y - _previousScreenCoordPosition.Y;
 
@@ -195,8 +240,8 @@ namespace System.Windows.Controls.Primitives
         {
             IsDragging = false;
             RaiseEvent(new DragCompletedEventArgs(
-                _previousScreenCoordPosition.X - _originThumbPoint.X,
-                _previousScreenCoordPosition.Y - _originThumbPoint.Y,
+                _previousScreenCoordPosition.X - _originScreenCoordPosition.X,
+                _previousScreenCoordPosition.Y - _originScreenCoordPosition.Y,
                 canceled));
         }
 

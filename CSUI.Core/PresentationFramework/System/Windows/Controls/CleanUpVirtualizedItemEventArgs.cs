@@ -59,6 +59,18 @@ namespace System.Windows.Controls
             }
         }
 
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            if (genericHandler is CleanUpVirtualizedItemEventHandler handler)
+            {
+                handler(genericTarget, this);
+            }
+            else
+            {
+                base.InvokeEventHandler(genericHandler, genericTarget);
+            }
+        }
+
         private object _value;
         private UIElement _element;
         private bool _cancel;

@@ -1264,6 +1264,27 @@ internal static class MarkupTests
         var xTb = panel.Children[4] as TextBox;
         Assert(xTb != null && xTb.Text == "AOT WPF Controls" && xTb.MaxLength == 32, "Parsed TextBox from XAML");
 
+        var thumbEvents = 0;
+        var thumb = new System.Windows.Controls.Primitives.Thumb { Width = 20, Height = 20 };
+        thumb.DragStarted += (s, e) => { thumbEvents++; };
+        thumb.DragDelta += (s, e) => { thumbEvents++; };
+        thumb.DragCompleted += (s, e) => { thumbEvents++; };
+        thumb.RaiseEvent(new System.Windows.Controls.Primitives.DragStartedEventArgs(1, 2));
+        thumb.RaiseEvent(new System.Windows.Controls.Primitives.DragDeltaEventArgs(5, 8));
+        thumb.RaiseEvent(new System.Windows.Controls.Primitives.DragCompletedEventArgs(5, 8, false));
+        AssertEqual(thumbEvents, 3, "Thumb DragStarted/DragDelta/DragCompleted routed events dispatch cleanly");
+
+        var scrollEvents = 0;
+        var sb = new System.Windows.Controls.Primitives.ScrollBar { Minimum = 0, Maximum = 100 };
+        sb.Scroll += (s, e) => { scrollEvents++; };
+        sb.RaiseEvent(new System.Windows.Controls.Primitives.ScrollEventArgs(System.Windows.Controls.Primitives.ScrollEventType.ThumbTrack, 42));
+        AssertEqual(scrollEvents, 1, "ScrollBar ScrollEventHandler dispatches cleanly");
+
+        var textChangedEvents = 0;
+        xTb!.TextChanged += (s, e) => { textChangedEvents++; };
+        xTb.Text = "Updated AOT Text";
+        AssertEqual(textChangedEvents, 1, "TextBox TextChangedEventHandler dispatches cleanly");
+
         var scrollViewer = new ScrollViewer { Content = panel };
         Assert(VisualTreeHelper.GetParent(panel) == scrollViewer, "ScrollViewer Content must have ScrollViewer as Visual parent");
 
@@ -1275,6 +1296,14 @@ internal static class MarkupTests
         };
         testWin.Show();
         Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+
+        IntPtr testHwnd = new WindowInteropHelper(testWin).Handle;
+        MS.Win32.UnsafeNativeMethods.ShowWindow(new System.Runtime.InteropServices.HandleRef(testWin, testHwnd), 3 /* SW_MAXIMIZE */);
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+        Assert(testWin.WindowState == WindowState.Maximized, "ShowWindow(SW_MAXIMIZE) transitions WindowState cleanly without MonitorInfo marshal crash");
+        MS.Win32.UnsafeNativeMethods.ShowWindow(new System.Runtime.InteropServices.HandleRef(testWin, testHwnd), 9 /* SW_RESTORE */);
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+        Assert(testWin.WindowState == WindowState.Normal, "ShowWindow(SW_RESTORE) restores WindowState cleanly");
 
         Assert(PresentationSource.FromDependencyObject(xBtn) != null, "PresentationSource for control inside ScrollViewer must not be null");
 
@@ -1329,9 +1358,20 @@ internal static class MarkupTests
         Assert(viewer.ViewportHeight <= 500.0, "ScrollViewer viewport height clamped inside constraint");
         Assert(viewer.ViewportWidth <= 400.0, "ScrollViewer viewport width clamped inside constraint");
 
-        // 2. Programmatic scrolling & smooth physics interpolation
+        // 2. Programmatic scrolling & CompositionTarget.Rendering smooth physics inertia
+        var smoothWin = new Window { Width = 400, Height = 500, Content = viewer };
+        smoothWin.Show();
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+        viewer.ScrollToVerticalOffset(120.0);
+        for (int i = 0; i < 40 && Math.Abs(viewer.VerticalOffset - 120.0) > 0.01; i++)
+        {
+            Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.Background);
+        }
+        AssertNear(viewer.VerticalOffset, 120.0, 0.01, "ScrollViewer smooth scroll converges cleanly to target offset");
+        smoothWin.Close();
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+
         viewer.ScrollToVerticalOffset(600.0);
-        // Under smooth scrolling, offset begins moving towards target
         viewer.ScrollToVerticalOffset(400.0);
         viewer.LineDown();
         viewer.PageDown();

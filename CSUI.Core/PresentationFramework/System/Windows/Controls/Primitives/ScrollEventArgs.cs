@@ -38,5 +38,17 @@ namespace System.Windows.Controls.Primitives
             NewValue = newValue;
             RoutedEvent = ScrollBar.ScrollEvent;
         }
+
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            if (genericHandler is ScrollEventHandler handler)
+            {
+                handler(genericTarget, this);
+            }
+            else
+            {
+                base.InvokeEventHandler(genericHandler, genericTarget);
+            }
+        }
     }
 }
