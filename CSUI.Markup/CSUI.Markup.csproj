@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsAotCompatible>true</IsAotCompatible>
+    <WarningsAsErrors>IL2026;IL2050;IL2060;IL2070;IL2072;IL2075;IL2087;IL2091;IL3050</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CSUI.Core\CSUI.Core.csproj" />
+  </ItemGroup>
+
+</Project>
