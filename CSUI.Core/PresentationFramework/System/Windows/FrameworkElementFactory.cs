@@ -1102,11 +1102,14 @@ namespace System.Windows
 
                 // The prefix is obtained from the ContentSource property.
                 // If this is null, user is explicitly asking for no auto-aliasing.
-                object o = GetValue(ContentPresenter.ContentSourceProperty);
+                DependencyProperty cpSourceDp = ContentPresenter.ContentSourceProperty;
+                object o = (cpSourceDp != null) ? GetValue(cpSourceDp) : DependencyProperty.UnsetValue;
                 string prefix = (o == DependencyProperty.UnsetValue) ? "Content" : (string)o;
 
+                DependencyProperty cpContentDp = ContentPresenter.ContentProperty ?? ContentControl.ContentProperty;
+
                 // if Content is previously set, do nothing
-                if (!String.IsNullOrEmpty(prefix) && !IsValueDefined(ContentPresenter.ContentProperty))
+                if (!String.IsNullOrEmpty(prefix) && cpContentDp != null && !IsValueDefined(cpContentDp))
                 {
                     // find source properties, using prefix
                     Debug.Assert(_frameworkTemplate != null, "ContentPresenter is an FE and can only have a FrameworkTemplate");
@@ -1126,20 +1129,26 @@ namespace System.Windows
                     // auto-alias the Content property
                     if (dpContent != null)
                     {
-                        SetValue(ContentPresenter.ContentProperty, new TemplateBindingExtension(dpContent));
+                        SetValue(cpContentDp, new TemplateBindingExtension(dpContent));
                     }
 
                     // auto-alias the remaining properties if none of them are previously set
-                    if (!IsValueDefined(ContentPresenter.ContentTemplateProperty) &&
-                        !IsValueDefined(ContentPresenter.ContentTemplateSelectorProperty) &&
-                        !IsValueDefined(ContentPresenter.ContentStringFormatProperty))
+                    DependencyProperty cpTemplateDp = ContentPresenter.ContentTemplateProperty ?? ContentControl.ContentTemplateProperty;
+                    DependencyProperty cpSelectorDp = ContentPresenter.ContentTemplateSelectorProperty ?? ContentControl.ContentTemplateSelectorProperty;
+                    DependencyProperty cpFormatDp = ContentPresenter.ContentStringFormatProperty ?? ContentControl.ContentStringFormatProperty;
+
+                    bool templateDefined = cpTemplateDp != null && IsValueDefined(cpTemplateDp);
+                    bool selectorDefined = cpSelectorDp != null && IsValueDefined(cpSelectorDp);
+                    bool formatDefined = cpFormatDp != null && IsValueDefined(cpFormatDp);
+
+                    if (!templateDefined && !selectorDefined && !formatDefined)
                     {
-                        if (dpContentTemplate != null)
-                            SetValue(ContentPresenter.ContentTemplateProperty, new TemplateBindingExtension(dpContentTemplate));
-                        if (dpContentTemplateSelector != null)
-                            SetValue(ContentPresenter.ContentTemplateSelectorProperty, new TemplateBindingExtension(dpContentTemplateSelector));
-                        if (dpContentStringFormat != null)
-                            SetValue(ContentPresenter.ContentStringFormatProperty, new TemplateBindingExtension(dpContentStringFormat));
+                        if (dpContentTemplate != null && cpTemplateDp != null)
+                            SetValue(cpTemplateDp, new TemplateBindingExtension(dpContentTemplate));
+                        if (dpContentTemplateSelector != null && cpSelectorDp != null)
+                            SetValue(cpSelectorDp, new TemplateBindingExtension(dpContentTemplateSelector));
+                        if (dpContentStringFormat != null && cpFormatDp != null)
+                            SetValue(cpFormatDp, new TemplateBindingExtension(dpContentStringFormat));
                     }
                 }
             }

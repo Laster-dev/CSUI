@@ -946,6 +946,10 @@ namespace CSUI.Markup
             {
                 return bool.Parse(raw);
             }
+            if (targetType == typeof(char))
+            {
+                return !string.IsNullOrEmpty(raw) ? raw[0] : '\0';
+            }
             if (targetType == typeof(Color))
             {
                 return ParseColor(raw);
