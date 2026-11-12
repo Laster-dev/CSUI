@@ -64,7 +64,7 @@ namespace MS.Internal.Data
     {
         private string _error;
         public string Error => _error;
-        private void SetError(string id, params object[] args) => _error = SR.Format(SR.GetResourceString(id), args);
+        private void SetError(string format, params object[] args) => _error = SR.Format(format, args);
 
         private enum State { Init, DrillIn, Prop, Done };
         private enum IndexerState { BeginParam, ParenString, ValueString, Done }
@@ -142,7 +142,7 @@ namespace MS.Internal.Data
                             case NullChar:
                                 break;
                             default:
-                                SetError(nameof(SR.PathSyntax), _path.Substring(0, _index), _path.Substring(_index));
+                                SetError(SR.PathSyntax, _path.Substring(0, _index), _path.Substring(_index));
                                 return Array.Empty<SourceValueInfo>();
                         }
                         _state = State.Prop;
@@ -188,13 +188,13 @@ namespace MS.Internal.Data
 
             if (level > 0)
             {
-                SetError(nameof(SR.UnmatchedParen), _path.Substring(start));
+                SetError(SR.UnmatchedParen, _path.Substring(start));
                 return;
             }
 
             if (level < 0)
             {
-                SetError(nameof(SR.UnmatchedParen), _path.Substring(0, _index));
+                SetError(SR.UnmatchedParen, _path.Substring(0, _index));
                 return;
             }
 
@@ -234,7 +234,7 @@ namespace MS.Internal.Data
             {
                 if (_index >= _n)
                 {
-                    SetError(nameof(SR.UnmatchedBracket), _path.Substring(start - 1));
+                    SetError(SR.UnmatchedBracket, _path.Substring(start - 1));
                     return;
                 }
 

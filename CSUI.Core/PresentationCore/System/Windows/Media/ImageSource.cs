@@ -22,6 +22,22 @@ namespace System.Windows.Media
     {
         #region Constructor
 
+        private static bool s_typeConvertersRegistered;
+
+        static ImageSource()
+        {
+            EnsureTypeConvertersRegistered();
+        }
+
+        internal static void EnsureTypeConvertersRegistered()
+        {
+            if (s_typeConvertersRegistered)
+                return;
+            s_typeConvertersRegistered = true;
+            System.Windows.Data.TypeConverterRegistry.Register<ImageSource>(new ImageSourceConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<PixelFormat>(new PixelFormatConverter());
+        }
+
         /// <summary>
         /// Don't allow 3rd party extensibility.
         /// </summary>
@@ -86,6 +102,14 @@ namespace System.Windows.Media
         {
         }
 
+        internal virtual bool TryCopyIconPixelsBgra32(out int pixelWidth, out int pixelHeight, out byte[] bgra32Pixels)
+        {
+            pixelWidth = 0;
+            pixelHeight = 0;
+            bgra32Pixels = null;
+            return false;
+        }
+
         protected static double PixelsToDIPs(double dpi, int pixels)
         {
             // Obtain the natural size in MIL Device Independant Pixels (DIPs, or 1/96") of the bitmap.

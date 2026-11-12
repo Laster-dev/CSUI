@@ -2937,11 +2937,13 @@ namespace System.Windows.Input
             bool treeViewNavigation)
         {
             Rect sourceRect = new Rect(0, 0, 0, 0);
-            if (sourceElement != null)
+            var getViewportPos = MS.Internal.Controls.ControlFoundationHooks.GetElementViewportPositionHook;
+            var tryGetTreeHeader = MS.Internal.Controls.ControlFoundationHooks.TryGetTreeViewItemHeaderHook;
+            if (sourceElement != null && getViewportPos != null)
             {
                 // Find sourceElement's position wrt viewport.
-                ElementViewportPosition sourceElementPosition = ItemsControl.GetElementViewportPosition(viewportBoundsElement,
-                    ItemsControl.TryGetTreeViewItemHeader(sourceElement) as UIElement,
+                ElementViewportPosition sourceElementPosition = getViewportPos(viewportBoundsElement,
+                    tryGetTreeHeader != null ? tryGetTreeHeader(sourceElement) as UIElement : null,
                     direction,
                     false /*fullyVisible*/,
                     out sourceRect);
@@ -2965,18 +2967,20 @@ namespace System.Windows.Input
                 if (IsGroupElementEligible(currElement, treeViewNavigation))
                 {
                     DependencyObject currentRectElement = currElement;
-                    if (treeViewNavigation)
+                    if (treeViewNavigation && tryGetTreeHeader != null)
                     {
-                        currentRectElement = ItemsControl.TryGetTreeViewItemHeader(currElement);
+                        currentRectElement = tryGetTreeHeader(currElement);
                     }
 
-                    Rect currentRect;
-                    ElementViewportPosition currentViewportPosition = ItemsControl.GetElementViewportPosition(
-                        viewportBoundsElement,
-                        currentRectElement as UIElement,
-                        direction,
-                        false /*fullyVisible*/,
-                        out currentRect);
+                    Rect currentRect = default;
+                    ElementViewportPosition currentViewportPosition = getViewportPos != null
+                        ? getViewportPos(
+                            viewportBoundsElement,
+                            currentRectElement as UIElement,
+                            direction,
+                            false /*fullyVisible*/,
+                            out currentRect)
+                        : ElementViewportPosition.None;
 
                     // Compute directionScore of the current element. Higher the
                     // directionScore more suitable the element is.

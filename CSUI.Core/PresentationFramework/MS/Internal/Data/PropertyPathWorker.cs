@@ -342,7 +342,7 @@ namespace MS.Internal.Data
             for (int k = 1; k < _arySVS.Length; ++k)
             {
                 object oldValue = BindingExpression.GetReference(_arySVS[k].item);
-                if (!ItemsControl.EqualsEx(oldValue, RawValue(k - 1)))
+                if (!MS.Internal.Helper.EqualsEx(oldValue, RawValue(k - 1)))
                 {
                     UpdateSourceValueState(k - 1, null);
                     return;
@@ -863,7 +863,7 @@ namespace MS.Internal.Data
                     item = BindingExpression.StaticSource;
                 }
 
-                if (!ItemsControl.EqualsEx(item, BindingExpression.GetReference(_arySVS[level].item))
+                if (!MS.Internal.Helper.EqualsEx(item, BindingExpression.GetReference(_arySVS[level].item))
                     && !IsNonIdempotentProperty(level - 1))
                 {
                     return false;

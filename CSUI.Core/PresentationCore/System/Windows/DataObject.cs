@@ -96,7 +96,14 @@ namespace System.Windows
         #region Fields & Constructors
 
         private const string JsonPayloadPrefix = "{\"$csui_json\":true,\"payload\":";
-        private static readonly string s_bitmapSourceTypeName = typeof(BitmapSource).FullName;
+        private const string BitmapSourceTypeName = "System.Windows.Media.Imaging.BitmapSource";
+
+        internal static Func<object, bool> IsBitmapSourceHook { get; set; }
+        internal static Func<Type, bool> IsBitmapSourceTypeHook { get; set; }
+        internal static Func<IntPtr, object> CreateBitmapSourceFromHBitmapHook { get; set; }
+        internal static Func<byte[], object> DecodeBitmapSourceFromDibBytesHook { get; set; }
+        internal static Func<object, IntPtr> AllocHBitmapFromBitmapSourceHook { get; set; }
+        internal static Func<object, IntPtr> AllocDibHGlobalFromBitmapSourceHook { get; set; }
 
         private sealed class DataStoreEntry
         {
@@ -320,7 +327,7 @@ namespace System.Windows
             {
                 SetData(DataFormats.UnicodeText, data, autoConvert: true);
             }
-            else if (data is BitmapSource)
+            else if (IsBitmapSourceHook?.Invoke(data) == true)
             {
                 SetData(DataFormats.Bitmap, data, autoConvert: true);
             }
@@ -377,7 +384,7 @@ namespace System.Windows
                 return TryGetData(DataFormats.UnicodeText, resolver: null, autoConvert: true, out data);
             }
 
-            if (typeof(T) == typeof(BitmapSource) || typeof(BitmapSource).IsAssignableFrom(typeof(T)))
+            if (IsBitmapSourceTypeHook?.Invoke(typeof(T)) == true)
             {
                 return TryGetData(DataFormats.Bitmap, resolver: null, autoConvert: true, out data);
             }
@@ -616,7 +623,11 @@ namespace System.Windows
         }
 
         /// <summary>Retrieves an image from the data object.</summary>
-        public BitmapSource GetImage() => GetData(DataFormats.Bitmap, autoConvert: true) as BitmapSource;
+        public BitmapSource GetImage()
+        {
+            RuntimeHelpers.RunClassConstructor(typeof(BitmapSource).TypeHandle);
+            return GetData(DataFormats.Bitmap, autoConvert: true) as BitmapSource;
+        }
 
         /// <summary>Retrieves Unicode text from the data object.</summary>
         public string GetText() => GetText(TextDataFormat.UnicodeText);
@@ -788,13 +799,13 @@ namespace System.Windows
 
             if (string.Equals(format, DataFormats.Bitmap, StringComparison.Ordinal) ||
                 string.Equals(format, DataFormats.Dib, StringComparison.Ordinal) ||
-                string.Equals(format, s_bitmapSourceTypeName, StringComparison.Ordinal))
+                string.Equals(format, BitmapSourceTypeName, StringComparison.Ordinal))
             {
                 return new[]
                 {
                     DataFormats.Bitmap,
                     DataFormats.Dib,
-                    s_bitmapSourceTypeName,
+                    BitmapSourceTypeName,
                 };
             }
 
@@ -918,7 +929,7 @@ namespace System.Windows
             {
                 if (med.tymed == (uint)TYMED.TYMED_GDI && med.unionValue != IntPtr.Zero)
                 {
-                    return Imaging.CreateBitmapSourceFromHBitmap(med.unionValue, IntPtr.Zero, Int32Rect.Empty, null);
+                    return CreateBitmapSourceFromHBitmapHook?.Invoke(med.unionValue);
                 }
 
                 if (med.tymed == (uint)TYMED.TYMED_HGLOBAL && med.unionValue != IntPtr.Zero)
@@ -942,7 +953,7 @@ namespace System.Windows
                     if (id == NativeMethods.CF_DIB)
                     {
                         byte[] dibBytes = OleComBridge.ReadBytesFromHGlobal(med.unionValue);
-                        return OleComBridge.DecodeBitmapSourceFromDibBytes(dibBytes);
+                        return DecodeBitmapSourceFromDibBytesHook?.Invoke(dibBytes);
                     }
 
                     if (string.Equals(format, DataFormats.Html, StringComparison.Ordinal) ||
@@ -1343,9 +1354,10 @@ namespace System.Windows
 
                 if (format.cfFormat == NativeMethods.CF_BITMAP &&
                     (format.tymed & (uint)TYMED.TYMED_GDI) != 0 &&
-                    data is BitmapSource bmpSource)
+                    IsBitmapSourceHook?.Invoke(data) == true &&
+                    AllocHBitmapFromBitmapSourceHook != null)
                 {
-                    IntPtr hBitmap = OleComBridge.AllocHBitmapFromBitmapSource(bmpSource);
+                    IntPtr hBitmap = AllocHBitmapFromBitmapSourceHook(data);
                     medium.tymed = (uint)TYMED.TYMED_GDI;
                     medium.unionValue = hBitmap;
                     medium.pUnkForRelease = null;
@@ -1420,9 +1432,11 @@ namespace System.Windows
                     return OleComBridge.AllocHGlobalFromFileDropList(sc);
                 }
 
-                if (cfFormat == NativeMethods.CF_DIB && data is BitmapSource dibBmp)
+                if (cfFormat == NativeMethods.CF_DIB &&
+                    IsBitmapSourceHook?.Invoke(data) == true &&
+                    AllocDibHGlobalFromBitmapSourceHook != null)
                 {
-                    return OleComBridge.AllocDibHGlobalFromBitmapSource(dibBmp);
+                    return AllocDibHGlobalFromBitmapSourceHook(data);
                 }
 
                 if (data is string textPayload)

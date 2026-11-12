@@ -269,7 +269,7 @@ namespace MS.Internal.Data
                 else
                 {
                     // current item is a leaf - compare it directly
-                    if (System.Windows.Controls.ItemsControl.EqualsEx(item, Items[k]))
+                    if (MS.Internal.Helper.EqualsEx(item, Items[k]))
                     {
                         return leaves;
                     }
@@ -301,7 +301,7 @@ namespace MS.Internal.Data
                 for (int k = 0, n = group.Items.Count; k < n; ++k)
                 {
                     // if we've reached the item, move up to the next level
-                    if ((index < 0 && System.Windows.Controls.ItemsControl.EqualsEx(item, group.Items[k])) ||
+                    if ((index < 0 && MS.Internal.Helper.EqualsEx(item, group.Items[k])) ||
                         index == k)
                     {
                         break;
@@ -457,7 +457,7 @@ namespace MS.Internal.Data
                     ++oldIndex;
                 }
 
-                if (localIndex < n && System.Windows.Controls.ItemsControl.EqualsEx(ProtectedItems[localIndex], list[fullIndex]))
+                if (localIndex < n && MS.Internal.Helper.EqualsEx(ProtectedItems[localIndex], list[fullIndex]))
                     ++localIndex;
             }
 
@@ -631,7 +631,7 @@ namespace MS.Internal.Data
 
             public int Compare(object x, object y)
             {
-                if (System.Windows.Controls.ItemsControl.EqualsEx(x, y))
+                if (MS.Internal.Helper.EqualsEx(x, y))
                     return 0;
 
                 // advance the index until seeing one x or y
@@ -639,11 +639,11 @@ namespace MS.Internal.Data
                 for (; _index < n; ++_index)
                 {
                     object z = _list[_index];
-                    if (System.Windows.Controls.ItemsControl.EqualsEx(x, z))
+                    if (MS.Internal.Helper.EqualsEx(x, z))
                     {
                         return -1;  // x occurs first, so x < y
                     }
-                    else if (System.Windows.Controls.ItemsControl.EqualsEx(y, z))
+                    else if (MS.Internal.Helper.EqualsEx(y, z))
                     {
                         return +1;  // y occurs first, so x > y
                     }

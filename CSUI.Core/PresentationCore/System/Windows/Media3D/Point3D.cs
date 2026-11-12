@@ -29,6 +29,29 @@ namespace System.Windows.Media.Media3D
 
         #region Constructors
 
+        private static bool s_typeConvertersRegistered;
+
+        static Point3D()
+        {
+            EnsureTypeConvertersRegistered();
+        }
+
+        internal static void EnsureTypeConvertersRegistered()
+        {
+            if (s_typeConvertersRegistered)
+                return;
+            s_typeConvertersRegistered = true;
+            System.Windows.Data.TypeConverterRegistry.Register<Point3D>(new Point3DConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Vector3D>(new Vector3DConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Size3D>(new Size3DConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Rect3D>(new Rect3DConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Point4D>(new Point4DConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Matrix3D>(new Matrix3DConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Quaternion>(new QuaternionConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Point3DCollection>(new Point3DCollectionConverter());
+            System.Windows.Data.TypeConverterRegistry.Register<Vector3DCollection>(new Vector3DCollectionConverter());
+        }
+
         /// <summary>
         /// Constructor that sets point's initial values.
         /// </summary>

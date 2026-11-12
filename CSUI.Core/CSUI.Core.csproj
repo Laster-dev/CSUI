@@ -12,8 +12,53 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="PresentationCore\Fonts\*.CompositeFont" />
+    <CompositeFontSource Include="PresentationCore\Fonts\*.CompositeFont" />
   </ItemGroup>
+
+  <UsingTask TaskName="MinifyCompositeFontTask"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <InputFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDirectory ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Xml" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Directory.CreateDirectory(OutputDirectory);
+        foreach (var item in InputFiles)
+        {
+            string srcPath = item.GetMetadata("FullPath");
+            string dstPath = Path.Combine(OutputDirectory, Path.GetFileName(srcPath));
+            var readerSettings = new XmlReaderSettings { IgnoreComments = true, IgnoreWhitespace = true };
+            var writerSettings = new XmlWriterSettings { Indent = false, OmitXmlDeclaration = false, Encoding = new UTF8Encoding(false) };
+            using (var reader = XmlReader.Create(srcPath, readerSettings))
+            using (var writer = XmlWriter.Create(dstPath, writerSettings))
+            {
+                writer.WriteNode(reader, defattr: true);
+            }
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="MinifyCompositeFonts"
+          Inputs="@(CompositeFontSource)"
+          Outputs="@(CompositeFontSource->'$(IntermediateOutputPath)MinifiedFonts\%(Filename)%(Extension)')">
+    <MinifyCompositeFontTask InputFiles="@(CompositeFontSource)" OutputDirectory="$(IntermediateOutputPath)MinifiedFonts" />
+  </Target>
+
+  <Target Name="IncludeMinifiedCompositeFonts"
+          BeforeTargets="AssignTargetPaths"
+          DependsOnTargets="MinifyCompositeFonts">
+    <ItemGroup>
+      <EmbeddedResource Include="@(CompositeFontSource->'$(IntermediateOutputPath)MinifiedFonts\%(Filename)%(Extension)')">
+        <LogicalName>CSUI.Core.PresentationCore.Fonts.%(Filename)%(Extension)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="CSUI.Tests" />

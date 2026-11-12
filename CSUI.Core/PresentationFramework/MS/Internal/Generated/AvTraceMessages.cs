@@ -11,7 +11,7 @@ namespace MS.Internal
 {
     internal static partial class TraceData
     {
-        private static AvTrace _avTrace = new AvTrace(
+        private static readonly AvTrace _avTrace = new AvTrace(
                 delegate() { return PresentationTraceSources.DataBindingSource; },
                 delegate() { PresentationTraceSources._DataBindingSource = null; }
                 );
@@ -1347,10 +1347,7 @@ namespace MS.Internal
             _avTrace.TraceStartStop(traceDetails.Id, traceDetails.Message, traceDetails.Labels, parameters);
         }
 
-        public static bool IsEnabled
-        {
-            get { return _avTrace != null && _avTrace.IsEnabled; }
-        }
+        public static bool IsEnabled => false;
 
         /// <summary> Is there a Tracesource?  (See comment on AvTrace.IsEnabledOverride.) </summary>
         public static bool IsEnabledOverride
@@ -1366,7 +1363,7 @@ namespace MS.Internal
 	}
     internal static partial class TracePageFormatting
     {
-        private static AvTrace _avTrace = new AvTrace(
+        private static readonly AvTrace _avTrace = new AvTrace(
                 delegate() { return PresentationTraceSources.DocumentsSource; },
                 delegate() { PresentationTraceSources._DocumentsSource = null; }
                 );
@@ -1438,10 +1435,7 @@ namespace MS.Internal
             _avTrace.TraceStartStop(traceDetails.Id, traceDetails.Message, traceDetails.Labels, parameters);
         }
 
-        public static bool IsEnabled
-        {
-            get { return _avTrace != null && _avTrace.IsEnabled; }
-        }
+        public static bool IsEnabled => false;
 
         /// <summary> Is there a Tracesource?  (See comment on AvTrace.IsEnabledOverride.) </summary>
         public static bool IsEnabledOverride
@@ -1457,7 +1451,7 @@ namespace MS.Internal
 	}
     internal static partial class TraceResourceDictionary
     {
-        private static AvTrace _avTrace = new AvTrace(
+        private static readonly AvTrace _avTrace = new AvTrace(
                 delegate() { return PresentationTraceSources.ResourceDictionarySource; },
                 delegate() { PresentationTraceSources._ResourceDictionarySource = null; }
                 );
@@ -1641,10 +1635,7 @@ namespace MS.Internal
             _avTrace.TraceStartStop(traceDetails.Id, traceDetails.Message, traceDetails.Labels, parameters);
         }
 
-        public static bool IsEnabled
-        {
-            get { return _avTrace != null && _avTrace.IsEnabled; }
-        }
+        public static bool IsEnabled => false;
 
         /// <summary> Is there a Tracesource?  (See comment on AvTrace.IsEnabledOverride.) </summary>
         public static bool IsEnabledOverride
@@ -1660,7 +1651,7 @@ namespace MS.Internal
 	}
     internal static partial class TraceMarkup
     {
-        private static AvTrace _avTrace = new AvTrace(
+        private static readonly AvTrace _avTrace = new AvTrace(
                 delegate() { return PresentationTraceSources.MarkupSource; },
                 delegate() { PresentationTraceSources._MarkupSource = null; }
                 );
@@ -1900,10 +1891,7 @@ namespace MS.Internal
             _avTrace.TraceStartStop(traceDetails.Id, traceDetails.Message, traceDetails.Labels, parameters);
         }
 
-        public static bool IsEnabled
-        {
-            get { return _avTrace != null && _avTrace.IsEnabled; }
-        }
+        public static bool IsEnabled => false;
 
         /// <summary> Is there a Tracesource?  (See comment on AvTrace.IsEnabledOverride.) </summary>
         public static bool IsEnabledOverride
@@ -1919,7 +1907,7 @@ namespace MS.Internal
 	}
     internal static partial class TraceHwndHost
     {
-        private static AvTrace _avTrace = new AvTrace(
+        private static readonly AvTrace _avTrace = new AvTrace(
                 delegate() { return PresentationTraceSources.HwndHostSource; },
                 delegate() { PresentationTraceSources._HwndHostSource = null; }
                 );
@@ -1949,10 +1937,7 @@ namespace MS.Internal
             _avTrace.TraceStartStop(traceDetails.Id, traceDetails.Message, traceDetails.Labels, parameters);
         }
 
-        public static bool IsEnabled
-        {
-            get { return _avTrace != null && _avTrace.IsEnabled; }
-        }
+        public static bool IsEnabled => false;
 
         /// <summary> Is there a Tracesource?  (See comment on AvTrace.IsEnabledOverride.) </summary>
         public static bool IsEnabledOverride
@@ -1968,7 +1953,7 @@ namespace MS.Internal
 	}
     internal static partial class TraceShell
     {
-        private static AvTrace _avTrace = new AvTrace(
+        private static readonly AvTrace _avTrace = new AvTrace(
                 delegate() { return PresentationTraceSources.ShellSource; },
                 delegate() { PresentationTraceSources._ShellSource = null; }
                 );
@@ -2074,10 +2059,7 @@ namespace MS.Internal
             _avTrace.TraceStartStop(traceDetails.Id, traceDetails.Message, traceDetails.Labels, parameters);
         }
 
-        public static bool IsEnabled
-        {
-            get { return _avTrace != null && _avTrace.IsEnabled; }
-        }
+        public static bool IsEnabled => false;
 
         /// <summary> Is there a Tracesource?  (See comment on AvTrace.IsEnabledOverride.) </summary>
         public static bool IsEnabledOverride

@@ -9,6 +9,7 @@ using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
+using System.Windows.Input;
 using MS.Utility;
 
 #nullable disable
@@ -218,5 +219,38 @@ namespace MS.Internal.Controls
             AccessTextDisplayProperty = accessTextProperty;
             CreateAccessTextFactoryHook = createFactory;
         }
+
+        // Decoupling hooks so Panel, StyleHelper, ObjectRef, and KeyboardNavigation
+        // do not statically root ItemsControl or ItemContainerGenerator in apps that never use them.
+        internal delegate ElementViewportPosition GetElementViewportPositionDelegate(
+            FrameworkElement viewport,
+            UIElement element,
+            FocusNavigationDirection direction,
+            bool fullyVisible,
+            out Rect elementRect);
+
+        internal static DependencyProperty ItemsPanelPropertyHook { get; set; }
+        internal static DependencyProperty ItemForItemContainerPropertyHook { get; set; }
+        internal static DependencyProperty HeaderedItemsControlHeaderPropertyHook { get; set; }
+        internal static DependencyProperty ItemsControlItemBindingGroupPropertyHook { get; set; }
+        internal static Func<DependencyObject, DependencyObject> GetItemsOwnerHook { get; set; }
+        internal static Action<Panel> OnPanelIsItemsHostChangedHook { get; set; }
+        internal static Func<Panel, bool> IsPanelItemsHostHook { get; set; }
+        internal static Func<Panel, IPanelItemContainerGenerator> ConnectPanelGeneratorHook { get; set; }
+        internal static Func<DependencyObject, DependencyObject> TryGetTreeViewItemHeaderHook { get; set; }
+        internal static GetElementViewportPositionDelegate GetElementViewportPositionHook { get; set; }
+    }
+
+    internal interface IPanelItemContainerGenerator
+    {
+        event ItemsChangedEventHandler ItemsChanged;
+        IDisposable StartAt(GeneratorPosition position, GeneratorDirection direction);
+        IDisposable StartAt(GeneratorPosition position, GeneratorDirection direction, bool allowStartAtRealizedItem);
+        DependencyObject GenerateNext();
+        DependencyObject GenerateNext(out bool isNewlyRealized);
+        void PrepareItemContainer(DependencyObject container);
+        void RemoveAll();
+        int IndexFromGeneratorPosition(GeneratorPosition position);
+        void Verify();
     }
 }

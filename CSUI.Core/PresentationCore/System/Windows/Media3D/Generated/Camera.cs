@@ -272,6 +272,7 @@ namespace System.Windows.Media.Media3D
 
             // Initializations
             Type typeofThis = typeof(Camera);
+            Point3D.EnsureTypeConvertersRegistered();
             TransformProperty =
                   RegisterProperty("Transform",
                                    typeof(Transform3D),

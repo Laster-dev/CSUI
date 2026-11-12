@@ -5592,7 +5592,7 @@ namespace System.Windows
         internal static bool IsStylingLogicalTree(DependencyProperty dp, object value)
         {
             // some properties are known not to affect the logical tree
-            if (dp == ItemsControl.ItemsPanelProperty ||
+            if ((MS.Internal.Controls.ControlFoundationHooks.ItemsPanelPropertyHook != null && dp == MS.Internal.Controls.ControlFoundationHooks.ItemsPanelPropertyHook) ||
                 (MS.Internal.Controls.ControlFoundationHooks.ContextMenuPropertyHook != null && dp == MS.Internal.Controls.ControlFoundationHooks.ContextMenuPropertyHook) ||
                 (MS.Internal.Controls.ControlFoundationHooks.ToolTipPropertyHook != null && dp == MS.Internal.Controls.ControlFoundationHooks.ToolTipPropertyHook))
                 return false;

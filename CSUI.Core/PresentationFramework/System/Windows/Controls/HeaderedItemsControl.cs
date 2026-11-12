@@ -35,6 +35,12 @@ namespace System.Windows.Controls
         ///     Automatic determination of current Dispatcher. Use alternative constructor
         ///     that accepts a Dispatcher for best performance.
         /// </remarks>
+        static HeaderedItemsControl()
+        {
+            FrameworkElementFactory.RegisterType<HeaderedItemsControl>();
+            MS.Internal.Controls.ControlFoundationHooks.HeaderedItemsControlHeaderPropertyHook = HeaderProperty;
+        }
+
         public HeaderedItemsControl() : base()
         {
         }

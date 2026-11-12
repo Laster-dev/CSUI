@@ -34,7 +34,7 @@ namespace System.Windows.Controls
     /// UIElements.  The control's item-host can ask the ItemContainerGenerator for
     /// a Generator, which does the actual generation of UI.
     /// </summary>
-    public sealed class ItemContainerGenerator : IRecyclingItemContainerGenerator, IWeakEventListener
+    public sealed class ItemContainerGenerator : MS.Internal.Controls.IPanelItemContainerGenerator, IRecyclingItemContainerGenerator, IWeakEventListener
     {
         //------------------------------------------------------
         //
@@ -994,6 +994,22 @@ namespace System.Windows.Controls
         // This is a clue that the underlying collection or collection-view may
         // have raised the wrong CollectionChange events.  If there's evidence
         // that this has happened, throw an exception.
+        void MS.Internal.Controls.IPanelItemContainerGenerator.Verify() => Verify();
+        IDisposable MS.Internal.Controls.IPanelItemContainerGenerator.StartAt(GeneratorPosition position, GeneratorDirection direction)
+            => ((IItemContainerGenerator)this).StartAt(position, direction);
+        IDisposable MS.Internal.Controls.IPanelItemContainerGenerator.StartAt(GeneratorPosition position, GeneratorDirection direction, bool allowStartAtRealizedItem)
+            => ((IItemContainerGenerator)this).StartAt(position, direction, allowStartAtRealizedItem);
+        DependencyObject MS.Internal.Controls.IPanelItemContainerGenerator.GenerateNext()
+            => ((IItemContainerGenerator)this).GenerateNext();
+        DependencyObject MS.Internal.Controls.IPanelItemContainerGenerator.GenerateNext(out bool isNewlyRealized)
+            => ((IItemContainerGenerator)this).GenerateNext(out isNewlyRealized);
+        void MS.Internal.Controls.IPanelItemContainerGenerator.PrepareItemContainer(DependencyObject container)
+            => ((IItemContainerGenerator)this).PrepareItemContainer(container);
+        void MS.Internal.Controls.IPanelItemContainerGenerator.RemoveAll()
+            => ((IItemContainerGenerator)this).RemoveAll();
+        int MS.Internal.Controls.IPanelItemContainerGenerator.IndexFromGeneratorPosition(GeneratorPosition position)
+            => ((IItemContainerGenerator)this).IndexFromGeneratorPosition(position);
+
         internal void Verify()
         {
             if (_itemMap == null)

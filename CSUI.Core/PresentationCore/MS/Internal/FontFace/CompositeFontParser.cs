@@ -9,7 +9,6 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Markup;
-using System.Xml;
 using System.Globalization;
 using System.Collections;
 using MS.Internal.TextFormatting;
@@ -164,20 +163,20 @@ namespace MS.Internal.FontFace
                     FailUnknownElement();
                 }
             }
-            catch (XmlException x)
+            catch (LiteXmlException x)
             {
                 FailNotWellFormed(x);
             }
             catch (FormatException x)
             {
-                if (_reader.NodeType == XmlNodeType.Attribute)
+                if (_reader.NodeType == LiteXmlNodeType.Attribute)
                     FailAttributeValue(x);
                 else
                     Fail(x.Message, x);
             }
             catch (ArgumentException x)
             {
-                if (_reader.NodeType == XmlNodeType.Attribute)
+                if (_reader.NodeType == LiteXmlNodeType.Attribute)
                     FailAttributeValue(x);
                 else
                     Fail(x.Message, x);
@@ -193,19 +192,9 @@ namespace MS.Internal.FontFace
         /// <summary>
         /// Creates the XML reader for the specified file.
         /// </summary>
-        private XmlReader CreateXmlReader(Stream fileStream)
+        private LiteXmlReader CreateXmlReader(Stream fileStream)
         {
-            XmlReaderSettings settings = new XmlReaderSettings
-            {
-                CloseInput = true,
-                IgnoreComments = true,
-                IgnoreWhitespace = false,
-                DtdProcessing = DtdProcessing.Prohibit
-            };
-
-            XmlReader baseReader = XmlReader.Create(fileStream, settings);
-
-            return new XmlCompatibilityReader(baseReader, new IsXmlNamespaceSupportedCallback(IsXmlNamespaceSupported));
+            return new LiteXmlReader(fileStream);
         }
 
         
@@ -255,7 +244,7 @@ namespace MS.Internal.FontFace
         /// Same semantics as XmlReader.MoveToContent, but this method processes Mapping processing
         /// instructions as it advances past them.
         /// </summary>
-        private XmlNodeType MoveToContent()
+        private LiteXmlNodeType MoveToContent()
         {
             bool contentNode = false;
 
@@ -263,11 +252,11 @@ namespace MS.Internal.FontFace
             {
                 switch (_reader.NodeType)
                 {
-                    case XmlNodeType.CDATA:
-                    case XmlNodeType.Element:
-                    case XmlNodeType.EndElement:
-                    case XmlNodeType.EntityReference:
-                    case XmlNodeType.EndEntity:
+                    case LiteXmlNodeType.CDATA:
+                    case LiteXmlNodeType.Element:
+                    case LiteXmlNodeType.EndElement:
+                    case LiteXmlNodeType.EntityReference:
+                    case LiteXmlNodeType.EndEntity:
                         contentNode = true;
                         break;
                 }
@@ -373,9 +362,9 @@ namespace MS.Internal.FontFace
             _reader.Read();
 
             // Iterate over children.
-            while (MoveToContent() != XmlNodeType.EndElement)
+            while (MoveToContent() != LiteXmlNodeType.EndElement)
             {
-                if (_reader.NodeType == XmlNodeType.Element && _reader.NamespaceURI == CompositeFontNamespace)
+                if (_reader.NodeType == LiteXmlNodeType.Element && _reader.NamespaceURI == CompositeFontNamespace)
                 {
                     bool isEmpty = _reader.IsEmptyElement;
 
@@ -388,7 +377,7 @@ namespace MS.Internal.FontFace
                             if (!isEmpty)
                             {
                                 // Process all child elements.
-                                while (MoveToContent() == XmlNodeType.Element)
+                                while (MoveToContent() == LiteXmlNodeType.Element)
                                 {
                                     if (_reader.LocalName == StringElement && IsSystemNamespace(_reader.NamespaceURI))
                                     {
@@ -539,9 +528,9 @@ namespace MS.Internal.FontFace
             {
                 _reader.Read();
 
-                while (MoveToContent() != XmlNodeType.EndElement)
+                while (MoveToContent() != LiteXmlNodeType.EndElement)
                 {
-                    if (_reader.NodeType == XmlNodeType.Element && _reader.NamespaceURI == CompositeFontNamespace)
+                    if (_reader.NodeType == LiteXmlNodeType.Element && _reader.NamespaceURI == CompositeFontNamespace)
                     {
                         if (_reader.LocalName == DeviceFontCharacterMetricsPropertyElement)
                         {
@@ -556,7 +545,7 @@ namespace MS.Internal.FontFace
                                 _reader.Read();
 
                                 // Process all child elements.
-                                while (MoveToContent() == XmlNodeType.Element)
+                                while (MoveToContent() == LiteXmlNodeType.Element)
                                 {
                                     if (_reader.LocalName == CharacterMetricsElement)
                                     {
@@ -787,9 +776,9 @@ namespace MS.Internal.FontFace
 
             _reader.Read();
 
-            while (MoveToContent() != XmlNodeType.EndElement)
+            while (MoveToContent() != LiteXmlNodeType.EndElement)
             {
-                if (_reader.NodeType == XmlNodeType.Element && _reader.NamespaceURI == CompositeFontNamespace)
+                if (_reader.NodeType == LiteXmlNodeType.Element && _reader.NamespaceURI == CompositeFontNamespace)
                 {
                     FailUnknownElement();
                 }
@@ -920,7 +909,7 @@ namespace MS.Internal.FontFace
 
         private CompositeFontInfo _compositeFontInfo;
 
-        private XmlReader _reader;
+        private LiteXmlReader _reader;
 
         // XML namespaces for which Mapping processing instructions have been read. For each entry,
         // the key is the XML namespace, and the value is either SystemClrNamespace (if the the 
@@ -969,6 +958,476 @@ namespace MS.Internal.FontFace
         // DevDiv:1158540
         // FontFamilyElements can now have OS specific attributes
         private const string OsAttribute = "OS";
+    }
+
+    internal enum LiteXmlNodeType
+    {
+        None = 0,
+        Element = 1,
+        Attribute = 2,
+        Text = 3,
+        CDATA = 4,
+        EntityReference = 5,
+        ProcessingInstruction = 7,
+        Comment = 8,
+        Whitespace = 13,
+        EndElement = 15,
+        EndEntity = 16,
+    }
+
+    internal sealed class LiteXmlException : Exception
+    {
+        public LiteXmlException(string message) : base(message) { }
+    }
+
+    /// <summary>
+    /// Lightweight standalone XML pull-reader for CompositeFont files.
+    /// Avoids pulling System.Private.Xml (550 KB+) into every NativeAOT UI app.
+    /// </summary>
+    internal sealed class LiteXmlReader
+    {
+        private struct AttrEntry
+        {
+            public string RawName;
+            public string LocalName;
+            public string Prefix;
+            public string NamespaceURI;
+            public string Value;
+        }
+
+        private readonly Stream _stream;
+        private readonly string _text;
+        private int _pos;
+
+        private readonly List<Dictionary<string, string>> _nsScopes = new List<Dictionary<string, string>>();
+        private readonly List<AttrEntry> _attrs = new List<AttrEntry>();
+        private int _attrIndex = -1;
+
+        private string _elemLocalName = string.Empty;
+        private string _elemNamespaceURI = string.Empty;
+        private bool _elemIsEmpty;
+
+        public LiteXmlNodeType NodeType { get; private set; } = LiteXmlNodeType.None;
+        public string LocalName { get; private set; } = string.Empty;
+        public string NamespaceURI { get; private set; } = string.Empty;
+        public string Value { get; private set; } = string.Empty;
+        public bool IsEmptyElement => NodeType == LiteXmlNodeType.Element && _elemIsEmpty;
+        public string BaseURI => string.Empty;
+
+        public LiteXmlReader(Stream stream)
+        {
+            _stream = stream;
+            using var sr = new StreamReader(stream, leaveOpen: true);
+            _text = sr.ReadToEnd();
+            _nsScopes.Add(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["xml"] = "http://www.w3.org/XML/1998/namespace",
+                ["xmlns"] = "http://www.w3.org/2000/xmlns/",
+                [""] = string.Empty,
+            });
+        }
+
+        public void Close()
+        {
+            _stream?.Dispose();
+        }
+
+        public bool IsStartElement(string localName, string namespaceURI)
+        {
+            MoveToContent();
+            return NodeType == LiteXmlNodeType.Element && LocalName == localName && NamespaceURI == namespaceURI;
+        }
+
+        private LiteXmlNodeType MoveToContent()
+        {
+            if (NodeType == LiteXmlNodeType.Attribute) MoveToElement();
+            while (true)
+            {
+                if (NodeType == LiteXmlNodeType.Element ||
+                    NodeType == LiteXmlNodeType.EndElement ||
+                    NodeType == LiteXmlNodeType.CDATA ||
+                    NodeType == LiteXmlNodeType.EntityReference ||
+                    NodeType == LiteXmlNodeType.EndEntity)
+                {
+                    return NodeType;
+                }
+                if (NodeType == LiteXmlNodeType.Text && !string.IsNullOrWhiteSpace(Value))
+                {
+                    return NodeType;
+                }
+                if (!Read()) return LiteXmlNodeType.None;
+            }
+        }
+
+        public string GetAttribute(string name)
+        {
+            if (NodeType != LiteXmlNodeType.Element && NodeType != LiteXmlNodeType.Attribute)
+            {
+                return null;
+            }
+            for (int i = 0; i < _attrs.Count; i++)
+            {
+                if (_attrs[i].RawName == name || _attrs[i].LocalName == name)
+                {
+                    return _attrs[i].Value;
+                }
+            }
+            return null;
+        }
+
+        public bool MoveToFirstAttribute()
+        {
+            if (_attrs.Count == 0 || (NodeType != LiteXmlNodeType.Element && NodeType != LiteXmlNodeType.Attribute))
+            {
+                return false;
+            }
+            _attrIndex = 0;
+            LoadCurrentAttr();
+            return true;
+        }
+
+        public bool MoveToNextAttribute()
+        {
+            if (_attrIndex < 0 || _attrIndex + 1 >= _attrs.Count)
+            {
+                return false;
+            }
+            _attrIndex++;
+            LoadCurrentAttr();
+            return true;
+        }
+
+        public void MoveToElement()
+        {
+            if (NodeType == LiteXmlNodeType.Attribute)
+            {
+                _attrIndex = -1;
+                NodeType = LiteXmlNodeType.Element;
+                LocalName = _elemLocalName;
+                NamespaceURI = _elemNamespaceURI;
+                Value = string.Empty;
+            }
+        }
+
+        private void LoadCurrentAttr()
+        {
+            AttrEntry a = _attrs[_attrIndex];
+            NodeType = LiteXmlNodeType.Attribute;
+            LocalName = a.LocalName;
+            NamespaceURI = a.NamespaceURI;
+            Value = a.Value;
+        }
+
+        public void Skip()
+        {
+            if (NodeType == LiteXmlNodeType.Attribute) MoveToElement();
+            if (NodeType == LiteXmlNodeType.Element)
+            {
+                if (_elemIsEmpty)
+                {
+                    Read();
+                    return;
+                }
+                int depth = 1;
+                while (Read())
+                {
+                    if (NodeType == LiteXmlNodeType.Element && !_elemIsEmpty) depth++;
+                    else if (NodeType == LiteXmlNodeType.EndElement)
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            Read();
+                            return;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Read();
+            }
+        }
+
+        public void ReadEndElement()
+        {
+            if (MoveToContent() != LiteXmlNodeType.EndElement)
+            {
+                throw new LiteXmlException($"Expected end element, found {NodeType}.");
+            }
+            Read();
+        }
+
+        public string ReadElementString()
+        {
+            if (NodeType == LiteXmlNodeType.Attribute) MoveToElement();
+            if (NodeType != LiteXmlNodeType.Element)
+            {
+                throw new LiteXmlException("Expected element.");
+            }
+            if (_elemIsEmpty)
+            {
+                Read();
+                return string.Empty;
+            }
+            Read();
+            var sb = new System.Text.StringBuilder();
+            while (NodeType == LiteXmlNodeType.Text || NodeType == LiteXmlNodeType.Whitespace || NodeType == LiteXmlNodeType.CDATA)
+            {
+                sb.Append(Value);
+                if (!Read()) break;
+            }
+            if (NodeType == LiteXmlNodeType.EndElement)
+            {
+                Read();
+            }
+            return sb.ToString();
+        }
+
+        public bool Read()
+        {
+            // Pop namespace scope when stepping off EndElement or an empty Element
+            if ((NodeType == LiteXmlNodeType.EndElement || (NodeType == LiteXmlNodeType.Element && _elemIsEmpty)) && _nsScopes.Count > 1)
+            {
+                _nsScopes.RemoveAt(_nsScopes.Count - 1);
+            }
+
+            _attrs.Clear();
+            _attrIndex = -1;
+            _elemIsEmpty = false;
+
+            while (_pos < _text.Length)
+            {
+                if (_text[_pos] == '<')
+                {
+                    if (StartsWith("<!--"))
+                    {
+                        int end = _text.IndexOf("-->", _pos + 4, StringComparison.Ordinal);
+                        if (end < 0) throw new LiteXmlException("Unterminated XML comment.");
+                        _pos = end + 3;
+                        continue;
+                    }
+                    if (StartsWith("<?"))
+                    {
+                        int end = _text.IndexOf("?>", _pos + 2, StringComparison.Ordinal);
+                        if (end < 0) throw new LiteXmlException("Unterminated processing instruction.");
+                        _pos = end + 2;
+                        continue;
+                    }
+                    if (StartsWith("<![CDATA["))
+                    {
+                        int end = _text.IndexOf("]]>", _pos + 9, StringComparison.Ordinal);
+                        if (end < 0) throw new LiteXmlException("Unterminated CDATA section.");
+                        Value = _text.Substring(_pos + 9, end - (_pos + 9));
+                        LocalName = string.Empty;
+                        NamespaceURI = string.Empty;
+                        NodeType = LiteXmlNodeType.CDATA;
+                        _pos = end + 3;
+                        return true;
+                    }
+                    if (_pos + 1 < _text.Length && _text[_pos + 1] == '/')
+                    {
+                        _pos += 2;
+                        SkipWs();
+                        string rawEnd = ReadName();
+                        SkipWs();
+                        if (_pos >= _text.Length || _text[_pos] != '>') throw new LiteXmlException("Malformed end tag.");
+                        _pos++;
+                        SplitQName(rawEnd, out string pfx, out string local);
+                        NodeType = LiteXmlNodeType.EndElement;
+                        LocalName = local;
+                        NamespaceURI = ResolveNamespace(pfx, isElement: true);
+                        Value = string.Empty;
+                        return true;
+                    }
+
+                    // Start tag
+                    _pos++;
+                    string rawTag = ReadName();
+                    var scope = new Dictionary<string, string>(StringComparer.Ordinal);
+                    _nsScopes.Add(scope);
+
+                    while (true)
+                    {
+                        SkipWs();
+                        if (_pos >= _text.Length) throw new LiteXmlException("Unexpected EOF in start tag.");
+                        if (_text[_pos] == '/' && _pos + 1 < _text.Length && _text[_pos + 1] == '>')
+                        {
+                            _elemIsEmpty = true;
+                            _pos += 2;
+                            break;
+                        }
+                        if (_text[_pos] == '>')
+                        {
+                            _elemIsEmpty = false;
+                            _pos++;
+                            break;
+                        }
+
+                        string attrRaw = ReadName();
+                        SkipWs();
+                        if (_pos >= _text.Length || _text[_pos] != '=') throw new LiteXmlException("Expected '=' after attribute name.");
+                        _pos++;
+                        SkipWs();
+                        if (_pos >= _text.Length || (_text[_pos] != '"' && _text[_pos] != '\'')) throw new LiteXmlException("Expected quoted attribute value.");
+                        char quote = _text[_pos++];
+                        int valStart = _pos;
+                        while (_pos < _text.Length && _text[_pos] != quote) _pos++;
+                        if (_pos >= _text.Length) throw new LiteXmlException("Unterminated attribute value.");
+                        string val = DecodeEntities(_text.Substring(valStart, _pos - valStart));
+                        _pos++; // skip closing quote
+
+                        SplitQName(attrRaw, out string aPfx, out string aLocal);
+                        if (attrRaw == "xmlns")
+                        {
+                            scope[""] = val;
+                        }
+                        else if (aPfx == "xmlns")
+                        {
+                            scope[aLocal] = val;
+                        }
+
+                        _attrs.Add(new AttrEntry
+                        {
+                            RawName = attrRaw,
+                            Prefix = aPfx,
+                            LocalName = aLocal,
+                            NamespaceURI = string.Empty,
+                            Value = val,
+                        });
+                    }
+
+                    // Resolve namespaces after reading all xmlns declarations on this element
+                    for (int i = 0; i < _attrs.Count; i++)
+                    {
+                        AttrEntry a = _attrs[i];
+                        if (a.RawName == "xmlns" || a.Prefix == "xmlns")
+                        {
+                            a.NamespaceURI = "http://www.w3.org/2000/xmlns/";
+                        }
+                        else if (!string.IsNullOrEmpty(a.Prefix))
+                        {
+                            a.NamespaceURI = ResolveNamespace(a.Prefix, isElement: false);
+                        }
+                        _attrs[i] = a;
+                    }
+
+                    SplitQName(rawTag, out string ePfx, out string eLocal);
+                    NodeType = LiteXmlNodeType.Element;
+                    _elemLocalName = eLocal;
+                    _elemNamespaceURI = ResolveNamespace(ePfx, isElement: true);
+                    LocalName = _elemLocalName;
+                    NamespaceURI = _elemNamespaceURI;
+                    Value = string.Empty;
+                    return true;
+                }
+                else
+                {
+                    int start = _pos;
+                    while (_pos < _text.Length && _text[_pos] != '<') _pos++;
+                    string rawText = _text.Substring(start, _pos - start);
+                    bool allWs = string.IsNullOrWhiteSpace(rawText);
+                    NodeType = allWs ? LiteXmlNodeType.Whitespace : LiteXmlNodeType.Text;
+                    LocalName = string.Empty;
+                    NamespaceURI = string.Empty;
+                    Value = allWs ? rawText : DecodeEntities(rawText);
+                    return true;
+                }
+            }
+
+            NodeType = LiteXmlNodeType.None;
+            LocalName = string.Empty;
+            NamespaceURI = string.Empty;
+            Value = string.Empty;
+            return false;
+        }
+
+        private bool StartsWith(string prefix)
+            => _pos + prefix.Length <= _text.Length && string.Compare(_text, _pos, prefix, 0, prefix.Length, StringComparison.Ordinal) == 0;
+
+        private void SkipWs()
+        {
+            while (_pos < _text.Length && char.IsWhiteSpace(_text[_pos])) _pos++;
+        }
+
+        private string ReadName()
+        {
+            int start = _pos;
+            while (_pos < _text.Length)
+            {
+                char c = _text[_pos];
+                if (char.IsWhiteSpace(c) || c == '=' || c == '>' || c == '/' || c == '<') break;
+                _pos++;
+            }
+            if (_pos == start) throw new LiteXmlException("Expected XML name.");
+            return _text.Substring(start, _pos - start);
+        }
+
+        private static void SplitQName(string qname, out string prefix, out string localName)
+        {
+            int colon = qname.IndexOf(':');
+            if (colon >= 0)
+            {
+                prefix = qname.Substring(0, colon);
+                localName = qname.Substring(colon + 1);
+            }
+            else
+            {
+                prefix = string.Empty;
+                localName = qname;
+            }
+        }
+
+        private string ResolveNamespace(string prefix, bool isElement)
+        {
+            if (string.IsNullOrEmpty(prefix) && !isElement) return string.Empty;
+            for (int i = _nsScopes.Count - 1; i >= 0; i--)
+            {
+                if (_nsScopes[i].TryGetValue(prefix, out string ns))
+                {
+                    return ns;
+                }
+            }
+            return string.Empty;
+        }
+
+        private static string DecodeEntities(string s)
+        {
+            if (s.IndexOf('&') < 0) return s;
+            var sb = new System.Text.StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (s[i] == '&')
+                {
+                    int semi = s.IndexOf(';', i + 1);
+                    if (semi > i + 1)
+                    {
+                        string ent = s.Substring(i + 1, semi - i - 1);
+                        char? decoded = ent switch
+                        {
+                            "amp" => '&',
+                            "lt" => '<',
+                            "gt" => '>',
+                            "quot" => '"',
+                            "apos" => '\'',
+                            _ when ent.StartsWith("#x", StringComparison.OrdinalIgnoreCase) &&
+                                   int.TryParse(ent.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int hx) => (char)hx,
+                            _ when ent.StartsWith("#", StringComparison.Ordinal) &&
+                                   int.TryParse(ent.Substring(1), NumberStyles.Integer, CultureInfo.InvariantCulture, out int dec) => (char)dec,
+                            _ => null
+                        };
+                        if (decoded.HasValue)
+                        {
+                            sb.Append(decoded.Value);
+                            i = semi;
+                            continue;
+                        }
+                    }
+                }
+                sb.Append(s[i]);
+            }
+            return sb.ToString();
+        }
     }
 }
 

@@ -19,6 +19,24 @@ namespace System.Windows.Media.Media3D
     [ContentProperty("Visual")]
     public sealed class Viewport2DVisual3D : Visual3D
     {
+        static Viewport2DVisual3D()
+        {
+            Visual.IsViewport2DVisual3DHook = static d => d is Viewport2DVisual3D;
+            Visual.TryCreateTransform2DTo3DTo2DHook = static (DependencyObject parent, Visual fromVisual, out GeneralTransform transform, out DependencyObject containingVisual2D) =>
+            {
+                if (parent is Viewport2DVisual3D v2dv3d)
+                {
+                    transform = new GeneralTransform2DTo3DTo2D(v2dv3d, fromVisual);
+                    containingVisual2D = VisualTreeHelper.GetContainingVisual2D(v2dv3d);
+                    return true;
+                }
+
+                transform = null;
+                containingVisual2D = null;
+                return false;
+            };
+        }
+
         /// <summary>
         /// Constructs a new Viewport2DVisual3D
         /// </summary>

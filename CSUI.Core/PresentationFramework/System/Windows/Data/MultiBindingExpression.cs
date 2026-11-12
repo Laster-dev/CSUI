@@ -952,7 +952,7 @@ namespace System.Windows.Data
         for (int i = 0; i < count; ++i)
         {
             object value = MutableBindingExpressions[i].GetValue(null, null); // could pass (null, null)
-            if (ItemsControl.EqualsEx(value, newValue))
+            if (MS.Internal.Helper.EqualsEx(value, newValue))
                 return MutableBindingExpressions[i].GetSourceItem(newValue);
         }
 
@@ -1335,7 +1335,7 @@ namespace System.Windows.Data
 
         // if this is a re-transfer after a source update and the value
         // hasn't changed, don't do any more work.
-        bool realTransfer = !(IsInUpdate && ItemsControl.EqualsEx(value, Value));
+        bool realTransfer = !(IsInUpdate && MS.Internal.Helper.EqualsEx(value, Value));
 
         if (realTransfer)
         {

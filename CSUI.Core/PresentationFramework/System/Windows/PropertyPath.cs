@@ -798,12 +798,16 @@ namespace System.Windows
                 ["FrameworkContentElement"] = typeof(FrameworkContentElement),
                 ["Control"] = typeof(System.Windows.Controls.Control),
                 ["ContentControl"] = typeof(System.Windows.Controls.ContentControl),
-                ["ItemsControl"] = typeof(System.Windows.Controls.ItemsControl),
                 ["Panel"] = typeof(System.Windows.Controls.Panel),
                 ["Decorator"] = typeof(System.Windows.Controls.Decorator),
                 ["Window"] = typeof(Window),
             };
             return dict;
+        }
+
+        internal static void RegisterKnownType(string name, Type type)
+        {
+            s_knownTypes[name] = type;
         }
 
         private static readonly ConcurrentDictionary<string, Type> s_knownTypes = CreateKnownTypes();

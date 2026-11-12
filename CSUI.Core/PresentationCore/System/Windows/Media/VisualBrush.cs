@@ -135,7 +135,7 @@ namespace System.Windows.Media
         {
             Debug.Assert(element != null);
             DependencyObject parent = VisualTreeHelper.GetParent(element);
-            if (!(element.IsUIElementRoot) && (parent == null || parent is System.Windows.Media.Media3D.Viewport2DVisual3D))
+            if (!(element.IsUIElementRoot) && (parent == null || (Visual.IsViewport2DVisual3DHook != null && Visual.IsViewport2DVisual3DHook(parent))))
             {
                 Visual.PerformAutoLayoutHook?.Invoke(element, null);
             }

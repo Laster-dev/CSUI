@@ -424,7 +424,7 @@ namespace MS.Internal.Data
 
                     for (int i = args.OldItems.Count - 1, index = args.OldStartingIndex + i; i >= 0; --i, --index)
                     {
-                        if (!System.Windows.Controls.ItemsControl.EqualsEx(args.OldItems[i], _snapshot[index]))
+                        if (!MS.Internal.Helper.EqualsEx(args.OldItems[i], _snapshot[index]))
                             // replace error message with a better one
                             throw new InvalidOperationException(SR.Format(SR.AddedItemNotAtIndex, index));
                         _snapshot.RemoveAt(index);
@@ -434,7 +434,7 @@ namespace MS.Internal.Data
                 case NotifyCollectionChangedAction.Replace:
                     for (int i = args.NewItems.Count - 1, index = args.NewStartingIndex + i; i >= 0; --i, --index)
                     {
-                        if (!System.Windows.Controls.ItemsControl.EqualsEx(args.OldItems[i], _snapshot[index]))
+                        if (!MS.Internal.Helper.EqualsEx(args.OldItems[i], _snapshot[index]))
                             // replace error message with a better one
                             throw new InvalidOperationException(SR.Format(SR.AddedItemNotAtIndex, index));
                         _snapshot[index] = args.NewItems[i];
@@ -453,7 +453,7 @@ namespace MS.Internal.Data
                             i >= 0;
                             --i, --oldIndex, --newIndex)
                         {
-                            if (!System.Windows.Controls.ItemsControl.EqualsEx(args.OldItems[i], _snapshot[oldIndex]))
+                            if (!MS.Internal.Helper.EqualsEx(args.OldItems[i], _snapshot[oldIndex]))
                                 // replace error message with a better one
                                 throw new InvalidOperationException(SR.Format(SR.AddedItemNotAtIndex, oldIndex));
                             _snapshot.Move(oldIndex, newIndex);
@@ -467,7 +467,7 @@ namespace MS.Internal.Data
                             i < args.OldItems.Count;
                             ++i, ++oldIndex, ++newIndex)
                         {
-                            if (!System.Windows.Controls.ItemsControl.EqualsEx(args.OldItems[i], _snapshot[oldIndex]))
+                            if (!MS.Internal.Helper.EqualsEx(args.OldItems[i], _snapshot[oldIndex]))
                                 // replace error message with a better one
                                 throw new InvalidOperationException(SR.Format(SR.AddedItemNotAtIndex, oldIndex));
                             _snapshot.Move(oldIndex, newIndex);

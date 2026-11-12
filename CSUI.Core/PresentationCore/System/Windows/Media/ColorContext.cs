@@ -6,8 +6,8 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Net.Http;
 using CSUI.Core.Interop.DirectX;
+using CSUI.Core.Interop.Win32;
 using MS.Internal;
 using SR = MS.Internal.PresentationCore.SR;
 
@@ -31,7 +31,6 @@ namespace System.Windows.Media
     public unsafe class ColorContext
     {
         private const int MaximumColorContextLength = 32 * 1024 * 1024;
-        private static readonly HttpClient s_httpClient = new HttpClient();
 
         private static readonly uint[] _colorTypeFromChannels = new uint[]
         {
@@ -317,8 +316,7 @@ namespace System.Windows.Media
             else if (string.Equals(profileUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(profileUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             {
-                using Stream stream = s_httpClient.GetStreamAsync(profileUri).GetAwaiter().GetResult();
-                rawBytes = ReadStreamBytes(stream);
+                rawBytes = WinHttpClient.DownloadBytes(profileUri, MaximumColorContextLength);
             }
             else
             {

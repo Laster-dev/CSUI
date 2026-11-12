@@ -902,7 +902,7 @@ namespace System.Windows.Data
                 object item = contextElement.GetValue(FrameworkElement.DataContextProperty);
 
                 // if binding inactive or the data item has changed, (re-)activate
-                if (StatusInternal == BindingStatusInternal.Inactive || !System.Windows.Controls.ItemsControl.EqualsEx(item, DataItem))
+                if (StatusInternal == BindingStatusInternal.Inactive || !MS.Internal.Helper.EqualsEx(item, DataItem))
                 {
                     Activate(item);
                 }
@@ -1465,7 +1465,7 @@ namespace System.Windows.Data
 
             // if this is a re-transfer after a source update and the value
             // hasn't changed, don't do any more work.
-            bool realTransfer = !(IsInUpdate && System.Windows.Controls.ItemsControl.EqualsEx(value, Value));
+            bool realTransfer = !(IsInUpdate && MS.Internal.Helper.EqualsEx(value, Value));
 
             if (realTransfer)
             {
@@ -2208,7 +2208,7 @@ namespace System.Windows.Data
             }
 
             // If the top-level item is different, ignore the update
-            if (!System.Windows.Controls.ItemsControl.EqualsEx(DataItem, item))
+            if (!MS.Internal.Helper.EqualsEx(DataItem, item))
                 return true;
 
             // check the rest of the path
@@ -2336,7 +2336,7 @@ namespace System.Windows.Data
                 }
 
                 object newItem = contextElement.GetValue(FrameworkElement.DataContextProperty);
-                if (!System.Windows.Controls.ItemsControl.EqualsEx(DataItem, newItem))
+                if (!MS.Internal.Helper.EqualsEx(DataItem, newItem))
                 {
                     Activate(newItem);
                 }

@@ -753,7 +753,7 @@ namespace MS.Internal.Data
 
             for (int j=node.Size; j<MaxSize; ++j)
             {
-                if (!System.Windows.Controls.ItemsControl.EqualsEx(node.GetItemAt(j), default(T)))
+                if (!MS.Internal.Helper.EqualsEx(node.GetItemAt(j), default(T)))
                     result = false;     // someone didn't clean up the array
             }
 

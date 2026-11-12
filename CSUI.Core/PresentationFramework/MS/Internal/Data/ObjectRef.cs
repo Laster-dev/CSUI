@@ -367,7 +367,8 @@ namespace MS.Internal.Data
             {
                 // for generated wrappers, use the ItemForContainer property instead
                 // of DataContext, since it's always set by the generator
-                o = el.GetValue(ItemContainerGenerator.ItemForItemContainerProperty);
+                var itemProp = MS.Internal.Controls.ControlFoundationHooks.ItemForItemContainerPropertyHook;
+                o = itemProp != null ? el.GetValue(itemProp) : null;
                 if (o == null)
                     o = el.GetValue(FrameworkElement.DataContextProperty);
             }
@@ -495,7 +496,7 @@ namespace MS.Internal.Data
                     }
 
                     if (child != null && parent != null &&
-                        ItemsControl.EqualsEx(child.DataContext, parent.DataContext))
+                        MS.Internal.Helper.EqualsEx(child.DataContext, parent.DataContext))
                     {
                         d = parent;
                         if (!BindingExpression.HasLocalDataContext(parent))

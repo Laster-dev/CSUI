@@ -154,7 +154,11 @@ namespace System.Windows
         }
 
         /// <summary>Retrieves an image from the Clipboard.</summary>
-        public static BitmapSource GetImage() => GetDataInternal(DataFormats.Bitmap) as BitmapSource;
+        public static BitmapSource GetImage()
+        {
+            System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(BitmapSource).TypeHandle);
+            return GetDataInternal(DataFormats.Bitmap) as BitmapSource;
+        }
 
         /// <summary>Retrieves Unicode text from the Clipboard.</summary>
         public static string GetText() => GetText(TextDataFormat.UnicodeText);

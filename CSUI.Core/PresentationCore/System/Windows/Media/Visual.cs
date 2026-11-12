@@ -824,9 +824,17 @@ namespace System.Windows.Media
             return result._hitResult;
         }
 
+        internal static Predicate<DependencyObject> IsViewport2DVisual3DHook;
+        internal delegate bool TryCreateTransform2DTo3DTo2DDelegate(
+            DependencyObject parent,
+            Visual fromVisual,
+            out GeneralTransform transform,
+            out DependencyObject containingVisual2D);
+        internal static TryCreateTransform2DTo3DTo2DDelegate TryCreateTransform2DTo3DTo2DHook;
+
         private static HitTestFilterBehavior Skip2DOn3DFilterCallback(DependencyObject potentialHitTestTarget)
         {
-            if (potentialHitTestTarget is Viewport2DVisual3D)
+            if (IsViewport2DVisual3DHook != null && IsViewport2DVisual3DHook(potentialHitTestTarget))
             {
                 return HitTestFilterBehavior.ContinueSkipSelfAndChildren;
             }
@@ -2936,7 +2944,8 @@ namespace System.Windows.Media
                 Visual gAsVisual = g as Visual;
                 if (gAsVisual != null)
                 {
-                    if (gAsVisual._parent is Viewport2DVisual3D v2dv3d)
+                    if (TryCreateTransform2DTo3DTo2DHook != null &&
+                        TryCreateTransform2DTo3DTo2DHook(gAsVisual._parent, gAsVisual, out GeneralTransform transform2DTo3DTo2D, out DependencyObject containingVisual2D))
                     {
                         if (group == null)
                         {
@@ -2949,8 +2958,8 @@ namespace System.Windows.Media
                             m = Matrix.Identity;
                         }
 
-                        group.Children.Add(new MS.Internal.Media3D.GeneralTransform2DTo3DTo2D(v2dv3d, gAsVisual));
-                        g = VisualTreeHelper.GetContainingVisual2D(v2dv3d);
+                        group.Children.Add(transform2DTo3DTo2D);
+                        g = containingVisual2D;
                         continue;
                     }
 

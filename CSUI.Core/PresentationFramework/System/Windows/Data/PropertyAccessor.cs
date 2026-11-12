@@ -399,10 +399,6 @@ namespace System.Windows.Data
             Register<IList, int>(nameof(IList.Count), static l => l.Count);
             Register<Array, int>(nameof(Array.Length), static a => a.Length);
             Register<string, int>(nameof(string.Length), static s => s.Length);
-            Register<CollectionView, int>(nameof(CollectionView.Count), static cv => cv.Count);
-            Register<CollectionView, object>(nameof(CollectionView.CurrentItem), static cv => cv.CurrentItem);
-            Register<CollectionView, int>(nameof(CollectionView.CurrentPosition), static cv => cv.CurrentPosition);
-            Register<CollectionView, bool>(nameof(CollectionView.IsEmpty), static cv => cv.IsEmpty);
             Register<DictionaryEntry, object>(nameof(DictionaryEntry.Key), static de => de.Key);
             Register<DictionaryEntry, object?>(nameof(DictionaryEntry.Value), static de => de.Value);
         }
@@ -565,22 +561,9 @@ namespace System.Windows.Data
             Register<Thickness>(new ThicknessConverter());
             Register<CornerRadius>(new CornerRadiusConverter());
             Register<GridLength>(new GridLengthConverter());
-            Register<FigureLength>(new FigureLengthConverter());
-            Register<VirtualizationCacheLength>(new VirtualizationCacheLengthConverter());
             Register<Key>(new KeyConverter());
             Register<ModifierKeys>(new ModifierKeysConverter());
             Register<KeyGesture>(new KeyGestureConverter());
-            Register<ImageSource>(new ImageSourceConverter());
-            Register<PixelFormat>(new PixelFormatConverter());
-            Register<Point3D>(new Point3DConverter());
-            Register<Vector3D>(new Vector3DConverter());
-            Register<Size3D>(new Size3DConverter());
-            Register<Rect3D>(new Rect3DConverter());
-            Register<Point4D>(new Point4DConverter());
-            Register<Matrix3D>(new Matrix3DConverter());
-            Register<Quaternion>(new QuaternionConverter());
-            Register<Point3DCollection>(new Point3DCollectionConverter());
-            Register<Vector3DCollection>(new Vector3DCollectionConverter());
         }
 
         /// <summary>Registers a converter for <paramref name="type"/>.</summary>

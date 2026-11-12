@@ -5,13 +5,17 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Windows.Interop;
+using System.Windows.Ole;
 using CSUI.Core.Interop;
 using CSUI.Core.Interop.DirectX;
 using MS.Internal;
 using MS.Internal.PresentationCore;
+using MS.Win32;
 
 namespace System.Windows.Media.Imaging
 {
@@ -23,6 +27,115 @@ namespace System.Windows.Media.Imaging
     public abstract partial class BitmapSource : ImageSource
     {
         #region Constructor
+
+        static BitmapSource()
+        {
+            DataObject.IsBitmapSourceHook = static o => o is BitmapSource;
+            DataObject.IsBitmapSourceTypeHook = static t => t == typeof(BitmapSource) || typeof(BitmapSource).IsAssignableFrom(t);
+            DataObject.CreateBitmapSourceFromHBitmapHook = static hBmp => System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(hBmp, IntPtr.Zero, Int32Rect.Empty, null);
+            DataObject.DecodeBitmapSourceFromDibBytesHook = static bytes => DecodeDibBytesForClipboard(bytes);
+            DataObject.AllocHBitmapFromBitmapSourceHook = static o => AllocHBitmapForClipboard((BitmapSource)o);
+            DataObject.AllocDibHGlobalFromBitmapSourceHook = static o => AllocDibHGlobalForClipboard((BitmapSource)o);
+        }
+
+        private static IntPtr AllocDibHGlobalForClipboard(BitmapSource source)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+
+            BmpBitmapEncoder encoder = new();
+            encoder.Frames.Add(BitmapFrame.Create(source));
+            using MemoryStream ms = new();
+            encoder.Save(ms);
+
+            byte[] bmpBytes = ms.ToArray();
+            const int BitmapFileHeaderSize = 14;
+            if (bmpBytes.Length <= BitmapFileHeaderSize)
+            {
+                throw new InvalidOperationException("Failed to encode bitmap as DIB.");
+            }
+
+            return OleComBridge.AllocHGlobalFromBytes(bmpBytes.AsSpan(BitmapFileHeaderSize));
+        }
+
+        private static unsafe IntPtr AllocHBitmapForClipboard(BitmapSource source)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+
+            BitmapSource bgraSource = source.Format == PixelFormats.Bgra32
+                ? source
+                : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+
+            int width = Math.Max(1, bgraSource.PixelWidth);
+            int height = Math.Max(1, bgraSource.PixelHeight);
+
+            BITMAPINFOHEADER bmi = new()
+            {
+                biSize = (uint)sizeof(BITMAPINFOHEADER),
+                biWidth = width,
+                biHeight = -height,
+                biPlanes = 1,
+                biBitCount = 32,
+                biCompression = 0,
+            };
+
+            IntPtr screenDc = UnsafeNativeMethods.GetDC(new HandleRef(null, IntPtr.Zero));
+            void* pBits = null;
+            IntPtr hBitmap = UnsafeNativeMethods.CreateDIBSection(screenDc, &bmi, 0, &pBits, IntPtr.Zero, 0);
+            if (screenDc != IntPtr.Zero)
+            {
+                UnsafeNativeMethods.ReleaseDC(new HandleRef(null, IntPtr.Zero), new HandleRef(null, screenDc));
+            }
+
+            if (hBitmap == IntPtr.Zero || pBits == null)
+            {
+                if (hBitmap != IntPtr.Zero)
+                {
+                    UnsafeNativeMethods.DeleteObject(hBitmap);
+                }
+                throw new OutOfMemoryException();
+            }
+
+            int stride = checked(width * 4);
+            int bufferSize = checked(stride * height);
+            bgraSource.CopyPixels(Int32Rect.Empty, (IntPtr)pBits, bufferSize, stride);
+            return hBitmap;
+        }
+
+        private static unsafe BitmapSource DecodeDibBytesForClipboard(ReadOnlySpan<byte> dibBytes)
+        {
+            if (dibBytes.Length < sizeof(BITMAPINFOHEADER))
+            {
+                return null;
+            }
+
+            BITMAPINFOHEADER header = MemoryMarshal.Read<BITMAPINFOHEADER>(dibBytes);
+            if (header.biSize < 12 || header.biSize > (uint)dibBytes.Length)
+            {
+                return null;
+            }
+
+            uint paletteCount = header.biClrUsed;
+            if (paletteCount == 0 && header.biBitCount <= 8 && header.biBitCount > 0)
+            {
+                paletteCount = 1u << header.biBitCount;
+            }
+
+            uint maskBytes = (header.biSize == 40 && header.biCompression == 3) ? 12u : 0u;
+            uint bfOffBits = 14u + header.biSize + maskBytes + (paletteCount * 4u);
+            uint bfSize = 14u + (uint)dibBytes.Length;
+
+            byte[] bmpData = new byte[14 + dibBytes.Length];
+            bmpData[0] = (byte)'B';
+            bmpData[1] = (byte)'M';
+            Unsafe.WriteUnaligned(ref bmpData[2], bfSize);
+            Unsafe.WriteUnaligned(ref bmpData[6], 0u);
+            Unsafe.WriteUnaligned(ref bmpData[10], bfOffBits);
+            dibBytes.CopyTo(bmpData.AsSpan(14));
+
+            using MemoryStream ms = new(bmpData);
+            BmpBitmapDecoder decoder = new(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            return decoder.Frames.Count > 0 ? decoder.Frames[0] : null;
+        }
 
         /// <summary>
         /// Create a BitmapSource from an array of pixels.
@@ -1496,6 +1609,30 @@ namespace System.Windows.Media.Imaging
                     }
                 }
             }
+        }
+
+        internal override bool TryCopyIconPixelsBgra32(out int pixelWidth, out int pixelHeight, out byte[] bgra32Pixels)
+        {
+            if (PixelWidth <= 0 || PixelHeight <= 0)
+            {
+                pixelWidth = 0;
+                pixelHeight = 0;
+                bgra32Pixels = null;
+                return false;
+            }
+
+            BitmapSource source = this;
+            if (source.Format != PixelFormats.Bgra32 && source.Format != PixelFormats.Pbgra32)
+            {
+                source = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            }
+
+            pixelWidth = source.PixelWidth;
+            pixelHeight = source.PixelHeight;
+            int stride = pixelWidth * 4;
+            bgra32Pixels = new byte[pixelHeight * stride];
+            source.CopyPixels(bgra32Pixels, stride, 0);
+            return true;
         }
 
         #endregion WeakBitmapSourceEventSink

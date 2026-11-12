@@ -242,47 +242,7 @@ namespace System.Windows.Controls
         /// <param name="newIsItemsHost">The new value of the IsItemsHost property.</param>
         protected virtual void OnIsItemsHostChanged(bool oldIsItemsHost, bool newIsItemsHost)
         {
-            // GetItemsOwner will check IsItemsHost first, so we don't have
-            // to check that IsItemsHost == true before calling it.
-            DependencyObject parent = ItemsControl.GetItemsOwnerInternal(this);
-            ItemsControl itemsControl = parent as ItemsControl;
-            Panel oldItemsHost = null;
-
-            if (itemsControl != null)
-            {
-                // ItemsHost should be the "root" element which has
-                // IsItemsHost = true on it.  In the case of grouping,
-                // IsItemsHost is true on all panels which are generating
-                // content.  Thus, we care only about the panel which
-                // is generating content for the ItemsControl.
-                IItemContainerGenerator generator = itemsControl.ItemContainerGenerator as IItemContainerGenerator;
-                if (generator != null && generator == generator.GetItemContainerGeneratorForPanel(this))
-                {
-                    oldItemsHost = itemsControl.ItemsHost;
-                    itemsControl.ItemsHost = this;
-                }
-            }
-            else
-            {
-                MS.Internal.Controls.IGroupItemHost groupItem = parent as MS.Internal.Controls.IGroupItemHost;
-                if (groupItem != null)
-                {
-                    IItemContainerGenerator generator = groupItem.Generator as IItemContainerGenerator;
-                    if (generator != null && generator == generator.GetItemContainerGeneratorForPanel(this))
-                    {
-                        oldItemsHost = groupItem.ItemsHost;
-                        groupItem.ItemsHost = this;
-                    }
-                }
-            }
-
-            if (oldItemsHost != null && oldItemsHost != this)
-            {
-                // when changing ItemsHost panels, disconnect the old one
-                oldItemsHost.VerifyBoundState();
-            }
-
-            VerifyBoundState();
+            MS.Internal.Controls.ControlFoundationHooks.OnPanelIsItemsHostChangedHook?.Invoke(this);
         }
 
         /// <summary>
@@ -400,7 +360,7 @@ namespace System.Windows.Controls
         {
             get
             {
-                return _itemContainerGenerator;
+                return _itemContainerGenerator as IItemContainerGenerator;
             }
         }
 
@@ -509,7 +469,7 @@ namespace System.Windows.Controls
 
         #region Private Methods
 
-        private bool VerifyBoundState()
+        internal bool VerifyBoundState()
         {
             // If the panel becomes "unbound" while attached to a generator, this
             // method detaches it and makes it really behave like "unbound."  This
@@ -520,7 +480,7 @@ namespace System.Windows.Controls
             // needs to release resources (an event handler) when it is "out of the tree."
             // Currently, there is no good notification for when this happens.
 
-            bool isItemsHost = (ItemsControl.GetItemsOwnerInternal(this) != null);
+            bool isItemsHost = MS.Internal.Controls.ControlFoundationHooks.IsPanelItemsHostHook?.Invoke(this) == true;
 
             if (isItemsHost)
             {
@@ -570,22 +530,17 @@ namespace System.Windows.Controls
         {
             Debug.Assert(_itemContainerGenerator == null, "Attempted to connect to a generator when Panel._itemContainerGenerator is non-null.");
 
-            ItemsControl itemsOwner = ItemsControl.GetItemsOwner(this);
-            if (itemsOwner == null)
+            var hook = MS.Internal.Controls.ControlFoundationHooks.ConnectPanelGeneratorHook;
+            if (hook == null)
             {
-                // This can happen if IsItemsHost=true, but the panel is not nested in an ItemsControl
                 throw new InvalidOperationException(SR.Panel_ItemsControlNotFound);
             }
 
-            IItemContainerGenerator itemsOwnerGenerator = itemsOwner.ItemContainerGenerator;
-            if (itemsOwnerGenerator != null)
+            _itemContainerGenerator = hook(this);
+            if (_itemContainerGenerator != null)
             {
-                _itemContainerGenerator = itemsOwnerGenerator.GetItemContainerGeneratorForPanel(this);
-                if (_itemContainerGenerator != null)
-                {
-                    _itemContainerGenerator.ItemsChanged += new ItemsChangedEventHandler(OnItemsChanged);
-                    ((IItemContainerGenerator)_itemContainerGenerator).RemoveAll();
-                }
+                _itemContainerGenerator.ItemsChanged += new ItemsChangedEventHandler(OnItemsChanged);
+                _itemContainerGenerator.RemoveAll();
             }
         }
 
@@ -594,7 +549,7 @@ namespace System.Windows.Controls
             Debug.Assert(_itemContainerGenerator != null, "Attempted to disconnect from a generator when Panel._itemContainerGenerator is null.");
 
             _itemContainerGenerator.ItemsChanged -= new ItemsChangedEventHandler(OnItemsChanged);
-            ((IItemContainerGenerator)_itemContainerGenerator).RemoveAll();
+            _itemContainerGenerator.RemoveAll();
             _itemContainerGenerator = null;
         }
 
@@ -631,7 +586,7 @@ namespace System.Windows.Controls
         {
             if (_itemContainerGenerator != null)
             {
-                ((IItemContainerGenerator)_itemContainerGenerator).RemoveAll();
+                _itemContainerGenerator.RemoveAll();
             }
 
             if ((_uiElementCollection != null) && (_uiElementCollection.Count > 0))
@@ -653,7 +608,7 @@ namespace System.Windows.Controls
             // code responds harmlessly.
             //Debug.Assert(_itemContainerGenerator != null, "Encountered a null _itemContainerGenerator while being asked to generate children.");
 
-            IItemContainerGenerator generator = (IItemContainerGenerator)_itemContainerGenerator;
+            var generator = _itemContainerGenerator;
             if (generator != null)
             {
                 using (generator.StartAt(new GeneratorPosition(-1, 0), GeneratorDirection.Forward))
@@ -713,7 +668,7 @@ namespace System.Windows.Controls
         {
             Debug.Assert(_itemContainerGenerator != null, "Encountered a null _itemContainerGenerator while receiving an Add action from a generator.");
 
-            IItemContainerGenerator generator = (IItemContainerGenerator)_itemContainerGenerator;
+            var generator = _itemContainerGenerator;
             using (generator.StartAt(pos, GeneratorDirection.Forward))
             {
                 for (int i = 0; i < itemCount; i++)
@@ -743,7 +698,7 @@ namespace System.Windows.Controls
             Debug.Assert(itemCount == containerCount, "Panel expects Replace to affect only realized containers");
             Debug.Assert(_itemContainerGenerator != null, "Encountered a null _itemContainerGenerator while receiving an Replace action from a generator.");
 
-            IItemContainerGenerator generator = (IItemContainerGenerator)_itemContainerGenerator;
+            var generator = _itemContainerGenerator;
             using (generator.StartAt(pos, GeneratorDirection.Forward, true))
             {
                 for (int i = 0; i < itemCount; i++)
@@ -772,7 +727,7 @@ namespace System.Windows.Controls
 
             Debug.Assert(_itemContainerGenerator != null, "Encountered a null _itemContainerGenerator while receiving an Move action from a generator.");
 
-            IItemContainerGenerator generator = (IItemContainerGenerator)_itemContainerGenerator;
+            var generator = _itemContainerGenerator;
             int toIndex = generator.IndexFromGeneratorPosition(toPos);
 
             UIElement[] elements = new UIElement[containerCount];
@@ -845,7 +800,7 @@ namespace System.Windows.Controls
         }
 
         private UIElementCollection _uiElementCollection;
-        private ItemContainerGenerator _itemContainerGenerator;
+        private MS.Internal.Controls.IPanelItemContainerGenerator _itemContainerGenerator;
         private BoolField _boolFieldStore;
 
         private const int c_zDefaultValue = 0;              //  default ZIndexProperty value

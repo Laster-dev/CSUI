@@ -47,6 +47,14 @@ namespace System.Windows.Data
         /// UI thread dispatcher of the caller of this constructor.
         /// </remarks>
         /// <param name="collection">underlying collection</param>
+        static CollectionView()
+        {
+            PropertyAccessorRegistry.Register<CollectionView, int>(nameof(Count), static cv => cv.Count);
+            PropertyAccessorRegistry.Register<CollectionView, object>(nameof(CurrentItem), static cv => cv.CurrentItem);
+            PropertyAccessorRegistry.Register<CollectionView, int>(nameof(CurrentPosition), static cv => cv.CurrentPosition);
+            PropertyAccessorRegistry.Register<CollectionView, bool>(nameof(IsEmpty), static cv => cv.IsEmpty);
+        }
+
         public CollectionView(IEnumerable collection)
             : this(collection, 0)
         {
@@ -509,7 +517,7 @@ namespace System.Windows.Data
             VerifyRefreshNotDeferred();
 
             // if already on item, or item is the placeholder, don't do anything
-            if (System.Windows.Controls.ItemsControl.EqualsEx(CurrentItem, item) || System.Windows.Controls.ItemsControl.EqualsEx(NewItemPlaceholder, item))
+            if (MS.Internal.Helper.EqualsEx(CurrentItem, item) || MS.Internal.Helper.EqualsEx(NewItemPlaceholder, item))
             {
                 // also check that we're not fooled by a false null _currentItem
                 if (item != null || IsCurrentInView)
@@ -518,7 +526,7 @@ namespace System.Windows.Data
 
             int index = -1;
             IEditableCollectionView ecv = this as IEditableCollectionView;
-            bool isNewItem = (ecv != null && ecv.IsAddingNew && System.Windows.Controls.ItemsControl.EqualsEx(item, ecv.CurrentAddItem));
+            bool isNewItem = (ecv != null && ecv.IsAddingNew && MS.Internal.Helper.EqualsEx(item, ecv.CurrentAddItem));
             if (isNewItem || PassesFilter(item))
             {
                 // if the item is not found IndexOf() will return -1, and

@@ -841,7 +841,7 @@ namespace System.Windows.Data
 
         private void SetNewItem(object item)
         {
-            if (!System.Windows.Controls.ItemsControl.EqualsEx(item, _newItem))
+            if (!MS.Internal.Helper.EqualsEx(item, _newItem))
             {
                 _newItem = item;
 
@@ -906,7 +906,7 @@ namespace System.Windows.Data
 
                     // the pending changes may have moved (or even removed) the
                     // item.   Verify the index.
-                    if (index >= InternalList.Count || !System.Windows.Controls.ItemsControl.EqualsEx(item, GetItemAt(index)))
+                    if (index >= InternalList.Count || !MS.Internal.Helper.EqualsEx(item, GetItemAt(index)))
                     {
                         index = InternalList.IndexOf(item);
                         if (index < 0)
@@ -959,7 +959,7 @@ namespace System.Windows.Data
 
             if (IsAddingNew)
             {
-                if (System.Windows.Controls.ItemsControl.EqualsEx(item, _newItem))
+                if (MS.Internal.Helper.EqualsEx(item, _newItem))
                     return;     // EditItem(newItem) is a no-op
 
                 CommitNew();    // implicitly close a previous AddNew
@@ -1076,7 +1076,7 @@ namespace System.Windows.Data
 
         private void SetEditItem(object item)
         {
-            if (!System.Windows.Controls.ItemsControl.EqualsEx(item, _editItem))
+            if (!MS.Internal.Helper.EqualsEx(item, _editItem))
             {
                 _editItem = item;
 
@@ -1692,7 +1692,7 @@ namespace System.Windows.Data
                         return InternalCount - 1;
                 }
             }
-            else if (IsAddingNew && System.Windows.Controls.ItemsControl.EqualsEx(item, _newItem))
+            else if (IsAddingNew && MS.Internal.Helper.EqualsEx(item, _newItem))
             {
                 switch (NewItemPlaceholderPosition)
                 {
@@ -2259,7 +2259,7 @@ namespace System.Windows.Data
                 object item = list[k];
                 LiveShapingItem lsi = isLiveGrouping ? lsList.ItemAt(k) : null;
 
-                if (!IsAddingNew || !System.Windows.Controls.ItemsControl.EqualsEx(_newItem, item))
+                if (!IsAddingNew || !MS.Internal.Helper.EqualsEx(_newItem, item))
                 {
                     _group.AddToSubgroups(item, lsi, true /*loading*/);
                 }

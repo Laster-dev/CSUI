@@ -59,19 +59,9 @@ namespace MS.Internal
         // Constructors
         // ------------------------------------------------------------------
 
-        static TraceData()
-        {
-            _avTrace.TraceExtraMessages += new AvTraceEventHandler(OnTrace);
-
-            // This tells tracing that IsEnabled should be true if we're in the debugger,
-            // even if the registry flag isn't turned on.  By default, IsEnabled is only
-            // true if the registry is set.
-            _avTrace.EnabledByDebugger = true;
-
-            // This tells the tracing code not to automatically generate the .GetType
-            // and .HashCode in the trace strings.
-            _avTrace.SuppressGeneratedParameters = true;
-        }
+        // Note: static ctor intentionally omitted while IsEnabled => false so accessing
+        // TraceData.IsEnabled preserves beforefieldinit and never roots _avTrace / OnTrace
+        // in NativeAOT builds.
 
         // ------------------------------------------------------------------
         // Methods

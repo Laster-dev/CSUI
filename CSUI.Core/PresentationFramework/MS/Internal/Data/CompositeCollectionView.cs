@@ -218,7 +218,7 @@ namespace MS.Internal.Data
         public override bool MoveCurrentTo(object item)
         {
             // if already on item, don't do anything
-            if (ItemsControl.EqualsEx(CurrentItem, item))
+            if (MS.Internal.Helper.EqualsEx(CurrentItem, item))
             {
                 // also check that we're not fooled by a false null CurrentItem
                 if (item != null || IsCurrentInView)
@@ -870,7 +870,7 @@ namespace MS.Internal.Data
 
                 if (cc == null) // flat item
                 {
-                    if (ItemsControl.EqualsEx(_collection[positionX], item))
+                    if (MS.Internal.Helper.EqualsEx(_collection[positionX], item))
                     {
                         break;
                     }
@@ -1136,7 +1136,7 @@ namespace MS.Internal.Data
             else
             {
                 object item = ((CollectionContainer)sender).ViewItem(_currentPositionY);
-                if (ItemsControl.EqualsEx(CurrentItem, item))
+                if (MS.Internal.Helper.EqualsEx(CurrentItem, item))
                 {
                     flatIndex = CurrentPosition + 1;
                 }
@@ -1165,14 +1165,14 @@ namespace MS.Internal.Data
             }
             else
             {
-                if (ItemsControl.EqualsEx(item, CurrentItem))
+                if (MS.Internal.Helper.EqualsEx(item, CurrentItem))
                 {
                     flatIndex = CurrentPosition;
                 }
                 else
                 {
                     object item2 = ((CollectionContainer)sender).ViewItem(_currentPositionY);
-                    if (ItemsControl.EqualsEx(item, item2))
+                    if (MS.Internal.Helper.EqualsEx(item, item2))
                     {
                         flatIndex = CurrentPosition + 1;
                     }
@@ -1651,7 +1651,7 @@ namespace MS.Internal.Data
             if (IsCurrentInView)
             {
                 int x, y;
-                if (!ItemsControl.EqualsEx(CurrentItem, GetItem(CurrentPosition, out x, out y)) && !_collection.HasRepeatedCollection())
+                if (!MS.Internal.Helper.EqualsEx(CurrentItem, GetItem(CurrentPosition, out x, out y)) && !_collection.HasRepeatedCollection())
                     Debug.Fail("CurrentItem is not consistent with CurrentPosition");
             }
             else

@@ -1104,7 +1104,7 @@ namespace System.Windows.Data
             object value = Value;
 
             // TargetNullValue is the UI representation of a "null" value.  Use null internally.
-            if (ItemsControl.EqualsEx(value, EffectiveTargetNullValue))
+            if (MS.Internal.Helper.EqualsEx(value, EffectiveTargetNullValue))
             {
                 value = null;
             }
@@ -1720,7 +1720,7 @@ namespace System.Windows.Data
                 DependencyProperty dataContextDP = FrameworkElement.DataContextProperty;
                 DependencyObject groupContextElement = bg.InheritanceContext;
                 if (groupContextElement == null ||
-                    !ItemsControl.EqualsEx( contextElement.GetValue(dataContextDP),
+                    !MS.Internal.Helper.EqualsEx( contextElement.GetValue(dataContextDP),
                                     groupContextElement.GetValue(dataContextDP)))
                 {
                     MarkAsNonGrouped();
@@ -2074,7 +2074,7 @@ namespace System.Windows.Data
 
             if (targetDP == ContentControl.ContentProperty ||
                 targetDP == ContentPresenter.ContentProperty ||
-                targetDP == HeaderedItemsControl.HeaderProperty ||
+                targetDP == MS.Internal.Controls.ControlFoundationHooks.HeaderedItemsControlHeaderPropertyHook ||
                 targetDP == HeaderedContentControl.HeaderProperty)
             {
                 // pass DisconnectedItem through content-like properties, so
@@ -2333,7 +2333,7 @@ namespace System.Windows.Data
                     int j;
                     for (j=toRemove.Count-1; j>=0; --j)
                     {
-                        if (ItemsControl.EqualsEx(toRemove[j].ErrorContent, errorContent))
+                        if (MS.Internal.Helper.EqualsEx(toRemove[j].ErrorContent, errorContent))
                         {
                             // this error appears on both lists - remove it from toRemove
                             toRemove.RemoveAt(j);

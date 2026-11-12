@@ -101,7 +101,7 @@ namespace MS.Internal.Data
             RBFinger<LiveShapingItem> finger = FindIndex(0);
             while (finger.Node != this)
             {
-                if (System.Windows.Controls.ItemsControl.EqualsEx(finger.Item.Item, item))
+                if (MS.Internal.Helper.EqualsEx(finger.Item.Item, item))
                     return finger.Item;
                 ++finger;
             }

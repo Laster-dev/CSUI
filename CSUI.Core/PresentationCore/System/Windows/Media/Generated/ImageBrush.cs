@@ -204,6 +204,7 @@ namespace System.Windows.Media
 
             // Initializations
             Type typeofThis = typeof(ImageBrush);
+            ImageSource.EnsureTypeConvertersRegistered();
             ImageSourceProperty =
                   RegisterProperty("ImageSource",
                                    typeof(ImageSource),

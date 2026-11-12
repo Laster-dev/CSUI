@@ -601,7 +601,9 @@ namespace System.Windows.Data
             // expected - this is what happens normally in a hierarchical control like TreeView.
             // The following code tries to detect the bad case and warn the user that something
             // is amiss.
-            if (_hasMultipleInheritanceContexts && property != ItemsControl.ItemBindingGroupProperty && TraceData.IsEnabled)
+            if (_hasMultipleInheritanceContexts &&
+                property != MS.Internal.Controls.ControlFoundationHooks.ItemsControlItemBindingGroupPropertyHook &&
+                TraceData.IsEnabled)
             {
                 TraceData.TraceAndNotify(TraceEventType.Warning,
                         TraceData.BindingGroupMultipleInheritance);
@@ -814,7 +816,7 @@ namespace System.Windows.Data
                     // 90% case:  the first entry in _itemsRW already points to the item,
                     // so just re-use it.  Otherwise create a new reference.
                     if (itemReference == null ||
-                        !ItemsControl.EqualsEx(dataContextItem, itemReference.Target))
+                        !MS.Internal.Helper.EqualsEx(dataContextItem, itemReference.Target))
                     {
                         itemReference = new WeakReference(dataContextItem);
                     }
@@ -1265,7 +1267,7 @@ namespace System.Windows.Data
         {
             for (int i=0, n=list.Count; i<n; ++i)
             {
-                if (ItemsControl.EqualsEx(item, list[i].Target))
+                if (MS.Internal.Helper.EqualsEx(item, list[i].Target))
                 {
                     return i;
                 }
@@ -1565,7 +1567,7 @@ namespace System.Windows.Data
                     {
                         GetValueTableEntry entry = _table[i];
                         if (propertyName == entry.PropertyName &&
-                            ItemsControl.EqualsEx(item, entry.Item))
+                            MS.Internal.Helper.EqualsEx(item, entry.Item))
                         {
                             return entry;
                         }
@@ -1899,7 +1901,7 @@ namespace System.Windows.Data
                 {
                     ProposedValueEntry entry = _table[i];
                     if (propertyName == entry.PropertyName &&
-                        ItemsControl.EqualsEx(item, entry.Item))
+                        MS.Internal.Helper.EqualsEx(item, entry.Item))
                     {
                         return i;
                     }

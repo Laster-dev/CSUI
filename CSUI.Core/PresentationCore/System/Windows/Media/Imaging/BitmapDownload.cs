@@ -7,11 +7,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Net.Cache;
 using System.Threading;
 using System.Windows.Threading;
+using CSUI.Core.Interop.Win32;
 using MS.Internal;
 using SR = MS.Internal.PresentationCore.SR;
 
@@ -299,53 +298,43 @@ namespace System.Windows.Media.Imaging
                 return;
             }
 
-            using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, uri);
+            string extraHeaders = null;
             if (entry.uriCachePolicy != null)
             {
-                if (entry.uriCachePolicy.Level == RequestCacheLevel.NoCacheNoStore ||
-                    entry.uriCachePolicy.Level == RequestCacheLevel.Reload)
+                if (entry.uriCachePolicy.Level == RequestCacheLevel.NoCacheNoStore)
                 {
-                    request.Headers.CacheControl = new CacheControlHeaderValue
-                    {
-                        NoCache = true,
-                        NoStore = entry.uriCachePolicy.Level == RequestCacheLevel.NoCacheNoStore
-                    };
+                    extraHeaders = "Cache-Control: no-cache, no-store\r\n";
+                }
+                else if (entry.uriCachePolicy.Level == RequestCacheLevel.Reload)
+                {
+                    extraHeaders = "Cache-Control: no-cache\r\n";
                 }
                 else if (entry.uriCachePolicy.Level == RequestCacheLevel.CacheOnly)
                 {
-                    request.Headers.CacheControl = new CacheControlHeaderValue { OnlyIfCached = true };
+                    extraHeaders = "Cache-Control: only-if-cached\r\n";
                 }
             }
 
-            using HttpResponseMessage response = s_httpClient.Send(request, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-
-            entry.contentType = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
-            long totalLength = response.Content.Headers.ContentLength ?? -1;
-            entry.contentLength = totalLength;
-
-            try
-            {
-                entry.outputStream = CreateTempOutputStream(entry);
-            }
-            catch (Exception e)
-            {
-                throw new IOException(SR.Image_CannotCreateTempFile, e);
-            }
-
-            using Stream networkStream = response.Content.ReadAsStream();
-            byte[] downloadBuffer = new byte[READ_SIZE];
-            long totalDownloaded = 0;
-            int chunk;
-
-            while ((chunk = networkStream.Read(downloadBuffer, 0, downloadBuffer.Length)) > 0)
-            {
-                entry.outputStream.Write(downloadBuffer, 0, chunk);
-                totalDownloaded += chunk;
-                ReportProgress(entry, totalDownloaded, totalLength);
-            }
-
-            entry.outputStream.Flush();
+            long totalLength = -1;
+            WinHttpClient.Download(
+                uri,
+                extraHeaders,
+                openOutput: (contentType, contentLength) =>
+                {
+                    entry.contentType = contentType ?? string.Empty;
+                    totalLength = contentLength;
+                    entry.contentLength = totalLength;
+                    try
+                    {
+                        entry.outputStream = CreateTempOutputStream(entry);
+                        return entry.outputStream;
+                    }
+                    catch (Exception e)
+                    {
+                        throw new IOException(SR.Image_CannotCreateTempFile, e);
+                    }
+                },
+                onProgress: (totalDownloaded, len) => ReportProgress(entry, totalDownloaded, len));
         }
 
         private static void ReportProgress(QueueEntry entry, long totalRead, long totalLength)
@@ -505,7 +494,6 @@ namespace System.Windows.Media.Imaging
             Started = 2
         }
 
-        private static readonly HttpClient s_httpClient = new HttpClient();
         internal static Thread _thread;
         internal static int _threadStartState;
         internal static Hashtable _uriTable;

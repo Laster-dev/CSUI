@@ -28,6 +28,11 @@ namespace System.Windows.Controls
         //
         //------------------------------------------------------
 
+        static ItemsPresenter()
+        {
+            FrameworkElementFactory.RegisterType<ItemsPresenter>();
+        }
+
         /// <summary>
         /// Called when the Template's tree is about to be generated
         /// </summary>

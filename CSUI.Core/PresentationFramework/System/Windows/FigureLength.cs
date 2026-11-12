@@ -60,6 +60,11 @@ namespace System.Windows
 
         #region Constructors
 
+        static FigureLength()
+        {
+            System.Windows.Data.TypeConverterRegistry.Register<FigureLength>(new FigureLengthConverter());
+        }
+
         /// <summary>
         /// Constructor, initializes the FigureLength as absolute value in pixels.
         /// </summary>

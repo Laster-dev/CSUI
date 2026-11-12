@@ -21,13 +21,8 @@ namespace MS.Internal
     /// </summary>
     internal static partial class TraceShell
     {
-        static TraceShell()
-        {
-            // This tells tracing that IsEnabled should be true if we're in the debugger,
-            // even if the registry flag isn't turned on.  By default, IsEnabled is only
-            // true if the registry is set.
-            _avTrace.EnabledByDebugger = true;
-        }
+        // Note: static ctor intentionally omitted while IsEnabled => false so accessing
+        // TraceShell.IsEnabled preserves beforefieldinit in NativeAOT builds.
     }
 }
 

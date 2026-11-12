@@ -460,10 +460,10 @@ namespace MS.Internal
             }
 
             // 2. In an ItemsControl, the container's parent is the "ItemsHost"
-            // panel, from which we get to the ItemsControl by public API.
+            // panel, from which we get to the ItemsControl via decoupled hook.
             if (parent != null)
             {
-                System.Windows.Controls.ItemsControl ic = System.Windows.Controls.ItemsControl.GetItemsOwner(parent);
+                MS.Internal.Controls.IGeneratorHost ic = MS.Internal.Controls.ControlFoundationHooks.GetItemsOwnerHook?.Invoke(parent) as MS.Internal.Controls.IGeneratorHost;
                 if (ic != null)
                     return ic;
             }
@@ -847,7 +847,8 @@ namespace MS.Internal
                             container.SetCurrentValue(dp, modifiedItemValue.Value);
                         }
                     }
-                    else if (container != container.GetValue(ItemContainerGenerator.ItemForItemContainerProperty))
+                    else if (MS.Internal.Controls.ControlFoundationHooks.ItemForItemContainerPropertyHook is DependencyProperty itemForContainerProp &&
+                             container != container.GetValue(itemForContainerProp))
                     {
                         // at this point we have
                         //   a. a real property (dp != null)
@@ -1258,6 +1259,18 @@ namespace MS.Internal
         //  Private Enums, Structs, Constants
         //
         //------------------------------------------------------
+
+        internal static bool EqualsEx(object o1, object o2)
+        {
+            try
+            {
+                return Object.Equals(o1, o2);
+            }
+            catch (System.InvalidCastException)
+            {
+                return false;
+            }
+        }
 
         internal static void RegisterItemValueStorageProperty(int globalIndex)
         {

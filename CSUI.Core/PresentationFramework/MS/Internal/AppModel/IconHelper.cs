@@ -9,7 +9,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using CSUI.Core.Interop;
 using MS.Win32;
 
@@ -137,22 +136,10 @@ namespace MS.Internal
 
         private static NativeMethods.IconHandle CreateIconHandleFromImageSource(ImageSource image, int targetW, int targetH)
         {
-            if (image is not BitmapSource bitmap || bitmap.PixelWidth <= 0 || bitmap.PixelHeight <= 0)
+            if (image == null || !image.TryCopyIconPixelsBgra32(out int srcW, out int srcH, out byte[] srcPixels) || srcW <= 0 || srcH <= 0)
             {
                 return NativeMethods.IconHandle.GetInvalidIcon();
             }
-
-            BitmapSource source = bitmap;
-            if (source.Format != PixelFormats.Bgra32 && source.Format != PixelFormats.Pbgra32)
-            {
-                source = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
-            }
-
-            int srcW = source.PixelWidth;
-            int srcH = source.PixelHeight;
-            int srcStride = srcW * 4;
-            byte[] srcPixels = new byte[srcH * srcStride];
-            source.CopyPixels(srcPixels, srcStride, 0);
 
             BITMAPINFOHEADER bih = new BITMAPINFOHEADER
             {

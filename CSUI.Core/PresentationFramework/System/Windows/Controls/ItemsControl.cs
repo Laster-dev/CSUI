@@ -60,6 +60,69 @@ namespace System.Windows.Controls
             VirtualizingPanel.ScrollUnitProperty.OverrideMetadata(typeof(ItemsControl), new FrameworkPropertyMetadata(new PropertyChangedCallback(OnScrollingModeChanged), new CoerceValueCallback(CoerceScrollingMode)));
             VirtualizingPanel.CacheLengthProperty.OverrideMetadata(typeof(ItemsControl), new FrameworkPropertyMetadata(new PropertyChangedCallback(OnCacheSizeChanged)));
             VirtualizingPanel.CacheLengthUnitProperty.OverrideMetadata(typeof(ItemsControl), new FrameworkPropertyMetadata(new PropertyChangedCallback(OnCacheSizeChanged), new CoerceValueCallback(CoerceVirtualizationCacheLengthUnit)));
+
+            FrameworkElementFactory.RegisterType<ItemsControl>();
+            FrameworkElementFactory.RegisterType<ItemsPresenter>();
+            PropertyPath.RegisterKnownType("ItemsControl", typeof(ItemsControl));
+
+            MS.Internal.Controls.ControlFoundationHooks.ItemsPanelPropertyHook = ItemsPanelProperty;
+            MS.Internal.Controls.ControlFoundationHooks.ItemForItemContainerPropertyHook = ItemContainerGenerator.ItemForItemContainerProperty;
+            MS.Internal.Controls.ControlFoundationHooks.ItemsControlItemBindingGroupPropertyHook = ItemBindingGroupProperty;
+            MS.Internal.Controls.ControlFoundationHooks.GetItemsOwnerHook = GetItemsOwner;
+            MS.Internal.Controls.ControlFoundationHooks.IsPanelItemsHostHook = static p => GetItemsOwnerInternal(p) != null;
+            MS.Internal.Controls.ControlFoundationHooks.OnPanelIsItemsHostChangedHook = HandlePanelIsItemsHostChanged;
+            MS.Internal.Controls.ControlFoundationHooks.ConnectPanelGeneratorHook = ConnectPanelGenerator;
+            MS.Internal.Controls.ControlFoundationHooks.TryGetTreeViewItemHeaderHook = TryGetTreeViewItemHeader;
+            MS.Internal.Controls.ControlFoundationHooks.GetElementViewportPositionHook = GetElementViewportPosition;
+        }
+
+        private static void HandlePanelIsItemsHostChanged(Panel panel)
+        {
+            DependencyObject parent = GetItemsOwnerInternal(panel);
+            ItemsControl itemsControl = parent as ItemsControl;
+            Panel oldItemsHost = null;
+
+            if (itemsControl != null)
+            {
+                IItemContainerGenerator generator = itemsControl.ItemContainerGenerator as IItemContainerGenerator;
+                if (generator != null && generator == generator.GetItemContainerGeneratorForPanel(panel))
+                {
+                    oldItemsHost = itemsControl.ItemsHost;
+                    itemsControl.ItemsHost = panel;
+                }
+            }
+            else
+            {
+                MS.Internal.Controls.IGroupItemHost groupItem = parent as MS.Internal.Controls.IGroupItemHost;
+                if (groupItem != null)
+                {
+                    IItemContainerGenerator generator = groupItem.Generator as IItemContainerGenerator;
+                    if (generator != null && generator == generator.GetItemContainerGeneratorForPanel(panel))
+                    {
+                        oldItemsHost = groupItem.ItemsHost;
+                        groupItem.ItemsHost = panel;
+                    }
+                }
+            }
+
+            if (oldItemsHost != null && oldItemsHost != panel)
+            {
+                oldItemsHost.VerifyBoundState();
+            }
+
+            panel.VerifyBoundState();
+        }
+
+        private static MS.Internal.Controls.IPanelItemContainerGenerator ConnectPanelGenerator(Panel panel)
+        {
+            ItemsControl itemsOwner = GetItemsOwner(panel);
+            if (itemsOwner == null)
+            {
+                throw new InvalidOperationException(SR.Panel_ItemsControlNotFound);
+            }
+
+            IItemContainerGenerator itemsOwnerGenerator = itemsOwner.ItemContainerGenerator;
+            return itemsOwnerGenerator?.GetItemContainerGeneratorForPanel(panel) as MS.Internal.Controls.IPanelItemContainerGenerator;
         }
 
         private static void OnScrollingModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -3519,20 +3582,7 @@ namespace System.Windows.Controls
         // with classes that implement Object.Equals poorly
         internal static bool EqualsEx(object o1, object o2)
         {
-            try
-            {
-                return Object.Equals(o1, o2);
-            }
-            catch (System.InvalidCastException)
-            {
-                // A common programming error: the type of o1 overrides Equals(object o2)
-                // but mistakenly assumes that o2 has the same type as o1:
-                //     MyType x = (MyType)o2;
-                // This throws InvalidCastException when o2 is a sentinel object,
-                // e.g. UnsetValue, DisconnectedItem, NewItemPlaceholder, etc.
-                // Rather than crash, just return false - the objects are clearly unequal.
-                return false;
-            }
+            return MS.Internal.Helper.EqualsEx(o1, o2);
         }
 
         #endregion

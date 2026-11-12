@@ -13,6 +13,14 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <StripSymbols>true</StripSymbols>
     <EventSourceSupport>false</EventSourceSupport>
+    <StackTraceSupport>false</StackTraceSupport>
+    <DebuggerSupport>false</DebuggerSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <AutoreleasePoolSupport>false</AutoreleasePoolSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
     <WarningsAsErrors>IL2026;IL2050;IL2060;IL2070;IL2072;IL2075;IL2087;IL2091;IL3050</WarningsAsErrors>
   </PropertyGroup>
 

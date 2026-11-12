@@ -247,7 +247,7 @@ namespace MS.Internal.Data
             ++_comparisons;
 #endif
 
-            if (x == y || System.Windows.Controls.ItemsControl.EqualsEx(x.Item, y.Item))
+            if (x == y || MS.Internal.Helper.EqualsEx(x.Item, y.Item))
                 return 0;
 
             int result = 0;
@@ -321,7 +321,7 @@ namespace MS.Internal.Data
         {
             foreach (LiveShapingItem lsi in _filterDirtyItems)
             {
-                if (System.Windows.Controls.ItemsControl.EqualsEx(item, lsi.Item))
+                if (MS.Internal.Helper.EqualsEx(item, lsi.Item))
                 {
                     lsi.StartingIndex = value;
                     return;
@@ -523,7 +523,7 @@ namespace MS.Internal.Data
             int result = 0;
             ForEachUntil((x) =>
                {
-                   if (System.Windows.Controls.ItemsControl.EqualsEx(value, x.Item))
+                   if (MS.Internal.Helper.EqualsEx(value, x.Item))
                        return true;
                    ++result;
                    return false;

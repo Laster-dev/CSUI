@@ -32,10 +32,7 @@ namespace MS.Internal.PresentationFramework
             FrameworkElementFactory.RegisterType<Control>();
             FrameworkElementFactory.RegisterType<ContentControl>();
             FrameworkElementFactory.RegisterType<HeaderedContentControl>();
-            FrameworkElementFactory.RegisterType<ItemsControl>();
-            FrameworkElementFactory.RegisterType<HeaderedItemsControl>();
             FrameworkElementFactory.RegisterType<ContentPresenter>();
-            FrameworkElementFactory.RegisterType<ItemsPresenter>();
             FrameworkElementFactory.RegisterType<Decorator>();
             FrameworkElementFactory.RegisterType<AdornerDecorator>();
             FrameworkElementFactory.RegisterType<Window>();

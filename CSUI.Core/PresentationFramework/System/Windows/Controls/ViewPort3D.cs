@@ -48,6 +48,7 @@ namespace System.Windows.Controls
             // layout bounds.  Most framework users find this surprising.
             // As a result, we clip Viewport3Ds to bounds by default.
             ClipToBoundsProperty.OverrideMetadata(typeof(Viewport3D), new PropertyMetadata(BooleanBoxes.TrueBox));
+            System.Windows.Media.Media3D.Point3D.EnsureTypeConvertersRegistered();
         }
 
         /// <summary>

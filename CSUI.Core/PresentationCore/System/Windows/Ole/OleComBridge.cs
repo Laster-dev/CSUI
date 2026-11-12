@@ -11,9 +11,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using System.Windows.Interop;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using MS.Win32;
 
 namespace System.Windows.Ole
@@ -806,105 +803,6 @@ namespace System.Windows.Ole
             }
 
             return ms.ToArray();
-        }
-
-        internal static IntPtr AllocDibHGlobalFromBitmapSource(BitmapSource source)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-
-            BmpBitmapEncoder encoder = new();
-            encoder.Frames.Add(BitmapFrame.Create(source));
-            using MemoryStream ms = new();
-            encoder.Save(ms);
-
-            byte[] bmpBytes = ms.ToArray();
-            const int BitmapFileHeaderSize = 14;
-            if (bmpBytes.Length <= BitmapFileHeaderSize)
-            {
-                throw new InvalidOperationException("Failed to encode bitmap as DIB.");
-            }
-
-            return AllocHGlobalFromBytes(bmpBytes.AsSpan(BitmapFileHeaderSize));
-        }
-
-        internal static IntPtr AllocHBitmapFromBitmapSource(BitmapSource source)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-
-            BitmapSource bgraSource = source.Format == PixelFormats.Bgra32
-                ? source
-                : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
-
-            int width = Math.Max(1, bgraSource.PixelWidth);
-            int height = Math.Max(1, bgraSource.PixelHeight);
-
-            BITMAPINFOHEADER bmi = new()
-            {
-                biSize = (uint)sizeof(BITMAPINFOHEADER),
-                biWidth = width,
-                biHeight = -height, // top-down DIB
-                biPlanes = 1,
-                biBitCount = 32,
-                biCompression = 0, // BI_RGB
-            };
-
-            IntPtr screenDc = UnsafeNativeMethods.GetDC(new HandleRef(null, IntPtr.Zero));
-            void* pBits = null;
-            IntPtr hBitmap = UnsafeNativeMethods.CreateDIBSection(screenDc, &bmi, 0 /* DIB_RGB_COLORS */, &pBits, IntPtr.Zero, 0);
-            if (screenDc != IntPtr.Zero)
-            {
-                UnsafeNativeMethods.ReleaseDC(new HandleRef(null, IntPtr.Zero), new HandleRef(null, screenDc));
-            }
-
-            if (hBitmap == IntPtr.Zero || pBits == null)
-            {
-                if (hBitmap != IntPtr.Zero)
-                {
-                    UnsafeNativeMethods.DeleteObject(hBitmap);
-                }
-                throw new OutOfMemoryException();
-            }
-
-            int stride = checked(width * 4);
-            int bufferSize = checked(stride * height);
-            bgraSource.CopyPixels(Int32Rect.Empty, (IntPtr)pBits, bufferSize, stride);
-            return hBitmap;
-        }
-
-        internal static BitmapSource DecodeBitmapSourceFromDibBytes(ReadOnlySpan<byte> dibBytes)
-        {
-            if (dibBytes.Length < sizeof(BITMAPINFOHEADER))
-            {
-                return null;
-            }
-
-            BITMAPINFOHEADER header = MemoryMarshal.Read<BITMAPINFOHEADER>(dibBytes);
-            if (header.biSize < 12 || header.biSize > (uint)dibBytes.Length)
-            {
-                return null;
-            }
-
-            uint paletteCount = header.biClrUsed;
-            if (paletteCount == 0 && header.biBitCount <= 8 && header.biBitCount > 0)
-            {
-                paletteCount = 1u << header.biBitCount;
-            }
-
-            uint maskBytes = (header.biSize == 40 && header.biCompression == 3 /* BI_BITFIELDS */) ? 12u : 0u;
-            uint bfOffBits = 14u + header.biSize + maskBytes + (paletteCount * 4u);
-            uint bfSize = 14u + (uint)dibBytes.Length;
-
-            byte[] bmpData = new byte[14 + dibBytes.Length];
-            bmpData[0] = (byte)'B';
-            bmpData[1] = (byte)'M';
-            Unsafe.WriteUnaligned(ref bmpData[2], bfSize);
-            Unsafe.WriteUnaligned(ref bmpData[6], 0u);
-            Unsafe.WriteUnaligned(ref bmpData[10], bfOffBits);
-            dibBytes.CopyTo(bmpData.AsSpan(14));
-
-            using MemoryStream ms = new(bmpData);
-            BmpBitmapDecoder decoder = new(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            return decoder.Frames.Count > 0 ? decoder.Frames[0] : null;
         }
 
         #endregion

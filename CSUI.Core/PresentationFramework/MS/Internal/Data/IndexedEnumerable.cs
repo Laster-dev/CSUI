@@ -394,7 +394,7 @@ namespace MS.Internal.Data
                 {
                     Debug.Fail("EnsureCacheCurrent: _enumerator.Current failed with InvalidOperationException");
                 }
-                Debug.Assert(System.Windows.Controls.ItemsControl.EqualsEx(_cachedItem, current), "EnsureCacheCurrent: _cachedItem out of sync with _enumerator.Current");
+                Debug.Assert(MS.Internal.Helper.EqualsEx(_cachedItem, current), "EnsureCacheCurrent: _cachedItem out of sync with _enumerator.Current");
             }
 #endif // DEBUG
             return isCacheCurrent;

@@ -48,6 +48,11 @@ namespace System.Windows.Controls
 
         #region Constructors
 
+        static VirtualizationCacheLength()
+        {
+            System.Windows.Data.TypeConverterRegistry.Register<VirtualizationCacheLength>(new VirtualizationCacheLengthConverter());
+        }
+
         /// <summary>
         /// Constructor, initializes the CacheBeforeViewport and the CacheAfterViewport to their sizes. Units are specified as a seperate VisualizationCacheLengthUnit property.
         /// </summary>
