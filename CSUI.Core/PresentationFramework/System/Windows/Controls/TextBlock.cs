@@ -56,7 +56,7 @@ namespace System.Windows.Controls
                 nameof(Foreground),
                 typeof(Brush),
                 typeof(TextBlock),
-                new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty BackgroundProperty =
             DependencyProperty.Register(
@@ -175,6 +175,15 @@ namespace System.Windows.Controls
         private FormattedText _cachedFormattedText;
         private double _cachedConstraintWidth = -1;
 
+        static TextBlock()
+        {
+            FrameworkElementFactory.RegisterFactory(typeof(TextBlock), static () => new TextBlock());
+            MS.Internal.Controls.ControlFoundationHooks.RegisterTextDisplay(
+                TextProperty,
+                static () => new FrameworkElementFactory(typeof(TextBlock)),
+                static () => new TextBlock());
+        }
+
         public TextBlock()
         {
         }
@@ -200,7 +209,7 @@ namespace System.Windows.Controls
 
             Typeface typeface = new Typeface(FontFamily, FontStyle, FontWeight, FontStretches.Normal);
             double emSize = Math.Max(1.0, FontSize);
-            Brush fg = Foreground ?? Brushes.Black;
+            Brush fg = Foreground ?? Brushes.White;
 
 #pragma warning disable CS0618 // Type or member is obsolete
             FormattedText ft = new FormattedText(

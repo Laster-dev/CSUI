@@ -1,6 +1,5 @@
 using System;
 using System.Windows;
-using System.Windows.Media;
 
 namespace CSUI.SampleApp
 {
@@ -10,16 +9,7 @@ namespace CSUI.SampleApp
         public static int Main(string[] args)
         {
             var app = new Application();
-
-            var window = new Window
-            {
-                Title = "CSUI",
-                Width = 960,
-                Height = 600,
-                WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                Background = new SolidColorBrush(Color.FromRgb(32, 32, 32))
-            };
-
+            var window = new MainWindow();
             return app.Run(window);
         }
     }

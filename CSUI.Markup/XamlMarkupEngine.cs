@@ -1983,6 +1983,7 @@ namespace CSUI.Markup
             RegisterProperty(typeof(Slider), nameof(Slider.TickFrequency), Slider.TickFrequencyProperty);
             RegisterProperty(typeof(Slider), nameof(Slider.TickPlacement), Slider.TickPlacementProperty);
             RegisterProperty(typeof(Slider), nameof(Slider.IsSnapToTickEnabled), Slider.IsSnapToTickEnabledProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.IsDirectionReversed), Slider.IsDirectionReversedProperty);
 
             RegisterType<TextBox>(contentProperty: TextBox.TextProperty);
             RegisterProperty(typeof(TextBox), nameof(TextBox.Text), TextBox.TextProperty);

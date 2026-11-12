@@ -4,6 +4,7 @@
 #nullable disable
 
 using System.Windows;
+using System.Windows.Media;
 
 namespace System.Windows.Controls.Primitives
 {
@@ -136,6 +137,25 @@ namespace System.Windows.Controls.Primitives
         protected virtual void OnUnchecked(RoutedEventArgs e)
         {
             RaiseEvent(e);
+        }
+
+        protected override void OnRender(DrawingContext dc)
+        {
+            if (Background == null && IsChecked == true)
+            {
+                Rect bounds = new Rect(0, 0, RenderSize.Width, RenderSize.Height);
+                if (bounds.Width > 0 && bounds.Height > 0)
+                {
+                    Brush bg = IsPressed
+                        ? new SolidColorBrush(Color.FromArgb(255, 0, 90, 158))
+                        : (IsMouseOver ? new SolidColorBrush(Color.FromArgb(255, 0, 110, 190)) : new SolidColorBrush(Color.FromArgb(255, 0, 103, 192)));
+                    Pen pen = new Pen(new SolidColorBrush(Color.FromArgb(255, 0, 120, 215)), 1.0);
+                    dc.DrawRoundedRectangle(bg, pen, bounds, 4, 4);
+                    return;
+                }
+            }
+
+            base.OnRender(dc);
         }
 
         protected virtual void OnIndeterminate(RoutedEventArgs e)

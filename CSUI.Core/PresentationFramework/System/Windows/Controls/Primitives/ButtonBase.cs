@@ -7,6 +7,7 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace System.Windows.Controls.Primitives
 {
@@ -256,6 +257,7 @@ namespace System.Windows.Controls.Primitives
         protected override void OnMouseEnter(MouseEventArgs e)
         {
             base.OnMouseEnter(e);
+            InvalidateVisual();
 
             if (ClickMode == ClickMode.Hover)
             {
@@ -267,6 +269,7 @@ namespace System.Windows.Controls.Primitives
         protected override void OnMouseLeave(MouseEventArgs e)
         {
             base.OnMouseLeave(e);
+            InvalidateVisual();
 
             if (ClickMode == ClickMode.Hover)
             {
@@ -301,6 +304,60 @@ namespace System.Windows.Controls.Primitives
                     e.Handled = true;
                 }
             }
+        }
+
+        protected override Size MeasureOverride(Size constraint)
+        {
+            Size baseSize = base.MeasureOverride(constraint);
+            Thickness pad = Padding;
+            double w = baseSize.Width + pad.Left + pad.Right;
+            double h = baseSize.Height + pad.Top + pad.Bottom;
+            return new Size(Math.Max(w, 24.0), Math.Max(h, 24.0));
+        }
+
+        protected override Size ArrangeOverride(Size arrangeBounds)
+        {
+            Thickness pad = Padding;
+            if (VisualChildrenCount > 0)
+            {
+                if (GetVisualChild(0) is UIElement child)
+                {
+                    double x = pad.Left;
+                    double y = pad.Top;
+                    double w = Math.Max(0, arrangeBounds.Width - pad.Left - pad.Right);
+                    double h = Math.Max(0, arrangeBounds.Height - pad.Top - pad.Bottom);
+                    child.Arrange(new Rect(x, y, w, h));
+                }
+            }
+            return arrangeBounds;
+        }
+
+        protected override void OnRender(DrawingContext dc)
+        {
+            base.OnRender(dc);
+
+            Rect bounds = new Rect(0, 0, RenderSize.Width, RenderSize.Height);
+            if (bounds.Width <= 0 || bounds.Height <= 0) return;
+
+            Brush bg = Background;
+            if (bg == null)
+            {
+                if (!IsEnabled)
+                    bg = new SolidColorBrush(Color.FromArgb(255, 38, 38, 38));
+                else if (IsPressed)
+                    bg = new SolidColorBrush(Color.FromArgb(255, 68, 68, 68));
+                else if (IsMouseOver)
+                    bg = new SolidColorBrush(Color.FromArgb(255, 54, 54, 54));
+                else
+                    bg = new SolidColorBrush(Color.FromArgb(255, 44, 44, 44));
+            }
+
+            Brush borderBrush = BorderBrush ?? new SolidColorBrush(Color.FromArgb(255, 75, 75, 75));
+            Thickness th = BorderThickness;
+            double stroke = th.Left > 0 ? th.Left : 1.0;
+            Pen pen = new Pen(borderBrush, stroke);
+
+            dc.DrawRoundedRectangle(bg, pen, bounds, 4, 4);
         }
 
         protected override void OnKeyUp(KeyEventArgs e)

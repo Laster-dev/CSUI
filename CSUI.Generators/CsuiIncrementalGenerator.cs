@@ -676,6 +676,8 @@ namespace CSUI.Generators
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Windows;");
             sb.AppendLine("using System.Windows.Controls;");
+            sb.AppendLine("using System.Windows.Controls.Primitives;");
+            sb.AppendLine("using System.Windows.Media;");
             sb.AppendLine("using System.Windows.Markup;");
             sb.AppendLine();
 

@@ -95,6 +95,25 @@ namespace System.Windows.Controls
             }
         }
 
+        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnMouseLeftButtonDown(e);
+            Focus();
+            e.Handled = true;
+        }
+
+        protected override void OnGotFocus(RoutedEventArgs e)
+        {
+            base.OnGotFocus(e);
+            InvalidateVisual();
+        }
+
+        protected override void OnLostFocus(RoutedEventArgs e)
+        {
+            base.OnLostFocus(e);
+            InvalidateVisual();
+        }
+
         protected override void OnTextInput(TextCompositionEventArgs e)
         {
             base.OnTextInput(e);

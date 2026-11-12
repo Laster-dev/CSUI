@@ -3,8 +3,10 @@
 
 #nullable disable
 
+using System;
 using System.Windows;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 
 namespace System.Windows.Controls
 {
@@ -47,6 +49,57 @@ namespace System.Windows.Controls
 
         public ProgressBar()
         {
+        }
+
+        protected override Size MeasureOverride(Size constraint)
+        {
+            if (Orientation == Orientation.Horizontal)
+            {
+                double w = double.IsInfinity(constraint.Width) ? 160.0 : Math.Max(40.0, constraint.Width);
+                return new Size(w, 6.0);
+            }
+            else
+            {
+                double h = double.IsInfinity(constraint.Height) ? 160.0 : Math.Max(40.0, constraint.Height);
+                return new Size(6.0, h);
+            }
+        }
+
+        protected override void OnRender(DrawingContext dc)
+        {
+            base.OnRender(dc);
+            double w = RenderSize.Width;
+            double h = RenderSize.Height;
+            if (w <= 0 || h <= 0) return;
+
+            // Track background
+            Brush trackBg = Background ?? new SolidColorBrush(Color.FromArgb(255, 45, 45, 45));
+            dc.DrawRoundedRectangle(trackBg, null, new Rect(0, 0, w, h), 3, 3);
+
+            // Progress indicator
+            double min = Minimum;
+            double max = Maximum;
+            double range = max - min;
+            double val = Value;
+            double pct = range > 1e-6 ? Math.Clamp((val - min) / range, 0.0, 1.0) : 0.0;
+
+            Brush indBrush = Foreground ?? new SolidColorBrush(Color.FromArgb(255, 0, 120, 215));
+            if (Orientation == Orientation.Horizontal)
+            {
+                double indW = w * pct;
+                if (indW > 0)
+                {
+                    dc.DrawRoundedRectangle(indBrush, null, new Rect(0, 0, indW, h), 3, 3);
+                }
+            }
+            else
+            {
+                double indH = h * pct;
+                if (indH > 0)
+                {
+                    dc.DrawRoundedRectangle(indBrush, null, new Rect(0, h - indH, w, indH), 3, 3);
+                }
+            }
         }
     }
 }
