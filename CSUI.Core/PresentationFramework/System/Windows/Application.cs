@@ -15,6 +15,7 @@
 //
 
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
@@ -25,6 +26,7 @@ using System.Threading;
 using System.Windows.Threading;
 using System.Windows.Interop;
 using System.Windows.Markup;
+using System.Windows.Resources;
 
 using MS.Internal;
 using MS.Internal.Interop;
@@ -933,8 +935,197 @@ namespace System.Windows
 
             if (StartupUri != null)
             {
-                throw new NotSupportedException("XAML/BAML StartupUri is not supported in NativeAOT mode.");
+                object root = LoadComponent(StartupUri);
+                if (root is Window window)
+                {
+                    if (MainWindow == null)
+                    {
+                        MainWindow = window;
+                    }
+                    window.Show();
+                }
+                else if (root is UIElement element)
+                {
+                    var host = new Window { Content = element };
+                    if (MainWindow == null)
+                    {
+                        MainWindow = host;
+                    }
+                    host.Show();
+                }
             }
+        }
+
+        /// <summary>
+        /// Registers a compiled XAML component factory and optional instance initializer for NativeAOT StartupUri and LoadComponent.
+        /// </summary>
+        public static void RegisterComponentFactory(string uriPath, Func<object> factory, Action<object> initializeComponent = null)
+        {
+            ArgumentNullException.ThrowIfNull(uriPath);
+            ArgumentNullException.ThrowIfNull(factory);
+            string normalized = NormalizeComponentPath(uriPath);
+            lock (_componentLock)
+            {
+                s_componentFactories[normalized] = factory;
+                if (initializeComponent != null)
+                {
+                    s_componentInitializers[normalized] = initializeComponent;
+                }
+            }
+        }
+
+        public static object LoadComponent(Uri resourceLocator)
+        {
+            ArgumentNullException.ThrowIfNull(resourceLocator);
+            string normalized = NormalizeComponentPath(resourceLocator.OriginalString);
+            Func<object> factory;
+            lock (_componentLock)
+            {
+                s_componentFactories.TryGetValue(normalized, out factory);
+            }
+            if (factory != null)
+            {
+                return factory();
+            }
+
+            throw new IOException($"Cannot locate compiled XAML component '{resourceLocator.OriginalString}'.");
+        }
+
+        public static void LoadComponent(object component, Uri resourceLocator)
+        {
+            ArgumentNullException.ThrowIfNull(component);
+            ArgumentNullException.ThrowIfNull(resourceLocator);
+            string normalized = NormalizeComponentPath(resourceLocator.OriginalString);
+            Action<object> init;
+            lock (_componentLock)
+            {
+                s_componentInitializers.TryGetValue(normalized, out init);
+            }
+            if (init != null)
+            {
+                init(component);
+                return;
+            }
+            if (component is IComponentConnector connector)
+            {
+                connector.InitializeComponent();
+                return;
+            }
+            throw new IOException($"Cannot initialize XAML component '{resourceLocator.OriginalString}'.");
+        }
+
+        public static StreamResourceInfo GetResourceStream(Uri uriResource)
+            => ResolvePackOrRelativeStream(uriResource);
+
+        public static StreamResourceInfo GetContentStream(Uri uriContent)
+            => ResolvePackOrRelativeStream(uriContent);
+
+        private static StreamResourceInfo ResolvePackOrRelativeStream(Uri uri)
+        {
+            ArgumentNullException.ThrowIfNull(uri);
+            string raw = uri.OriginalString;
+            string assemblyName = null;
+            string localPath = NormalizePackPath(raw, out assemblyName);
+
+            string diskPath = Path.Combine(
+                AppContext.BaseDirectory,
+                localPath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(diskPath))
+            {
+                return new StreamResourceInfo(
+                    new FileStream(diskPath, FileMode.Open, FileAccess.Read, FileShare.Read),
+                    InferContentType(localPath));
+            }
+
+            Assembly targetAsm = ResolveTargetAssembly(assemblyName);
+            if (targetAsm != null)
+            {
+                string dotPath = localPath.Replace('/', '.');
+                Stream s = targetAsm.GetManifestResourceStream(localPath)
+                    ?? targetAsm.GetManifestResourceStream(dotPath);
+                if (s != null)
+                {
+                    return new StreamResourceInfo(s, InferContentType(localPath));
+                }
+
+                string suffix = "." + dotPath;
+                foreach (string resName in targetAsm.GetManifestResourceNames())
+                {
+                    if (resName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(resName, localPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Stream matched = targetAsm.GetManifestResourceStream(resName);
+                        if (matched != null)
+                        {
+                            return new StreamResourceInfo(matched, InferContentType(localPath));
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static Assembly ResolveTargetAssembly(string assemblyName)
+        {
+            if (!string.IsNullOrEmpty(assemblyName))
+            {
+                foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (string.Equals(asm.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return asm;
+                    }
+                }
+            }
+            return ResourceAssembly ?? Assembly.GetEntryAssembly();
+        }
+
+        private static string NormalizePackPath(string raw, out string assemblyName)
+        {
+            assemblyName = null;
+            string s = (raw ?? string.Empty).Trim().Replace('\\', '/');
+            const string PackApp = "pack://application:,,,";
+            const string PackSoo = "pack://siteoforigin:,,,";
+            if (s.StartsWith(PackApp, StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(PackApp.Length);
+            }
+            else if (s.StartsWith(PackSoo, StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(PackSoo.Length);
+            }
+
+            s = s.TrimStart('/');
+            int compIdx = s.IndexOf(";component/", StringComparison.OrdinalIgnoreCase);
+            if (compIdx >= 0)
+            {
+                assemblyName = s.Substring(0, compIdx);
+                s = s.Substring(compIdx + ";component/".Length);
+            }
+            return s.TrimStart('/');
+        }
+
+        private static string NormalizeComponentPath(string raw)
+        {
+            string normalized = NormalizePackPath(raw, out _);
+            return normalized.ToLowerInvariant();
+        }
+
+        private static string InferContentType(string path)
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext switch
+            {
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".bmp" => "image/bmp",
+                ".ico" => "image/x-icon",
+                ".xaml" => "application/xaml+xml",
+                ".xml" => "application/xml",
+                ".ttf" or ".otf" => "application/font",
+                _ => "application/octet-stream"
+            };
         }
 
         /// <summary>
@@ -1465,6 +1656,10 @@ namespace System.Windows
 
         private EventHandlerList            _events;
         private bool                        _hasImplicitStylesInResources;
+
+        private static readonly object _componentLock = new object();
+        private static readonly Dictionary<string, Func<object>> s_componentFactories = new Dictionary<string, Func<object>>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, Action<object>> s_componentInitializers = new Dictionary<string, Action<object>>(StringComparer.OrdinalIgnoreCase);
 
         private static readonly object EVENT_STARTUP = new object();
         private static readonly object EVENT_EXIT = new object();

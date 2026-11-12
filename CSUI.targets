@@ -1,0 +1,51 @@
+<Project>
+  <!-- CSUI Drop-in WPF Replacement MSBuild Targets -->
+  <PropertyGroup>
+    <_CsuiRootDir>$(MSBuildThisFileDirectory)</_CsuiRootDir>
+    <CsuiWpfDropIn Condition="'$(CsuiWpfDropIn)' == ''">true</CsuiWpfDropIn>
+    <UseWPF Condition="'$(CsuiWpfDropIn)' == 'true'">false</UseWPF>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectFullPath)' != '$(_CsuiRootDir)CSUI.Core\CSUI.Core.csproj' and '$(MSBuildProjectFullPath)' != '$(_CsuiRootDir)CSUI.Generators\CSUI.Generators.csproj'">
+    <ProjectReference Include="$(_CsuiRootDir)CSUI.Core\CSUI.Core.csproj"
+                      Condition="Exists('$(_CsuiRootDir)CSUI.Core\CSUI.Core.csproj') and '@(ProjectReference->WithMetadataValue(&quot;Filename&quot;, &quot;CSUI.Core&quot;))' == ''" />
+    <ProjectReference Include="$(_CsuiRootDir)CSUI.Generators\CSUI.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      Condition="Exists('$(_CsuiRootDir)CSUI.Generators\CSUI.Generators.csproj') and '@(ProjectReference->WithMetadataValue(&quot;Filename&quot;, &quot;CSUI.Generators&quot;))' == ''" />
+  </ItemGroup>
+
+  <!-- Map standard WPF Page / ApplicationDefinition / Resource items into CSUI compile-time XAML + pack:// resources -->
+  <Target Name="_CsuiMapWpfBuildItems"
+          BeforeTargets="AssignTargetPaths;PrepareResourceNames;CreateManifestResourceNames;PrepareResources;GenerateMSBuildEditorConfigFileCore;CoreCompile">
+    <ItemGroup>
+      <!-- Include explicit ApplicationDefinition and Page items -->
+      <_CsuiExplicitXaml Include="@(ApplicationDefinition);@(Page)" />
+      <!-- Auto-discover **/*.xaml when default items are enabled and not already listed -->
+      <_CsuiDiscoveredXaml Include="**\*.xaml"
+                           Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);bin\**;obj\**"
+                           Condition="'$(EnableDefaultItems)' == 'true'" />
+      <_CsuiAllXamlRaw Include="@(_CsuiExplicitXaml);@(_CsuiDiscoveredXaml)" />
+    </ItemGroup>
+
+    <RemoveDuplicates Inputs="@(_CsuiAllXamlRaw)">
+      <Output TaskParameter="Filtered" ItemName="_CsuiDistinctXaml" />
+    </RemoveDuplicates>
+
+    <ItemGroup>
+      <!-- Avoid re-adding files already explicitly listed in AdditionalFiles -->
+      <_CsuiExistingAdditional Include="@(AdditionalFiles)" />
+      <AdditionalFiles Include="@(_CsuiDistinctXaml)" Exclude="@(_CsuiExistingAdditional)" />
+
+      <!-- Map WPF <Resource Include="..." /> into <EmbeddedResource> with forward-slash pack:// logical names -->
+      <EmbeddedResource Include="@(Resource)" Condition="'@(Resource)' != '' and '%(Resource.Link)' != ''">
+        <LogicalName>$([System.String]::new('%(Resource.Link)').Replace('\', '/'))</LogicalName>
+      </EmbeddedResource>
+      <EmbeddedResource Include="@(Resource)" Condition="'@(Resource)' != '' and '%(Resource.Link)' == ''">
+        <LogicalName>$([System.String]::new('%(RelativeDir)%(Filename)%(Extension)').Replace('\', '/'))</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
+</Project>

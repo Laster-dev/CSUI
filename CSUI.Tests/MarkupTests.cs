@@ -30,6 +30,7 @@ internal static class MarkupTests
         TestCompileTimeXamlToCSharpGenerator();
         TestAdvancedBindingsInFluentAndXaml();
         TestRoslynSourceGeneratorZeroBoilerplate();
+        TestZeroModificationWpfDropIn();
         TestApplicationWindowPopupAndToolTip();
         TestSvgEngineAndPixelAlignment();
         TestModernEffectsAndAcrylicMaterial();
@@ -604,6 +605,34 @@ internal static class MarkupTests
 
         Pass("MK-5. Roslyn Incremental Source Generator ([ObservableObject], [ObservableProperty], [AlsoNotifyChangeFor], [RelayCommand], [Bindable], [XamlType] & .xaml InitializeComponent)",
             $"totalScore={view.PrimaryBadge.Height}, series1={vm.Series[1]}, tier={view.PrimaryBadge.StaticTier}");
+    }
+
+    private static void TestZeroModificationWpfDropIn()
+    {
+        var vm = new ZeroModViewModel();
+        var view = new ZeroModWpfView { DataContext = vm };
+        view.Measure(new Size(640, 480));
+        view.Arrange(new Rect(0, 0, 640, 480));
+        view.UpdateLayout();
+
+        AssertEqual(view.TitleTb.Text, "PureWpfTitle", "Zero-attr INPC initial binding");
+        AssertEqual(view.ConvTb.Text, "YES", "Binding Converter={StaticResource ...}");
+        AssertEqual(view.IdxTb.Text, "SlotA", "Zero-attr INPC string indexer [slot]");
+        AssertEqual(view.AncTb.Text, "AncestorTagOK", "RelativeSource AncestorType=UserControl");
+        AssertEqual(view.ElemTb.Text, "PureWpfTitle", "ElementName=TitleTb mirror binding");
+        AssertEqual(view.BadgeCtrl.BadgeCaption, "UnregisteredCtrlOK", "Unregistered custom control CLR property");
+        Assert(view.ActionBtn.Background is SolidColorBrush scb && scb.Color == Colors.Coral, "MergedDictionary StaticResource brush");
+
+        vm.Title = "LiveUpdatedTitle";
+        AssertEqual(view.TitleTb.Text, "LiveUpdatedTitle", "Zero-attr INPC live PropertyChanged update");
+        AssertEqual(view.ElemTb.Text, "LiveUpdatedTitle", "ElementName cascade update");
+
+        // Verify Application.LoadComponent resolves compiled XAML view cleanly under NativeAOT
+        object loaded = Application.LoadComponent(new Uri("ZeroModWpfView.xaml", UriKind.Relative));
+        Assert(loaded is ZeroModWpfView, "Application.LoadComponent(ZeroModWpfView.xaml)");
+
+        Pass("MK-6. Zero-Modification WPF Compatibility (Compile-Time Resources/Style/Templates, MergedDictionaries, Unannotated INPC/POCO, Custom Control & LoadComponent)",
+            $"title={view.TitleTb.Text}, badge={view.BadgeCtrl.BadgeCaption}");
     }
 
     private static void TestApplicationWindowPopupAndToolTip()

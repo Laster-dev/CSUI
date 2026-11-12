@@ -1,0 +1,10 @@
+<Project>
+  <!-- CSUI Drop-in WPF Replacement MSBuild Properties -->
+  <PropertyGroup>
+    <!-- Prevent Microsoft.NET.Sdk.WindowsDesktop from pulling full WPF runtime when swapping a .csproj to CSUI -->
+    <CsuiWpfDropIn Condition="'$(CsuiWpfDropIn)' == ''">true</CsuiWpfDropIn>
+    <UseWPF Condition="'$(CsuiWpfDropIn)' == 'true'">false</UseWPF>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+  </PropertyGroup>
+</Project>

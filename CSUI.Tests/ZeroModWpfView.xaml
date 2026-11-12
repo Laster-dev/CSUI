@@ -1,0 +1,46 @@
+<UserControl x:Class="CSUI.Tests.ZeroModWpfView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:CSUI.Tests"
+             Tag="AncestorTagOK">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ZeroModTestTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <local:ZeroModBoolConverter x:Key="ZeroModBoolConv" />
+            <ControlTemplate x:Key="ZeroModBtnTpl" TargetType="Button">
+                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="8,4">
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+            <DataTemplate DataType="{x:Type local:ZeroModItem}">
+                <TextBlock Text="{Binding Label}" FontWeight="Bold" />
+            </DataTemplate>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="MidnightBlue" />
+                <Style.Triggers>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.5" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="8">
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <TextBlock x:Name="TitleTb" Text="{Binding Title}" />
+            <TextBlock x:Name="ConvTb" Text="{Binding Active, Converter={StaticResource ZeroModBoolConv}}" />
+            <TextBlock x:Name="IdxTb" Text="{Binding [slot]}" />
+            <TextBlock x:Name="AncTb" Text="{Binding Tag, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+            <TextBlock x:Name="ElemTb" Text="{Binding Text, ElementName=TitleTb}" />
+            <local:ZeroModBadge x:Name="BadgeCtrl" BadgeCaption="UnregisteredCtrlOK" />
+        </StackPanel>
+        <ContentControl Grid.Row="1" x:Name="ItemPresenter" Content="{Binding FeaturedItem}" />
+        <Button Grid.Row="2" x:Name="ActionBtn"
+                Template="{StaticResource ZeroModBtnTpl}"
+                Background="{StaticResource ZeroModAccent}"
+                Content="Execute" />
+    </Grid>
+</UserControl>
