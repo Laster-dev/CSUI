@@ -832,8 +832,11 @@ namespace System.Windows.Controls
             if (IsSmoothScrollingEnabled)
             {
                 double maxV = Math.Max(0, ExtentHeight - ViewportHeight);
-                double baseTarget = _vScrollAnim.IsActive ? _vScrollAnim.TargetOffset : VerticalOffset;
-                double nextTarget = Math.Clamp(baseTarget - step, 0, maxV);
+                double scrollAmount = -step;
+                double currentTarget = _vScrollAnim.IsActive ? _vScrollAnim.TargetOffset : VerticalOffset;
+                bool reversing = _vScrollAnim.IsActive && ((currentTarget - VerticalOffset) * scrollAmount < 0.0);
+                double baseTarget = reversing ? VerticalOffset : currentTarget;
+                double nextTarget = Math.Clamp(baseTarget + scrollAmount, 0, maxV);
                 _vScrollAnim.UpdateTarget(VerticalOffset, nextTarget, Stopwatch.GetTimestamp());
                 if (_vScrollAnim.IsActive)
                 {

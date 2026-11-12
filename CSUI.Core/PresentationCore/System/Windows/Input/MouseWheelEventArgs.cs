@@ -51,6 +51,6 @@ namespace System.Windows.Input
             handler(genericTarget, this);
         }
 
-        private static int _delta;
+        private int _delta;
     }
 }

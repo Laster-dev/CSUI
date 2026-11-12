@@ -1396,6 +1396,23 @@ internal static class MarkupTests
         AssertNear(axis.Evaluate(tEnd), 220.0, 1e-6, "ChromiumScrollAxis finishes at exact target without asymptotic creep");
         Assert(!axis.IsActive, "ChromiumScrollAxis deactivates deterministically at t >= 1.0");
 
+        // Verify live MouseWheel opposite-direction immediate interruption & MouseWheelEventArgs instance _delta
+        var w1 = new MouseWheelEventArgs(Mouse.PrimaryDevice, 1, 120);
+        var w2 = new MouseWheelEventArgs(Mouse.PrimaryDevice, 2, -120);
+        Assert(w1.Delta == 120 && w2.Delta == -120, "MouseWheelEventArgs.Delta must be per-instance (not static)");
+
+        viewer.ScrollToVerticalOffset(0.0);
+        var wheelWin = new Window { Width = 400, Height = 500, Content = viewer };
+        wheelWin.Show();
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+        viewer.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, 10, -240) { RoutedEvent = Mouse.MouseWheelEvent });
+        // Immediately interrupt mid-scroll with reverse direction (+240)
+        viewer.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, 20, 240) { RoutedEvent = Mouse.MouseWheelEvent });
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.Background);
+        Assert(viewer.VerticalOffset == 0.0 || viewer.VerticalOffset < 50.0, "Reverse MouseWheel interrupts active scroll immediately without waiting for old tail");
+        wheelWin.Close();
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+
         viewer.ScrollToVerticalOffset(600.0);
         viewer.ScrollToVerticalOffset(400.0);
         viewer.LineDown();

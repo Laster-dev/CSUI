@@ -2064,6 +2064,26 @@ namespace System.Windows.Threading
                 {
                     while(frame.Continue)
                     {
+                        bool shouldDrainInput = false;
+                        lock (_instanceLock)
+                        {
+                            if (_postedProcessingType == PROCESS_FOREGROUND &&
+                                _queue.MaxPriority <= DispatcherPriority.Render)
+                            {
+                                shouldDrainInput = true;
+                            }
+                        }
+
+                        if (shouldDrainInput)
+                        {
+                            // Win32 GetMessageW prioritizes QS_POSTMESSAGE (_msgProcessQueue) over QS_INPUT
+                            // (WM_MOUSEWHEEL, WM_MOUSEMOVE, WM_KEYDOWN). Drain pending hardware input first so
+                            // continuous Render/smooth-scroll frames cannot starve live wheel/mouse interruption.
+                            DrainPendingHardwareInput(frame, ref msg);
+                            if (!frame.Continue)
+                                break;
+                        }
+
                         if (!GetMessage(ref msg, IntPtr.Zero, 0, 0))
                             break;
 
@@ -2104,6 +2124,23 @@ namespace System.Windows.Threading
                                                    new HandleRef(this, hwnd),
                                                    minMessage,
                                                    maxMessage);
+        }
+
+        private void DrainPendingHardwareInput(DispatcherFrame frame, ref MSG msg)
+        {
+            HandleRef nullHwnd = new HandleRef(null, IntPtr.Zero);
+            for (int i = 0; i < 32 && frame.Continue; i++)
+            {
+                if (UnsafeNativeMethods.PeekMessage(ref msg, nullHwnd, WindowMessage.WM_MOUSEFIRST, WindowMessage.WM_MOUSELAST, NativeMethods.PM_REMOVE) ||
+                    UnsafeNativeMethods.PeekMessage(ref msg, nullHwnd, WindowMessage.WM_KEYFIRST, WindowMessage.WM_KEYLAST, NativeMethods.PM_REMOVE))
+                {
+                    TranslateAndDispatchMessage(ref msg);
+                }
+                else
+                {
+                    break;
+                }
+            }
         }
 
         /// <summary>
