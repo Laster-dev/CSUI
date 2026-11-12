@@ -28,6 +28,8 @@ internal static class Program
             Console.WriteLine("\n--- Layer 2C: PresentationFramework (Layout, Resources, Styles/Templates, AOT Binding, Items) ---");
             PresentationFrameworkTests.RunAll();
 
+            WpfAllControlsTests.RunAll();
+
             Console.WriteLine("\n--- Layer 3B & 4: Media3D, D3D11 Backend, Cross-Thread VisualTarget, D3DImage & Live HwndSource ---");
             Media3DAndInteropTests.RunAll();
 

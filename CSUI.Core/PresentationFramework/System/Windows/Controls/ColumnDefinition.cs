@@ -82,6 +82,10 @@ namespace System.Windows.Controls
             _owner = owner;
         }
 
+        internal ColumnDefinitionCollection() : this(null)
+        {
+        }
+
         protected override void InsertItem(int index, ColumnDefinition item)
         {
             ArgumentNullException.ThrowIfNull(item);

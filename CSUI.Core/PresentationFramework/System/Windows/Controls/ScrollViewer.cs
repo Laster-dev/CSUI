@@ -226,9 +226,18 @@ namespace System.Windows.Controls
             remove => RemoveHandler(ScrollChangedEvent, value);
         }
 
+        internal const double _scrollLineDelta = 16.0;
+        internal const double _mouseWheelDelta = 48.0;
+
         private readonly ScrollBar _hScrollBar;
         private readonly ScrollBar _vScrollBar;
         private IScrollInfo _scrollInfo;
+
+        internal IScrollInfo ScrollInfo
+        {
+            get => _scrollInfo;
+            set => _scrollInfo = value;
+        }
 
         // Chromium cc::ScrollOffsetAnimationCurve smooth scroll state
         internal struct ChromiumScrollCubicBezier
@@ -721,6 +730,10 @@ namespace System.Windows.Controls
             ScrollToVerticalOffset(e.NewValue);
         }
 
+        public double ScrollableWidth => Math.Max(0.0, ExtentWidth - ViewportWidth);
+
+        public double ScrollableHeight => Math.Max(0.0, ExtentHeight - ViewportHeight);
+
         public void ScrollToVerticalOffset(double offset)
         {
             offset = Math.Clamp(offset, 0, Math.Max(0, ExtentHeight - ViewportHeight));
@@ -795,6 +808,8 @@ namespace System.Windows.Controls
         public void ScrollToBottom() => ScrollToVerticalOffset(ExtentHeight);
         public void ScrollToLeftEnd() => ScrollToHorizontalOffset(0);
         public void ScrollToRightEnd() => ScrollToHorizontalOffset(ExtentWidth);
+        public void ScrollToHome() { ScrollToHorizontalOffset(0); ScrollToVerticalOffset(0); }
+        public void ScrollToEnd() { ScrollToHorizontalOffset(0); ScrollToVerticalOffset(ExtentHeight); }
 
         public void LineUp()
         {
@@ -818,6 +833,53 @@ namespace System.Windows.Controls
         {
             if (_scrollInfo != null) _scrollInfo.PageDown();
             else ScrollToVerticalOffset(VerticalOffset + ViewportHeight);
+        }
+
+        public void LineLeft()
+        {
+            if (_scrollInfo != null) _scrollInfo.LineLeft();
+            else ScrollToHorizontalOffset(HorizontalOffset - _scrollLineDelta);
+        }
+
+        public void LineRight()
+        {
+            if (_scrollInfo != null) _scrollInfo.LineRight();
+            else ScrollToHorizontalOffset(HorizontalOffset + _scrollLineDelta);
+        }
+
+        public void PageLeft()
+        {
+            if (_scrollInfo != null) _scrollInfo.PageLeft();
+            else ScrollToHorizontalOffset(HorizontalOffset - ViewportWidth);
+        }
+
+        public void PageRight()
+        {
+            if (_scrollInfo != null) _scrollInfo.PageRight();
+            else ScrollToHorizontalOffset(HorizontalOffset + ViewportWidth);
+        }
+
+        internal const string ScrollContentPresenterTemplateName = "PART_ScrollContentPresenter";
+
+        internal void ScrollInDirection(KeyEventArgs e)
+        {
+            if (e == null) return;
+            bool invert = (FlowDirection == FlowDirection.RightToLeft);
+            switch (e.Key)
+            {
+                case Key.Up:
+                    LineUp();
+                    break;
+                case Key.Down:
+                    LineDown();
+                    break;
+                case Key.Left:
+                    if (invert) LineRight(); else LineLeft();
+                    break;
+                case Key.Right:
+                    if (invert) LineLeft(); else LineRight();
+                    break;
+            }
         }
 
         protected override void OnMouseWheel(MouseWheelEventArgs e)

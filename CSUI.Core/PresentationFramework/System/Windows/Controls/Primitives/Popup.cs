@@ -8,6 +8,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -301,6 +302,77 @@ namespace System.Windows.Controls.Primitives
 
         public event EventHandler Opened;
         public event EventHandler Closed;
+        internal event EventHandler PopupCouldClose;
+
+        internal static readonly TimeSpan AnimationDelayTime = TimeSpan.FromMilliseconds(150);
+
+        internal bool DropOpposite { get; set; }
+
+        private static void BindPopupProperty(Popup popup, DependencyProperty targetProperty, DependencyObject source, DependencyProperty sourceProperty)
+        {
+            popup.SetBinding(targetProperty, new Binding
+            {
+                Path = new PropertyPath(sourceProperty),
+                Mode = BindingMode.OneWay,
+                Source = source
+            });
+        }
+
+        public static void CreateRootPopup(Popup popup, UIElement child)
+        {
+            CreateRootPopupInternal(popup, child, false);
+        }
+
+        internal static void CreateRootPopupInternal(Popup popup, UIElement child, bool bindTreatMousePlacementAsBottomProperty)
+        {
+            ArgumentNullException.ThrowIfNull(popup);
+            ArgumentNullException.ThrowIfNull(child);
+
+            if (LogicalTreeHelper.GetParent(child) != null || VisualTreeHelper.GetParent(child) != null)
+            {
+                throw new InvalidOperationException("Child element already has a logical or visual parent.");
+            }
+
+            if (child is global::System.Windows.Controls.ContextMenu)
+            {
+                BindPopupProperty(popup, PlacementTargetProperty, child, global::System.Windows.Controls.ContextMenu.PlacementTargetProperty);
+                popup.Child = child;
+                BindPopupProperty(popup, VerticalOffsetProperty, child, global::System.Windows.Controls.ContextMenu.VerticalOffsetProperty);
+                BindPopupProperty(popup, HorizontalOffsetProperty, child, global::System.Windows.Controls.ContextMenu.HorizontalOffsetProperty);
+                BindPopupProperty(popup, PlacementRectangleProperty, child, global::System.Windows.Controls.ContextMenu.PlacementRectangleProperty);
+                BindPopupProperty(popup, PlacementProperty, child, global::System.Windows.Controls.ContextMenu.PlacementProperty);
+                BindPopupProperty(popup, StaysOpenProperty, child, global::System.Windows.Controls.ContextMenu.StaysOpenProperty);
+                BindPopupProperty(popup, CustomPopupPlacementCallbackProperty, child, global::System.Windows.Controls.ContextMenu.CustomPopupPlacementCallbackProperty);
+                BindPopupProperty(popup, IsOpenProperty, child, global::System.Windows.Controls.ContextMenu.IsOpenProperty);
+            }
+            else if (child is global::System.Windows.Controls.ToolTip)
+            {
+                BindPopupProperty(popup, PlacementTargetProperty, child, global::System.Windows.Controls.ToolTip.PlacementTargetProperty);
+                popup.Child = child;
+                BindPopupProperty(popup, VerticalOffsetProperty, child, global::System.Windows.Controls.ToolTip.VerticalOffsetProperty);
+                BindPopupProperty(popup, HorizontalOffsetProperty, child, global::System.Windows.Controls.ToolTip.HorizontalOffsetProperty);
+                BindPopupProperty(popup, PlacementRectangleProperty, child, global::System.Windows.Controls.ToolTip.PlacementRectangleProperty);
+                BindPopupProperty(popup, PlacementProperty, child, global::System.Windows.Controls.ToolTip.PlacementProperty);
+                BindPopupProperty(popup, StaysOpenProperty, child, global::System.Windows.Controls.ToolTip.StaysOpenProperty);
+                BindPopupProperty(popup, CustomPopupPlacementCallbackProperty, child, global::System.Windows.Controls.ToolTip.CustomPopupPlacementCallbackProperty);
+                BindPopupProperty(popup, IsOpenProperty, child, global::System.Windows.Controls.ToolTip.IsOpenProperty);
+            }
+            else
+            {
+                popup.Child = child;
+            }
+        }
+
+        internal static bool IsRootedInPopup(Popup parentPopup, UIElement element)
+        {
+            object logicalParent = LogicalTreeHelper.GetParent(element);
+            if (logicalParent == null && VisualTreeHelper.GetParent(element) != null)
+            {
+                return false;
+            }
+
+            return logicalParent == parentPopup;
+        }
 
         internal HwndSource PopupHwndSource => _popupHwndSource;
 
@@ -527,20 +599,28 @@ namespace System.Windows.Controls.Primitives
             Closed?.Invoke(this, e);
         }
 
-        internal sealed class PopupRoot : Decorator
+        internal void OnPopupCouldClose()
         {
-            private readonly NonLogicalAdornerDecorator _adornerDecorator = new NonLogicalAdornerDecorator();
-
-            public PopupRoot()
-            {
-                base.Child = _adornerDecorator;
-            }
-
-            public override UIElement Child
-            {
-                get => _adornerDecorator.Child;
-                set => _adornerDecorator.Child = value;
-            }
+            PopupCouldClose?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    internal sealed class PopupRoot : Decorator
+    {
+        private readonly NonLogicalAdornerDecorator _adornerDecorator = new NonLogicalAdornerDecorator();
+
+        public PopupRoot()
+        {
+            base.Child = _adornerDecorator;
+        }
+
+        public override UIElement Child
+        {
+            get => _adornerDecorator.Child;
+            set => _adornerDecorator.Child = value;
+        }
+
+        protected override Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+            new Automation.Peers.PopupRootAutomationPeer(this);
     }
 }

@@ -32,6 +32,8 @@ namespace System.Windows.Controls
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(HeaderedContentControl), new FrameworkPropertyMetadata(typeof(HeaderedContentControl)));
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(HeaderedContentControl));
+            FrameworkElementFactory.RegisterType<HeaderedContentControl>();
+            ControlFoundationHooks.HeaderedContentControlHeaderPropertyHook = HeaderProperty;
         }
 
         /// <summary>

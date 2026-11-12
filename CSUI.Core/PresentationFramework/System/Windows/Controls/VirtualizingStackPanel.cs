@@ -304,6 +304,22 @@ namespace System.Windows.Controls
             return isVert ? new Size(maxCrossSize, vpLength) : new Size(vpLength, maxCrossSize);
         }
 
+        protected virtual void OnCleanUpVirtualizedItem(CleanUpVirtualizedItemEventArgs e)
+        {
+            ItemsControl itemsControl = ItemsControl.GetItemsOwner(this);
+            itemsControl?.RaiseEvent(e);
+        }
+
+        protected virtual void OnViewportSizeChanged(Size oldViewportSize, Size newViewportSize)
+        {
+        }
+
+        internal bool IgnoreMaxDesiredSize { get; set; }
+
+        internal void ResetMaximumDesiredSize()
+        {
+        }
+
         private void CleanUpContainers(IItemContainerGenerator generator, int minKeep, int maxKeep)
         {
             IRecyclingItemContainerGenerator recGen = generator as IRecyclingItemContainerGenerator;
@@ -315,6 +331,14 @@ namespace System.Windows.Controls
                 int itemIndex = generator.IndexFromGeneratorPosition(new GeneratorPosition(i, 0));
                 if (itemIndex < minKeep || itemIndex > maxKeep)
                 {
+                    object item = generator is ItemContainerGenerator icg ? icg.ItemFromContainer(child) : null;
+                    var cleanArgs = new CleanUpVirtualizedItemEventArgs(item, child);
+                    OnCleanUpVirtualizedItem(cleanArgs);
+                    if (cleanArgs.Cancel)
+                    {
+                        continue;
+                    }
+
                     if (recGen != null)
                     {
                         recGen.Recycle(new GeneratorPosition(i, 0), 1);

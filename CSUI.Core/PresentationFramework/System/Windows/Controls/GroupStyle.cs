@@ -46,6 +46,7 @@ namespace System.Windows.Controls
             s_defaultVirtualizingStackPanel = MS.Internal.Controls.ControlFoundationHooks.CreateDefaultVirtualizingStackPanelTemplateHook?.Invoke();
 
             s_DefaultGroupStyle = new GroupStyle();
+            MS.Internal.Controls.ControlFoundationHooks.CreateGroupItemHook ??= static () => new GroupItem();
         }
 
         #endregion Constructors

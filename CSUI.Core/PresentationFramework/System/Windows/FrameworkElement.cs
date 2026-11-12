@@ -2362,8 +2362,9 @@ namespace System.Windows
             return null;
         }
 
-        public static readonly DependencyProperty ToolTipProperty =
-            ToolTipService.ToolTipProperty.AddOwner(typeof(FrameworkElement));
+        private static DependencyProperty s_toolTipProperty;
+        public static DependencyProperty ToolTipProperty =>
+            s_toolTipProperty ??= ToolTipService.ToolTipProperty.AddOwner(typeof(FrameworkElement));
 
         public object ToolTip
         {
@@ -2371,6 +2372,69 @@ namespace System.Windows
             set => ToolTipService.SetToolTip(this, value);
         }
 
+        private static DependencyProperty s_contextMenuProperty;
+        public static DependencyProperty ContextMenuProperty =>
+            s_contextMenuProperty ??= ContextMenuService.ContextMenuProperty.AddOwner(typeof(FrameworkElement));
+
+        public ContextMenu ContextMenu
+        {
+            get => ContextMenuService.GetContextMenu(this);
+            set => ContextMenuService.SetContextMenu(this, value);
+        }
+
+        private static PopupControlService _popupControlService;
+        internal static PopupControlService PopupControlService =>
+            _popupControlService ??= new PopupControlService();
+
+        private static RoutedEvent s_contextMenuOpeningEvent;
+        public static RoutedEvent ContextMenuOpeningEvent =>
+            s_contextMenuOpeningEvent ??= ContextMenuService.ContextMenuOpeningEvent.AddOwner(_typeofThis);
+
+        public event ContextMenuEventHandler ContextMenuOpening
+        {
+            add { AddHandler(ContextMenuOpeningEvent, value); }
+            remove { RemoveHandler(ContextMenuOpeningEvent, value); }
+        }
+
+        private static void OnContextMenuOpeningThunk(object sender, ContextMenuEventArgs e)
+        {
+            ((FrameworkElement)sender).OnContextMenuOpening(e);
+        }
+
+        protected virtual void OnContextMenuOpening(ContextMenuEventArgs e)
+        {
+        }
+
+        private static RoutedEvent s_contextMenuClosingEvent;
+        public static RoutedEvent ContextMenuClosingEvent =>
+            s_contextMenuClosingEvent ??= ContextMenuService.ContextMenuClosingEvent.AddOwner(_typeofThis);
+
+        public event ContextMenuEventHandler ContextMenuClosing
+        {
+            add { AddHandler(ContextMenuClosingEvent, value); }
+            remove { RemoveHandler(ContextMenuClosingEvent, value); }
+        }
+
+        private static void OnContextMenuClosingThunk(object sender, ContextMenuEventArgs e)
+        {
+            ((FrameworkElement)sender).OnContextMenuClosing(e);
+        }
+
+        protected virtual void OnContextMenuClosing(ContextMenuEventArgs e)
+        {
+        }
+
+        private static bool s_contextMenuClassHandlersRegistered;
+        internal static void EnsureContextMenuClassHandlers()
+        {
+            if (s_contextMenuClassHandlersRegistered)
+            {
+                return;
+            }
+            s_contextMenuClassHandlersRegistered = true;
+            EventManager.RegisterClassHandler(_typeofThis, ContextMenuOpeningEvent, new ContextMenuEventHandler(OnContextMenuOpeningThunk));
+            EventManager.RegisterClassHandler(_typeofThis, ContextMenuClosingEvent, new ContextMenuEventHandler(OnContextMenuClosingThunk));
+        }
 
         static FrameworkElement()
         {

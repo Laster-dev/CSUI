@@ -288,6 +288,63 @@ namespace System.Windows.Controls.Primitives
             }
         }
 
+        private static RoutedCommand s_lineUpCommand;
+        public static RoutedCommand LineUpCommand => s_lineUpCommand ??= new RoutedCommand(nameof(LineUpCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_lineDownCommand;
+        public static RoutedCommand LineDownCommand => s_lineDownCommand ??= new RoutedCommand(nameof(LineDownCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_lineLeftCommand;
+        public static RoutedCommand LineLeftCommand => s_lineLeftCommand ??= new RoutedCommand(nameof(LineLeftCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_lineRightCommand;
+        public static RoutedCommand LineRightCommand => s_lineRightCommand ??= new RoutedCommand(nameof(LineRightCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_pageUpCommand;
+        public static RoutedCommand PageUpCommand => s_pageUpCommand ??= new RoutedCommand(nameof(PageUpCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_pageDownCommand;
+        public static RoutedCommand PageDownCommand => s_pageDownCommand ??= new RoutedCommand(nameof(PageDownCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_pageLeftCommand;
+        public static RoutedCommand PageLeftCommand => s_pageLeftCommand ??= new RoutedCommand(nameof(PageLeftCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_pageRightCommand;
+        public static RoutedCommand PageRightCommand => s_pageRightCommand ??= new RoutedCommand(nameof(PageRightCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_scrollHereCommand;
+        public static RoutedCommand ScrollHereCommand => s_scrollHereCommand ??= new RoutedCommand(nameof(ScrollHereCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_scrollToTopCommand;
+        public static RoutedCommand ScrollToTopCommand => s_scrollToTopCommand ??= new RoutedCommand(nameof(ScrollToTopCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_scrollToBottomCommand;
+        public static RoutedCommand ScrollToBottomCommand => s_scrollToBottomCommand ??= new RoutedCommand(nameof(ScrollToBottomCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_scrollToLeftEndCommand;
+        public static RoutedCommand ScrollToLeftEndCommand => s_scrollToLeftEndCommand ??= new RoutedCommand(nameof(ScrollToLeftEndCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_scrollToRightEndCommand;
+        public static RoutedCommand ScrollToRightEndCommand => s_scrollToRightEndCommand ??= new RoutedCommand(nameof(ScrollToRightEndCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_scrollToHorizontalOffsetCommand;
+        public static RoutedCommand ScrollToHorizontalOffsetCommand => s_scrollToHorizontalOffsetCommand ??= new RoutedCommand(nameof(ScrollToHorizontalOffsetCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_scrollToVerticalOffsetCommand;
+        public static RoutedCommand ScrollToVerticalOffsetCommand => s_scrollToVerticalOffsetCommand ??= new RoutedCommand(nameof(ScrollToVerticalOffsetCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_deferScrollToHorizontalOffsetCommand;
+        public static RoutedCommand DeferScrollToHorizontalOffsetCommand => s_deferScrollToHorizontalOffsetCommand ??= new RoutedCommand(nameof(DeferScrollToHorizontalOffsetCommand), typeof(ScrollBar));
+
+        private static RoutedCommand s_deferScrollToVerticalOffsetCommand;
+        public static RoutedCommand DeferScrollToVerticalOffsetCommand => s_deferScrollToVerticalOffsetCommand ??= new RoutedCommand(nameof(DeferScrollToVerticalOffsetCommand), typeof(ScrollBar));
+
+        internal static bool IsValidOrientation(object o)
+        {
+            Orientation value = (Orientation)o;
+            return value == Orientation.Horizontal || value == Orientation.Vertical;
+        }
+
         protected override void OnRender(DrawingContext dc)
         {
             // Subtle track background on mouse hover

@@ -468,7 +468,32 @@ namespace System.Windows.Controls
             double contentX = Math.Max(0.0, pt.X - Padding.Left - BorderThickness.Left);
 
             // Approximate character hit test
+            int bestIdx = GetCharacterIndexFromPoint(pt, snapToText: true);
+
+            CaretIndex = bestIdx;
+            SelectionStart = bestIdx;
+            SelectionLength = 0;
+            e.Handled = true;
+        }
+
+        public int GetCharacterIndexFromPoint(Point point, bool snapToText)
+        {
+            double contentX = Math.Max(0.0, point.X - Padding.Left - BorderThickness.Left);
             string text = Text;
+            if (string.IsNullOrEmpty(text))
+            {
+                return snapToText ? 0 : -1;
+            }
+
+            if (!snapToText)
+            {
+                FormattedText fullFt = CreateFormattedText(text, double.PositiveInfinity);
+                if (point.X < 0 || contentX > fullFt.Width + 4.0)
+                {
+                    return -1;
+                }
+            }
+
             int bestIdx = 0;
             double bestDist = double.PositiveInfinity;
             for (int i = 0; i <= text.Length; i++)
@@ -483,10 +508,7 @@ namespace System.Windows.Controls
                 }
             }
 
-            CaretIndex = bestIdx;
-            SelectionStart = bestIdx;
-            SelectionLength = 0;
-            e.Handled = true;
+            return bestIdx;
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -602,5 +624,8 @@ namespace System.Windows.Controls
                 dc.DrawLine(caretPen, caretPt, new Point(caretPt.X, caretPt.Y + h));
             }
         }
+
+        protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+            new System.Windows.Automation.Peers.TextBoxAutomationPeer(this);
     }
 }

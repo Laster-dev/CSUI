@@ -4,8 +4,11 @@
 #nullable disable
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Media;
 
 namespace System.Windows.Controls
@@ -14,8 +17,14 @@ namespace System.Windows.Controls
     /// Provides a lightweight, high-performance element for displaying small to large amounts of text.
     /// Direct2D DirectWrite hardware-accelerated text layout with sub-pixel and 1px snap alignment.
     /// </summary>
-    public class TextBlock : FrameworkElement
+    public class TextBlock : FrameworkElement, MS.Internal.Controls.ITextDisplayElement
     {
+        bool MS.Internal.Controls.ITextDisplayElement.IsContentPresenterContainer { get; set; }
+
+        bool MS.Internal.Controls.ITextDisplayElement.TryAddInline(object inline)
+        {
+            return MS.Internal.Controls.ControlFoundationHooks.TryAddInlineHook?.Invoke(this, inline) ?? false;
+        }
         public static readonly DependencyProperty TextProperty =
             DependencyProperty.Register(
                 nameof(Text),
@@ -93,8 +102,9 @@ namespace System.Windows.Controls
                 typeof(TextBlock),
                 new FrameworkPropertyMetadata(new Thickness(0.0), FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
 
-        public static readonly DependencyProperty LineHeightProperty =
-            DependencyProperty.Register(
+        private static DependencyProperty s_lineHeightProperty;
+        public static DependencyProperty LineHeightProperty =>
+            s_lineHeightProperty ??= DependencyProperty.Register(
                 nameof(LineHeight),
                 typeof(double),
                 typeof(TextBlock),
@@ -174,6 +184,73 @@ namespace System.Windows.Controls
 
         private FormattedText _cachedFormattedText;
         private double _cachedConstraintWidth = -1;
+        private object _inlinesStorage;
+        private Func<object, string> _extractInlinesTextHook;
+        private Action<object, List<UIElement>> _collectInlineChildrenHook;
+        private List<UIElement> _inlineUiChildren;
+
+        public InlineCollection Inlines => (InlineCollection)(_inlinesStorage ??= new InlineCollection(this));
+
+        internal void ConfigureInlineStorage(
+            Func<object, string> extractTextHook,
+            Action<object, List<UIElement>> collectChildrenHook)
+        {
+            _extractInlinesTextHook = extractTextHook;
+            _collectInlineChildrenHook = collectChildrenHook;
+        }
+
+        internal void OnInlinesChanged()
+        {
+            _cachedFormattedText = null;
+            if (_inlineUiChildren != null)
+            {
+                foreach (UIElement child in _inlineUiChildren)
+                {
+                    RemoveVisualChild(child);
+                }
+                _inlineUiChildren.Clear();
+            }
+
+            if (_inlinesStorage != null && _collectInlineChildrenHook != null)
+            {
+                var collected = new List<UIElement>();
+                _collectInlineChildrenHook(_inlinesStorage, collected);
+                if (collected.Count > 0)
+                {
+                    _inlineUiChildren ??= new List<UIElement>(collected.Count);
+                    foreach (UIElement child in collected)
+                    {
+                        _inlineUiChildren.Add(child);
+                        AddVisualChild(child);
+                    }
+                }
+            }
+
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+
+        protected override int VisualChildrenCount => _inlineUiChildren?.Count ?? 0;
+
+        protected override Visual GetVisualChild(int index)
+        {
+            if (_inlineUiChildren == null || (uint)index >= (uint)_inlineUiChildren.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+            return _inlineUiChildren[index];
+        }
+
+        private string GetEffectiveText()
+        {
+            string txt = Text;
+            if (!string.IsNullOrEmpty(txt) || _inlinesStorage == null || _extractInlinesTextHook == null)
+            {
+                return txt ?? string.Empty;
+            }
+
+            return _extractInlinesTextHook(_inlinesStorage) ?? string.Empty;
+        }
 
         static TextBlock()
         {
@@ -201,7 +278,7 @@ namespace System.Windows.Controls
 
         private FormattedText GetOrCreateFormattedText(double availableWidth)
         {
-            string txt = Text ?? string.Empty;
+            string txt = GetEffectiveText();
             if (_cachedFormattedText != null && Math.Abs(_cachedConstraintWidth - availableWidth) < 0.001)
             {
                 return _cachedFormattedText;
@@ -235,9 +312,13 @@ namespace System.Windows.Controls
 
             ft.TextAlignment = TextAlignment;
 
-            if (LineHeight > 0)
+            if (s_lineHeightProperty != null)
             {
-                ft.LineHeight = LineHeight;
+                double lineHeight = (double)GetValue(s_lineHeightProperty);
+                if (lineHeight > 0)
+                {
+                    ft.LineHeight = lineHeight;
+                }
             }
 
             _cachedFormattedText = ft;
@@ -247,23 +328,55 @@ namespace System.Windows.Controls
 
         protected override Size MeasureOverride(Size constraint)
         {
-            string text = Text;
+            string text = GetEffectiveText();
             Thickness pad = Padding;
             double horizontalPad = pad.Left + pad.Right;
             double verticalPad = pad.Top + pad.Bottom;
 
-            if (string.IsNullOrEmpty(text))
+            double measuredW = horizontalPad;
+            double measuredH = verticalPad;
+
+            if (!string.IsNullOrEmpty(text))
             {
-                return new Size(horizontalPad, verticalPad);
+                double availableWidth = Math.Max(0.0, constraint.Width - horizontalPad);
+                FormattedText ft = GetOrCreateFormattedText(availableWidth);
+                measuredW += ft.WidthIncludingTrailingWhitespace;
+                measuredH += ft.Height;
             }
 
-            double availableWidth = Math.Max(0.0, constraint.Width - horizontalPad);
-            FormattedText ft = GetOrCreateFormattedText(availableWidth);
-
-            double measuredW = ft.WidthIncludingTrailingWhitespace + horizontalPad;
-            double measuredH = ft.Height + verticalPad;
+            if (_inlineUiChildren != null && _inlineUiChildren.Count > 0)
+            {
+                double childW = 0.0;
+                double childH = 0.0;
+                Size childAvail = new Size(Math.Max(0.0, constraint.Width - horizontalPad), Math.Max(0.0, constraint.Height - verticalPad));
+                foreach (UIElement child in _inlineUiChildren)
+                {
+                    child.Measure(childAvail);
+                    childW += child.DesiredSize.Width;
+                    if (child.DesiredSize.Height > childH) childH = child.DesiredSize.Height;
+                }
+                measuredW = Math.Max(measuredW, childW + horizontalPad);
+                measuredH = Math.Max(measuredH, childH + verticalPad);
+            }
 
             return new Size(measuredW, measuredH);
+        }
+
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            if (_inlineUiChildren != null && _inlineUiChildren.Count > 0)
+            {
+                Thickness pad = Padding;
+                double x = pad.Left;
+                double availH = Math.Max(0.0, finalSize.Height - pad.Top - pad.Bottom);
+                foreach (UIElement child in _inlineUiChildren)
+                {
+                    double w = child.DesiredSize.Width;
+                    child.Arrange(new Rect(x, pad.Top, w, availH));
+                    x += w;
+                }
+            }
+            return finalSize;
         }
 
         protected override void OnRender(DrawingContext dc)
@@ -276,7 +389,7 @@ namespace System.Windows.Controls
                 dc.DrawRectangle(bg, null, new Rect(0, 0, RenderSize.Width, RenderSize.Height));
             }
 
-            string text = Text;
+            string text = GetEffectiveText();
             if (string.IsNullOrEmpty(text)) return;
 
             double availableWidth = Math.Max(0.0, RenderSize.Width - pad.Left - pad.Right);
@@ -285,5 +398,8 @@ namespace System.Windows.Controls
             Point origin = new Point(pad.Left, pad.Top);
             dc.DrawText(ft, origin);
         }
+
+        protected override Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+            new Automation.Peers.TextBlockAutomationPeer(this);
     }
 }

@@ -16,7 +16,7 @@ namespace System.Windows.Controls.Primitives
     /// </summary>
     public abstract class ButtonBase : ContentControl, ICommandSource
     {
-        private static readonly DependencyPropertyKey IsPressedPropertyKey =
+        internal static readonly DependencyPropertyKey IsPressedPropertyKey =
             DependencyProperty.RegisterReadOnly(
                 nameof(IsPressed),
                 typeof(bool),
@@ -375,5 +375,7 @@ namespace System.Windows.Controls.Primitives
                 e.Handled = true;
             }
         }
+
+        internal void AutomationButtonBaseClick() => OnClick();
     }
 }

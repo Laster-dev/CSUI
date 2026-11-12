@@ -38,8 +38,9 @@ namespace System.Windows.Controls
                 new FrameworkPropertyMetadata(1.0, FrameworkPropertyMetadataOptions.AffectsRender),
                 ValidateTickFrequency);
 
-        public static readonly DependencyProperty TickPlacementProperty =
-            DependencyProperty.Register(
+        private static DependencyProperty s_tickPlacementProperty;
+        public static DependencyProperty TickPlacementProperty =>
+            s_tickPlacementProperty ??= DependencyProperty.Register(
                 nameof(TickPlacement),
                 typeof(TickPlacement),
                 typeof(Slider),
@@ -51,6 +52,83 @@ namespace System.Windows.Controls
                 typeof(bool),
                 typeof(Slider),
                 new FrameworkPropertyMetadata(false));
+
+        private static DependencyProperty s_delayProperty;
+        public static DependencyProperty DelayProperty =>
+            s_delayProperty ??= RepeatButton.DelayProperty.AddOwner(typeof(Slider));
+
+        private static DependencyProperty s_intervalProperty;
+        public static DependencyProperty IntervalProperty =>
+            s_intervalProperty ??= RepeatButton.IntervalProperty.AddOwner(typeof(Slider));
+
+        private static DependencyProperty s_autoToolTipPlacementProperty;
+        public static DependencyProperty AutoToolTipPlacementProperty =>
+            s_autoToolTipPlacementProperty ??= DependencyProperty.Register(
+                nameof(AutoToolTipPlacement),
+                typeof(AutoToolTipPlacement),
+                typeof(Slider),
+                new FrameworkPropertyMetadata(AutoToolTipPlacement.None));
+
+        private static DependencyProperty s_autoToolTipPrecisionProperty;
+        public static DependencyProperty AutoToolTipPrecisionProperty =>
+            s_autoToolTipPrecisionProperty ??= DependencyProperty.Register(
+                nameof(AutoToolTipPrecision),
+                typeof(int),
+                typeof(Slider),
+                new FrameworkPropertyMetadata(0));
+
+        private static DependencyProperty s_isSelectionRangeEnabledProperty;
+        public static DependencyProperty IsSelectionRangeEnabledProperty =>
+            s_isSelectionRangeEnabledProperty ??= DependencyProperty.Register(
+                nameof(IsSelectionRangeEnabled),
+                typeof(bool),
+                typeof(Slider),
+                new FrameworkPropertyMetadata(false));
+
+        private static DependencyProperty s_selectionStartProperty;
+        public static DependencyProperty SelectionStartProperty =>
+            s_selectionStartProperty ??= DependencyProperty.Register(
+                nameof(SelectionStart),
+                typeof(double),
+                typeof(Slider),
+                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+        private static DependencyProperty s_selectionEndProperty;
+        public static DependencyProperty SelectionEndProperty =>
+            s_selectionEndProperty ??= DependencyProperty.Register(
+                nameof(SelectionEnd),
+                typeof(double),
+                typeof(Slider),
+                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+        private static DependencyProperty s_ticksProperty;
+        public static DependencyProperty TicksProperty =>
+            s_ticksProperty ??= DependencyProperty.Register(
+                nameof(Ticks),
+                typeof(DoubleCollection),
+                typeof(Slider),
+                new FrameworkPropertyMetadata((DoubleCollection)null));
+
+        private static RoutedCommand s_decreaseLarge;
+        public static RoutedCommand DecreaseLarge => s_decreaseLarge ??= new RoutedCommand(nameof(DecreaseLarge), typeof(Slider));
+
+        private static RoutedCommand s_increaseLarge;
+        public static RoutedCommand IncreaseLarge => s_increaseLarge ??= new RoutedCommand(nameof(IncreaseLarge), typeof(Slider));
+
+        private static RoutedCommand s_decreaseSmall;
+        public static RoutedCommand DecreaseSmall => s_decreaseSmall ??= new RoutedCommand(nameof(DecreaseSmall), typeof(Slider));
+
+        private static RoutedCommand s_increaseSmall;
+        public static RoutedCommand IncreaseSmall => s_increaseSmall ??= new RoutedCommand(nameof(IncreaseSmall), typeof(Slider));
+
+        private static RoutedCommand s_minimizeValue;
+        public static RoutedCommand MinimizeValue => s_minimizeValue ??= new RoutedCommand(nameof(MinimizeValue), typeof(Slider));
+
+        private static RoutedCommand s_maximizeValue;
+        public static RoutedCommand MaximizeValue => s_maximizeValue ??= new RoutedCommand(nameof(MaximizeValue), typeof(Slider));
+
+        private Track _track;
+        internal Track Track => _track;
 
         public Orientation Orientation
         {
@@ -80,6 +158,60 @@ namespace System.Windows.Controls
         {
             get => (bool)GetValue(IsSnapToTickEnabledProperty);
             set => SetValue(IsSnapToTickEnabledProperty, value);
+        }
+
+        public int Delay
+        {
+            get => (int)GetValue(DelayProperty);
+            set => SetValue(DelayProperty, value);
+        }
+
+        public int Interval
+        {
+            get => (int)GetValue(IntervalProperty);
+            set => SetValue(IntervalProperty, value);
+        }
+
+        public AutoToolTipPlacement AutoToolTipPlacement
+        {
+            get => (AutoToolTipPlacement)GetValue(AutoToolTipPlacementProperty);
+            set => SetValue(AutoToolTipPlacementProperty, value);
+        }
+
+        public int AutoToolTipPrecision
+        {
+            get => (int)GetValue(AutoToolTipPrecisionProperty);
+            set => SetValue(AutoToolTipPrecisionProperty, value);
+        }
+
+        public bool IsSelectionRangeEnabled
+        {
+            get => (bool)GetValue(IsSelectionRangeEnabledProperty);
+            set => SetValue(IsSelectionRangeEnabledProperty, value);
+        }
+
+        public double SelectionStart
+        {
+            get => (double)GetValue(SelectionStartProperty);
+            set => SetValue(SelectionStartProperty, value);
+        }
+
+        public double SelectionEnd
+        {
+            get => (double)GetValue(SelectionEndProperty);
+            set => SetValue(SelectionEndProperty, value);
+        }
+
+        public DoubleCollection Ticks
+        {
+            get => (DoubleCollection)GetValue(TicksProperty);
+            set => SetValue(TicksProperty, value);
+        }
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            _track = GetTemplateChild("PART_Track") as Track;
         }
 
         static Slider()

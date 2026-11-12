@@ -2075,7 +2075,7 @@ namespace System.Windows.Data
             if (targetDP == ContentControl.ContentProperty ||
                 targetDP == ContentPresenter.ContentProperty ||
                 targetDP == MS.Internal.Controls.ControlFoundationHooks.HeaderedItemsControlHeaderPropertyHook ||
-                targetDP == HeaderedContentControl.HeaderProperty)
+                targetDP == MS.Internal.Controls.ControlFoundationHooks.HeaderedContentControlHeaderPropertyHook)
             {
                 // pass DisconnectedItem through content-like properties, so
                 // that their descendent bindings can disconnect

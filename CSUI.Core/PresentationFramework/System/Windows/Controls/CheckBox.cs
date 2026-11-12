@@ -48,6 +48,9 @@ namespace System.Windows.Controls
             return arrangeBounds;
         }
 
+        protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+            new System.Windows.Automation.Peers.CheckBoxAutomationPeer(this);
+
         protected override void OnRender(DrawingContext dc)
         {
             double w = RenderSize.Width;

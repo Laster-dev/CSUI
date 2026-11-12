@@ -203,5 +203,8 @@ namespace System.Windows.Controls
                 dc.DrawText(ft, new Point(xStart, yStart));
             }
         }
+
+        protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+            new System.Windows.Automation.Peers.PasswordBoxAutomationPeer(this);
     }
 }

@@ -179,6 +179,7 @@ namespace MS.Internal.Controls
         internal static DependencyProperty InlineTextDecorationsProperty { get; set; }
         internal static DependencyProperty InlineBaselineAlignmentProperty { get; set; }
         internal static Func<object, bool> IsInlineObjectHook { get; set; }
+        internal static Func<object, object, bool> TryAddInlineHook { get; set; }
 
         private static RoutedEvent s_cleanUpVirtualizedItemEvent;
 
@@ -201,6 +202,19 @@ namespace MS.Internal.Controls
 
         internal static DependencyProperty AccessTextDisplayProperty;
         internal static Func<FrameworkElementFactory> CreateAccessTextFactoryHook;
+
+        internal static string RemoveAccessKeyMarker(string text)
+        {
+            if (!string.IsNullOrEmpty(text))
+            {
+                int index = text.IndexOf(AccessKeyMarker);
+                if (index >= 0)
+                {
+                    return text.Remove(index, 1);
+                }
+            }
+            return text;
+        }
 
         internal static void RegisterTextDisplay(
             DependencyProperty textProperty,
@@ -231,6 +245,7 @@ namespace MS.Internal.Controls
 
         internal static DependencyProperty ItemsPanelPropertyHook { get; set; }
         internal static DependencyProperty ItemForItemContainerPropertyHook { get; set; }
+        internal static DependencyProperty HeaderedContentControlHeaderPropertyHook { get; set; }
         internal static DependencyProperty HeaderedItemsControlHeaderPropertyHook { get; set; }
         internal static DependencyProperty ItemsControlItemBindingGroupPropertyHook { get; set; }
         internal static Func<DependencyObject, DependencyObject> GetItemsOwnerHook { get; set; }

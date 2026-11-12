@@ -50,6 +50,15 @@ namespace System.Windows.Controls
             element.SetValue(DockProperty, dock);
         }
 
+        internal static bool IsValidDock(object o)
+        {
+            Dock dock = (Dock)o;
+            return dock == Dock.Left
+                || dock == Dock.Top
+                || dock == Dock.Right
+                || dock == Dock.Bottom;
+        }
+
         public bool LastChildFill
         {
             get => (bool)GetValue(LastChildFillProperty);

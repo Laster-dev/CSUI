@@ -26,12 +26,9 @@ namespace MS.Internal.PresentationFramework
                 element != null ? LogicalTreeHelper.GetParent(element) : null;
 
             FrameworkElementFactory.RegisterType<UIElement>();
-            FrameworkElementFactory.RegisterType<ContentElement>();
             FrameworkElementFactory.RegisterType<FrameworkElement>();
-            FrameworkElementFactory.RegisterType<FrameworkContentElement>();
             FrameworkElementFactory.RegisterType<Control>();
             FrameworkElementFactory.RegisterType<ContentControl>();
-            FrameworkElementFactory.RegisterType<HeaderedContentControl>();
             FrameworkElementFactory.RegisterType<ContentPresenter>();
             FrameworkElementFactory.RegisterType<Decorator>();
             FrameworkElementFactory.RegisterType<AdornerDecorator>();

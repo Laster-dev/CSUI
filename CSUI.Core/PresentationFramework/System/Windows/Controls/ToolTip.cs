@@ -19,7 +19,15 @@ namespace System.Windows.Controls
                 "ToolTip",
                 typeof(object),
                 typeof(ToolTipService),
-                new FrameworkPropertyMetadata(null));
+                new FrameworkPropertyMetadata(null, OnToolTipServiceToolTipChanged));
+
+        private static void OnToolTipServiceToolTipChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (e.NewValue != null)
+            {
+                PopupControlService.EnsureInitialized();
+            }
+        }
 
         public static object GetToolTip(DependencyObject element)
         {
@@ -109,11 +117,325 @@ namespace System.Windows.Controls
             element.SetValue(PlacementProperty, value);
         }
 
+        public static readonly DependencyProperty HasDropShadowProperty =
+            DependencyProperty.RegisterAttached(
+                "HasDropShadow",
+                typeof(bool),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
+
+        public static bool GetHasDropShadow(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (bool)element.GetValue(HasDropShadowProperty);
+        }
+
+        public static void SetHasDropShadow(DependencyObject element, bool value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(HasDropShadowProperty, BooleanBoxes.Box(value));
+        }
+
+        public static readonly DependencyProperty PlacementRectangleProperty =
+            DependencyProperty.RegisterAttached(
+                "PlacementRectangle",
+                typeof(Rect),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(Rect.Empty));
+
+        public static Rect GetPlacementRectangle(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (Rect)element.GetValue(PlacementRectangleProperty);
+        }
+
+        public static void SetPlacementRectangle(DependencyObject element, Rect value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(PlacementRectangleProperty, value);
+        }
+
+        public static readonly DependencyProperty ShowOnDisabledProperty =
+            DependencyProperty.RegisterAttached(
+                "ShowOnDisabled",
+                typeof(bool),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
+
+        public static bool GetShowOnDisabled(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (bool)element.GetValue(ShowOnDisabledProperty);
+        }
+
+        public static void SetShowOnDisabled(DependencyObject element, bool value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(ShowOnDisabledProperty, BooleanBoxes.Box(value));
+        }
+
+        private static readonly DependencyPropertyKey IsOpenPropertyKey =
+            DependencyProperty.RegisterAttachedReadOnly(
+                "IsOpen",
+                typeof(bool),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
+
+        public static readonly DependencyProperty IsOpenProperty = IsOpenPropertyKey.DependencyProperty;
+
+        public static bool GetIsOpen(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (bool)element.GetValue(IsOpenProperty);
+        }
+
+        internal static void SetIsOpen(DependencyObject element, bool value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(IsOpenPropertyKey, BooleanBoxes.Box(value));
+        }
+
+        public static readonly DependencyProperty IsEnabledProperty =
+            DependencyProperty.RegisterAttached(
+                "IsEnabled",
+                typeof(bool),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(BooleanBoxes.TrueBox));
+
+        public static bool GetIsEnabled(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (bool)element.GetValue(IsEnabledProperty);
+        }
+
+        public static void SetIsEnabled(DependencyObject element, bool value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(IsEnabledProperty, BooleanBoxes.Box(value));
+        }
+
+        private static bool PositiveValueValidate(object o)
+        {
+            return ((int)o) >= 0;
+        }
+
+        public static readonly DependencyProperty ShowDurationProperty =
+            DependencyProperty.RegisterAttached(
+                "ShowDuration",
+                typeof(int),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(5000),
+                new ValidateValueCallback(PositiveValueValidate));
+
+        public static int GetShowDuration(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (int)element.GetValue(ShowDurationProperty);
+        }
+
+        public static void SetShowDuration(DependencyObject element, int value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(ShowDurationProperty, value);
+        }
+
+        public static readonly DependencyProperty InitialShowDelayProperty =
+            DependencyProperty.RegisterAttached(
+                "InitialShowDelay",
+                typeof(int),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(400),
+                new ValidateValueCallback(PositiveValueValidate));
+
+        public static int GetInitialShowDelay(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (int)element.GetValue(InitialShowDelayProperty);
+        }
+
+        public static void SetInitialShowDelay(DependencyObject element, int value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(InitialShowDelayProperty, value);
+        }
+
+        public static readonly DependencyProperty BetweenShowDelayProperty =
+            DependencyProperty.RegisterAttached(
+                "BetweenShowDelay",
+                typeof(int),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata(100),
+                new ValidateValueCallback(PositiveValueValidate));
+
+        public static int GetBetweenShowDelay(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (int)element.GetValue(BetweenShowDelayProperty);
+        }
+
+        public static void SetBetweenShowDelay(DependencyObject element, int value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(BetweenShowDelayProperty, value);
+        }
+
+        public static readonly DependencyProperty ShowsToolTipOnKeyboardFocusProperty =
+            DependencyProperty.RegisterAttached(
+                "ShowsToolTipOnKeyboardFocus",
+                typeof(bool?),
+                typeof(ToolTipService),
+                new FrameworkPropertyMetadata((bool?)null));
+
+        public static bool? GetShowsToolTipOnKeyboardFocus(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (bool?)element.GetValue(ShowsToolTipOnKeyboardFocusProperty);
+        }
+
+        public static void SetShowsToolTipOnKeyboardFocus(DependencyObject element, bool? value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(ShowsToolTipOnKeyboardFocusProperty, value);
+        }
+
+        public static readonly RoutedEvent ToolTipOpeningEvent =
+            EventManager.RegisterRoutedEvent<ToolTipEventHandler>(
+                "ToolTipOpening",
+                RoutingStrategy.Direct,
+                typeof(ToolTipService),
+                static (h, s, e) => h(s, (ToolTipEventArgs)e));
+
+        public static void AddToolTipOpeningHandler(DependencyObject element, ToolTipEventHandler handler)
+        {
+            UIElement.AddHandler(element, ToolTipOpeningEvent, handler);
+        }
+
+        public static void RemoveToolTipOpeningHandler(DependencyObject element, ToolTipEventHandler handler)
+        {
+            UIElement.RemoveHandler(element, ToolTipOpeningEvent, handler);
+        }
+
+        public static readonly RoutedEvent ToolTipClosingEvent =
+            EventManager.RegisterRoutedEvent<ToolTipEventHandler>(
+                "ToolTipClosing",
+                RoutingStrategy.Direct,
+                typeof(ToolTipService),
+                static (h, s, e) => h(s, (ToolTipEventArgs)e));
+
+        public static void AddToolTipClosingHandler(DependencyObject element, ToolTipEventHandler handler)
+        {
+            UIElement.AddHandler(element, ToolTipClosingEvent, handler);
+        }
+
+        public static void RemoveToolTipClosingHandler(DependencyObject element, ToolTipEventHandler handler)
+        {
+            UIElement.RemoveHandler(element, ToolTipClosingEvent, handler);
+        }
+
+        internal static readonly RoutedEvent FindToolTipEvent =
+            EventManager.RegisterRoutedEvent<FindToolTipEventHandler>(
+                "FindToolTip",
+                RoutingStrategy.Bubble,
+                typeof(ToolTipService),
+                static (h, s, e) => h(s, (FindToolTipEventArgs)e));
+
         static ToolTipService()
         {
             ControlFoundationHooks.ToolTipPropertyHook = ToolTipProperty;
             ControlFoundationHooks.GetToolTipHook = static d => d?.GetValue(ToolTipProperty);
+            EventManager.RegisterClassHandler(typeof(UIElement), FindToolTipEvent, new FindToolTipEventHandler(OnFindToolTip));
         }
+
+        private static void OnFindToolTip(object sender, FindToolTipEventArgs e)
+        {
+            if (e.TargetElement == null && sender is DependencyObject o && ToolTipIsEnabled(o, e.TriggerAction))
+            {
+                e.TargetElement = o;
+                e.Handled = true;
+            }
+        }
+
+        internal static bool ToolTipIsEnabled(DependencyObject o, TriggerAction triggerAction)
+        {
+            object tooltipObject = GetToolTip(o);
+
+            if ((tooltipObject != null) && GetIsEnabled(o))
+            {
+                bool enableOnKeyboardFocus = true;
+                if (triggerAction == TriggerAction.KeyboardFocus)
+                {
+                    bool? propertyValue = GetShowsToolTipOnKeyboardFocus(o);
+
+                    if (propertyValue == (bool?)null && tooltipObject is ToolTip tooltip)
+                    {
+                        propertyValue = tooltip.ShowsToolTipOnKeyboardFocus;
+                    }
+
+                    enableOnKeyboardFocus = (propertyValue != false);
+                }
+
+                if ((PopupControlService.IsElementEnabled(o) || GetShowOnDisabled(o)) && enableOnKeyboardFocus)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static bool IsFromKeyboard(TriggerAction triggerAction)
+        {
+            return triggerAction == TriggerAction.KeyboardFocus || triggerAction == TriggerAction.KeyboardShortcut;
+        }
+
+        internal enum TriggerAction
+        {
+            Mouse,
+            KeyboardFocus,
+            KeyboardShortcut
+        }
+    }
+
+    public delegate void ToolTipEventHandler(object sender, ToolTipEventArgs e);
+
+    public sealed class ToolTipEventArgs : RoutedEventArgs
+    {
+        internal ToolTipEventArgs(bool opening)
+        {
+            RoutedEvent = opening ? ToolTipService.ToolTipOpeningEvent : ToolTipService.ToolTipClosingEvent;
+        }
+
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            ((ToolTipEventHandler)genericHandler)(genericTarget, this);
+        }
+    }
+
+    internal delegate void FindToolTipEventHandler(object sender, FindToolTipEventArgs e);
+
+    internal sealed class FindToolTipEventArgs : RoutedEventArgs
+    {
+        internal FindToolTipEventArgs(ToolTipService.TriggerAction triggerAction)
+        {
+            RoutedEvent = ToolTipService.FindToolTipEvent;
+            _triggerAction = triggerAction;
+        }
+
+        internal DependencyObject TargetElement
+        {
+            get => _targetElement;
+            set => _targetElement = value;
+        }
+
+        internal ToolTipService.TriggerAction TriggerAction => _triggerAction;
+
+        protected override void InvokeEventHandler(Delegate genericHandler, object genericTarget)
+        {
+            ((FindToolTipEventHandler)genericHandler)(genericTarget, this);
+        }
+
+        private DependencyObject _targetElement;
+        private readonly ToolTipService.TriggerAction _triggerAction;
     }
 
     [DefaultEvent(nameof(Opened))]
@@ -226,6 +548,74 @@ namespace System.Windows.Controls
         {
             get => (bool)GetValue(StaysOpenProperty);
             set => SetValue(StaysOpenProperty, BooleanBoxes.Box(value));
+        }
+
+        internal static readonly DependencyProperty FromKeyboardProperty =
+            DependencyProperty.Register(
+                nameof(FromKeyboard),
+                typeof(bool),
+                typeof(ToolTip),
+                new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
+
+        internal bool FromKeyboard
+        {
+            get => (bool)GetValue(FromKeyboardProperty);
+            set => SetValue(FromKeyboardProperty, BooleanBoxes.Box(value));
+        }
+
+        public static readonly DependencyProperty HasDropShadowProperty =
+            ToolTipService.HasDropShadowProperty.AddOwner(typeof(ToolTip));
+
+        public bool HasDropShadow
+        {
+            get => (bool)GetValue(HasDropShadowProperty);
+            set => SetValue(HasDropShadowProperty, BooleanBoxes.Box(value));
+        }
+
+        public static readonly DependencyProperty PlacementRectangleProperty =
+            ToolTipService.PlacementRectangleProperty.AddOwner(typeof(ToolTip));
+
+        public Rect PlacementRectangle
+        {
+            get => (Rect)GetValue(PlacementRectangleProperty);
+            set => SetValue(PlacementRectangleProperty, value);
+        }
+
+        public static readonly DependencyProperty CustomPopupPlacementCallbackProperty =
+            Popup.CustomPopupPlacementCallbackProperty.AddOwner(typeof(ToolTip));
+
+        public CustomPopupPlacementCallback CustomPopupPlacementCallback
+        {
+            get => (CustomPopupPlacementCallback)GetValue(CustomPopupPlacementCallbackProperty);
+            set => SetValue(CustomPopupPlacementCallbackProperty, value);
+        }
+
+        public static readonly DependencyProperty ShowsToolTipOnKeyboardFocusProperty =
+            ToolTipService.ShowsToolTipOnKeyboardFocusProperty.AddOwner(typeof(ToolTip));
+
+        public bool? ShowsToolTipOnKeyboardFocus
+        {
+            get => (bool?)GetValue(ShowsToolTipOnKeyboardFocusProperty);
+            set => SetValue(ShowsToolTipOnKeyboardFocusProperty, value);
+        }
+
+        internal void ForceClose()
+        {
+            if (_parentPopup != null)
+            {
+                _parentPopup.IsOpen = false;
+            }
+        }
+
+        internal Rect GetScreenRect()
+        {
+            if (_parentPopup?.PopupHwndSource == null)
+            {
+                return Rect.Empty;
+            }
+
+            Point origin = PointToScreen(new Point(0.0, 0.0));
+            return new Rect(origin, RenderSize);
         }
 
         public static readonly RoutedEvent OpenedEvent =

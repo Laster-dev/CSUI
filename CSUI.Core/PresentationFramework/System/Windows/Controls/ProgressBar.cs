@@ -65,6 +65,9 @@ namespace System.Windows.Controls
             }
         }
 
+        protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+            new System.Windows.Automation.Peers.ProgressBarAutomationPeer(this);
+
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);

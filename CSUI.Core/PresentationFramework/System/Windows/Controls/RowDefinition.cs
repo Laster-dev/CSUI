@@ -16,6 +16,13 @@ namespace System.Windows.Controls
     /// </summary>
     public abstract class DefinitionBase : FrameworkContentElement
     {
+        internal static readonly DependencyProperty PrivateSharedSizeScopeProperty =
+            DependencyProperty.RegisterAttached(
+                "PrivateSharedSizeScope",
+                typeof(object),
+                typeof(DefinitionBase),
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits));
+
         internal Grid ParentGrid { get; set; }
 
         internal double FinalOffset { get; set; }
@@ -23,6 +30,30 @@ namespace System.Windows.Controls
         internal double MinCalculatedSize { get; set; }
         internal double MaxCalculatedSize { get; set; }
         internal double PreferredCalculatedSize { get; set; }
+
+        internal GridLength UserSizeValueCache =>
+            this switch
+            {
+                ColumnDefinition cd => cd.Width,
+                RowDefinition rd => rd.Height,
+                _ => new GridLength(1.0, GridUnitType.Star)
+            };
+
+        internal double UserMinSizeValueCache =>
+            this switch
+            {
+                ColumnDefinition cd => cd.MinWidth,
+                RowDefinition rd => rd.MinHeight,
+                _ => 0.0
+            };
+
+        internal double UserMaxSizeValueCache =>
+            this switch
+            {
+                ColumnDefinition cd => cd.MaxWidth,
+                RowDefinition rd => rd.MaxHeight,
+                _ => double.PositiveInfinity
+            };
 
         protected static void OnDefinitionPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -104,6 +135,10 @@ namespace System.Windows.Controls
         internal RowDefinitionCollection(Grid owner)
         {
             _owner = owner;
+        }
+
+        internal RowDefinitionCollection() : this(null)
+        {
         }
 
         protected override void InsertItem(int index, RowDefinition item)
