@@ -4,6 +4,7 @@
 #nullable disable
 
 using System;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -22,14 +23,14 @@ namespace System.Windows.Controls
                 nameof(Orientation),
                 typeof(Orientation),
                 typeof(Slider),
-                new FrameworkPropertyMetadata(Orientation.Horizontal, FrameworkPropertyMetadataOptions.AffectsMeasure));
+                new FrameworkPropertyMetadata(Orientation.Horizontal, FrameworkPropertyMetadataOptions.AffectsMeasure, OnSelectionRangePropertyChanged));
 
         public static readonly DependencyProperty IsDirectionReversedProperty =
             DependencyProperty.Register(
                 nameof(IsDirectionReversed),
                 typeof(bool),
                 typeof(Slider),
-                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender, OnSelectionRangePropertyChanged));
 
         public static readonly DependencyProperty TickFrequencyProperty =
             DependencyProperty.Register(
@@ -84,7 +85,7 @@ namespace System.Windows.Controls
                 nameof(IsSelectionRangeEnabled),
                 typeof(bool),
                 typeof(Slider),
-                new FrameworkPropertyMetadata(false));
+                new FrameworkPropertyMetadata(false, OnSelectionRangePropertyChanged));
 
         private static DependencyProperty s_selectionStartProperty;
         public static DependencyProperty SelectionStartProperty =>
@@ -92,7 +93,7 @@ namespace System.Windows.Controls
                 nameof(SelectionStart),
                 typeof(double),
                 typeof(Slider),
-                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnSelectionRangePropertyChanged));
 
         private static DependencyProperty s_selectionEndProperty;
         public static DependencyProperty SelectionEndProperty =>
@@ -100,7 +101,7 @@ namespace System.Windows.Controls
                 nameof(SelectionEnd),
                 typeof(double),
                 typeof(Slider),
-                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnSelectionRangePropertyChanged));
 
         private static DependencyProperty s_ticksProperty;
         public static DependencyProperty TicksProperty =>
@@ -129,6 +130,9 @@ namespace System.Windows.Controls
         public static RoutedCommand MaximizeValue => s_maximizeValue ??= new RoutedCommand(nameof(MaximizeValue), typeof(Slider));
 
         private Track _track;
+        private FrameworkElement _selectionRange;
+        private ToolTip _autoToolTip;
+        private double _dragUnsnappedValue;
         internal Track Track => _track;
 
         public Orientation Orientation
@@ -211,18 +215,56 @@ namespace System.Windows.Controls
 
         public override void OnApplyTemplate()
         {
+            if (_track != null)
+            {
+                _track.SizeChanged -= OnTrackSizeChanged;
+            }
+
             base.OnApplyTemplate();
             _track = GetTemplateChild("PART_Track") as Track;
+            _selectionRange = GetTemplateChild("PART_SelectionRange") as FrameworkElement;
+
+            if (_track != null)
+            {
+                _track.SizeChanged += OnTrackSizeChanged;
+            }
+
+            UpdateSelectionRangeElementPositionAndSize();
+        }
+
+        private void OnTrackSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateSelectionRangeElementPositionAndSize();
+        }
+
+        private static void OnSelectionRangePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is Slider slider)
+            {
+                slider.UpdateSelectionRangeElementPositionAndSize();
+            }
         }
 
         static Slider()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Slider), new FrameworkPropertyMetadata(typeof(Slider)));
             FocusableProperty.OverrideMetadata(typeof(Slider), new FrameworkPropertyMetadata(true));
+            MinimumProperty.OverrideMetadata(typeof(Slider), new FrameworkPropertyMetadata(0.0, OnSelectionRangePropertyChanged));
+            MaximumProperty.OverrideMetadata(typeof(Slider), new FrameworkPropertyMetadata(10.0, OnSelectionRangePropertyChanged));
+            EventManager.RegisterClassHandler(typeof(Slider), Thumb.DragStartedEvent, new DragStartedEventHandler(OnThumbDragStartedThunk));
             EventManager.RegisterClassHandler(typeof(Slider), Thumb.DragDeltaEvent, new DragDeltaEventHandler(OnThumbDragDeltaThunk));
+            EventManager.RegisterClassHandler(typeof(Slider), Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnThumbDragCompletedThunk));
             CommandManager.RegisterClassCommandBinding(typeof(Slider), new CommandBinding(DecreaseLarge, OnDecreaseLargeCommand));
             CommandManager.RegisterClassCommandBinding(typeof(Slider), new CommandBinding(IncreaseLarge, OnIncreaseLargeCommand));
             RegisterDefaultTheme();
+        }
+
+        private static void OnThumbDragStartedThunk(object sender, DragStartedEventArgs e)
+        {
+            if (sender is Slider slider)
+            {
+                slider.OnThumbDragStarted(e);
+            }
         }
 
         private static void OnThumbDragDeltaThunk(object sender, DragDeltaEventArgs e)
@@ -230,11 +272,67 @@ namespace System.Windows.Controls
             if (sender is Slider slider && slider._track != null)
             {
                 double delta = slider._track.ValueFromDistance(e.HorizontalChange, e.VerticalChange);
-                if (!double.IsNaN(delta) && !double.IsInfinity(delta) && delta != 0.0)
+                if (!double.IsNaN(delta) && !double.IsInfinity(delta))
                 {
-                    slider.ChangeValue(delta);
+                    slider.OnThumbDragDelta(delta);
                 }
             }
+        }
+
+        private static void OnThumbDragCompletedThunk(object sender, DragCompletedEventArgs e)
+        {
+            if (sender is Slider slider)
+            {
+                slider.OnThumbDragCompleted(e);
+            }
+        }
+
+        private void OnThumbDragStarted(DragStartedEventArgs e)
+        {
+            _dragUnsnappedValue = Value;
+
+            if (AutoToolTipPlacement != AutoToolTipPlacement.None)
+            {
+                if (_autoToolTip == null)
+                {
+                    _autoToolTip = new ToolTip();
+                }
+
+                _autoToolTip.Placement = AutoToolTipPlacement == AutoToolTipPlacement.TopLeft
+                    ? (Orientation == Orientation.Horizontal ? PlacementMode.Top : PlacementMode.Left)
+                    : (Orientation == Orientation.Horizontal ? PlacementMode.Bottom : PlacementMode.Right);
+                _autoToolTip.PlacementTarget = _track?.Thumb ?? (UIElement)this;
+                _autoToolTip.Content = GetAutoToolTipNumber();
+                _autoToolTip.IsOpen = true;
+            }
+        }
+
+        private void OnThumbDragDelta(double delta)
+        {
+            if (delta != 0.0)
+            {
+                _dragUnsnappedValue = Math.Clamp(_dragUnsnappedValue + delta, Minimum, Maximum);
+                UpdateValue(_dragUnsnappedValue);
+            }
+
+            if (_autoToolTip != null && _autoToolTip.IsOpen)
+            {
+                _autoToolTip.Content = GetAutoToolTipNumber();
+            }
+        }
+
+        private void OnThumbDragCompleted(DragCompletedEventArgs e)
+        {
+            if (_autoToolTip != null)
+            {
+                _autoToolTip.IsOpen = false;
+            }
+        }
+
+        private string GetAutoToolTipNumber()
+        {
+            int precision = Math.Max(0, AutoToolTipPrecision);
+            return Value.ToString("F" + precision, CultureInfo.CurrentCulture);
         }
 
         private static void OnDecreaseLargeCommand(object sender, ExecutedRoutedEventArgs e)
@@ -462,16 +560,117 @@ namespace System.Windows.Controls
             }
         }
 
+        protected override Size ArrangeOverride(Size arrangeBounds)
+        {
+            Size arranged = base.ArrangeOverride(arrangeBounds);
+            UpdateSelectionRangeElementPositionAndSize();
+            return arranged;
+        }
+
+        private void UpdateSelectionRangeElementPositionAndSize()
+        {
+            if (_track == null || _selectionRange == null)
+            {
+                return;
+            }
+
+            if (!IsSelectionRangeEnabled)
+            {
+                if (Orientation == Orientation.Horizontal)
+                {
+                    _selectionRange.Width = 0.0;
+                }
+                else
+                {
+                    _selectionRange.Height = 0.0;
+                }
+                return;
+            }
+
+            double min = Minimum;
+            double max = Maximum;
+            double range = max - min;
+            if (range <= 0.0)
+            {
+                return;
+            }
+
+            double start = Math.Clamp(SelectionStart, min, max);
+            double end = Math.Clamp(SelectionEnd, min, max);
+            if (end < start)
+            {
+                (start, end) = (end, start);
+            }
+
+            double thumbW = _track.Thumb != null ? _track.Thumb.ActualWidth : 0.0;
+            double thumbH = _track.Thumb != null ? _track.Thumb.ActualHeight : 0.0;
+
+            if (Orientation == Orientation.Horizontal)
+            {
+                double usableWidth = Math.Max(0.0, _track.ActualWidth - thumbW);
+                double valueToSize = usableWidth / range;
+                _selectionRange.Width = (end - start) * valueToSize;
+                double left = IsDirectionReversed
+                    ? (thumbW * 0.5) + ((max - end) * valueToSize)
+                    : (thumbW * 0.5) + ((start - min) * valueToSize);
+                Canvas.SetLeft(_selectionRange, left);
+            }
+            else
+            {
+                double usableHeight = Math.Max(0.0, _track.ActualHeight - thumbH);
+                double valueToSize = usableHeight / range;
+                _selectionRange.Height = (end - start) * valueToSize;
+                double top = IsDirectionReversed
+                    ? (thumbH * 0.5) + ((start - min) * valueToSize)
+                    : (thumbH * 0.5) + ((max - end) * valueToSize);
+                Canvas.SetTop(_selectionRange, top);
+            }
+        }
+
         private void ChangeValue(double delta)
         {
-            double newVal = Value + delta;
-            if (IsSnapToTickEnabled && TickFrequency > 0.0)
+            UpdateValue(Value + delta);
+        }
+
+        private void UpdateValue(double value)
+        {
+            double snapped = SnapToTick(value);
+            Value = Math.Clamp(snapped, Minimum, Maximum);
+        }
+
+        private double SnapToTick(double value)
+        {
+            if (!IsSnapToTickEnabled)
             {
-                double min = Minimum;
-                double steps = Math.Round((newVal - min) / TickFrequency);
-                newVal = min + (steps * TickFrequency);
+                return value;
             }
-            Value = Math.Clamp(newVal, Minimum, Maximum);
+
+            double previous = Minimum;
+            double next = Maximum;
+
+            DoubleCollection ticks = Ticks;
+            if (ticks != null && ticks.Count > 0)
+            {
+                foreach (double tick in ticks)
+                {
+                    if (tick >= previous && tick <= value)
+                    {
+                        previous = tick;
+                    }
+                    if (tick <= next && tick >= value)
+                    {
+                        next = tick;
+                    }
+                }
+            }
+            else if (TickFrequency > 0.0)
+            {
+                double freq = TickFrequency;
+                previous = Minimum + (Math.Floor((value - Minimum) / freq) * freq);
+                next = Math.Min(Maximum, previous + freq);
+            }
+
+            return Math.Abs(value - previous) <= Math.Abs(next - value) ? previous : next;
         }
     }
 }

@@ -21,7 +21,7 @@ namespace System.Windows.Controls.Primitives
                 nameof(IsPressed),
                 typeof(bool),
                 typeof(ButtonBase),
-                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender, OnVisualStatePropertyChanged));
 
         public static readonly DependencyProperty IsPressedProperty =
             IsPressedPropertyKey.DependencyProperty;
@@ -98,6 +98,9 @@ namespace System.Windows.Controls.Primitives
         static ButtonBase()
         {
             FocusableProperty.OverrideMetadata(typeof(ButtonBase), new FrameworkPropertyMetadata(true));
+            KeyboardNavigation.AcceptsReturnProperty.OverrideMetadata(typeof(ButtonBase), new FrameworkPropertyMetadata(true));
+            IsEnabledProperty.OverrideMetadata(typeof(ButtonBase), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
+            IsMouseOverPropertyKey.OverrideMetadata(typeof(ButtonBase), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
         }
 
         protected ButtonBase()
@@ -169,13 +172,24 @@ namespace System.Windows.Controls.Primitives
             {
                 _canExecuteChangedHandler = (s, e) => UpdateCanExecute();
                 newCmd.CanExecuteChanged += _canExecuteChangedHandler;
-                UpdateCanExecute();
             }
-            else
+            UpdateCanExecute();
+        }
+
+        private bool CanExecute
+        {
+            get => !ReadControlFlag(ControlBoolFlags.CommandDisabled);
+            set
             {
-                CoerceValue(IsEnabledProperty);
+                if (value != CanExecute)
+                {
+                    WriteControlFlag(ControlBoolFlags.CommandDisabled, !value);
+                    CoerceValue(IsEnabledProperty);
+                }
             }
         }
+
+        protected override bool IsEnabledCore => base.IsEnabledCore && CanExecute;
 
         private void UpdateCanExecute()
         {
@@ -183,18 +197,47 @@ namespace System.Windows.Controls.Primitives
             if (cmd != null)
             {
                 object param = CommandParameter;
-                bool canExecute;
-                if (cmd is RoutedCommand routedCmd)
-                {
-                    canExecute = routedCmd.CanExecute(param, CommandTarget);
-                }
-                else
-                {
-                    canExecute = cmd.CanExecute(param);
-                }
+                bool canExecute = cmd is RoutedCommand routedCmd
+                    ? routedCmd.CanExecute(param, CommandTarget)
+                    : cmd.CanExecute(param);
 
-                IsEnabled = canExecute;
+                CanExecute = canExecute;
             }
+            else
+            {
+                CanExecute = true;
+            }
+        }
+
+        internal override void ChangeVisualState(bool useTransitions)
+        {
+            if (!IsEnabled)
+            {
+                VisualStateManager.GoToState(this, VisualStates.StateDisabled, useTransitions);
+            }
+            else if (IsPressed)
+            {
+                VisualStateManager.GoToState(this, VisualStates.StatePressed, useTransitions);
+            }
+            else if (IsMouseOver)
+            {
+                VisualStateManager.GoToState(this, VisualStates.StateMouseOver, useTransitions);
+            }
+            else
+            {
+                VisualStateManager.GoToState(this, VisualStates.StateNormal, useTransitions);
+            }
+
+            if (IsKeyboardFocused)
+            {
+                VisualStateManager.GoToState(this, VisualStates.StateFocused, useTransitions);
+            }
+            else
+            {
+                VisualStateManager.GoToState(this, VisualStates.StateUnfocused, useTransitions);
+            }
+
+            base.ChangeVisualState(useTransitions);
         }
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)

@@ -240,7 +240,7 @@ namespace System.Windows.Input.StylusPointer
                             // the stylus stack.  This was happening due to handling of mouse events from Button and InkCanvas.
                             // This would cause promotions to not cause click events in the button.  Canceling and handling
                             // these messages will prevent the MouseDevice from processing them and destroying state.
-                            if (CurrentStylusDevice?.InRange ?? false)
+                            if (CurrentStylusDevice is { InRange: true } stylus && (!stylus.InAir || stylus.Captured != null))
                             {
                                 e.Cancel();
                                 input.Handled = true;

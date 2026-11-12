@@ -128,6 +128,26 @@ namespace System.Windows.Controls.Primitives
                 {
                     btn.OnIndeterminate(new RoutedEventArgs(IndeterminateEvent, btn));
                 }
+
+                btn.UpdateVisualState();
+            }
+        }
+
+        internal override void ChangeVisualState(bool useTransitions)
+        {
+            base.ChangeVisualState(useTransitions);
+
+            if (IsChecked == true)
+            {
+                VisualStateManager.GoToState(this, VisualStates.StateChecked, useTransitions);
+            }
+            else if (IsChecked == false)
+            {
+                VisualStateManager.GoToState(this, VisualStates.StateUnchecked, useTransitions);
+            }
+            else
+            {
+                VisualStates.GoToState(this, useTransitions, VisualStates.StateIndeterminate, VisualStates.StateUnchecked);
             }
         }
 

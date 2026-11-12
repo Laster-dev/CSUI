@@ -33,7 +33,6 @@ namespace System.Windows.Controls
 
         private FrameworkElement _track;
         private FrameworkElement _indicator;
-        private FrameworkElement _glow;
 
         public bool IsIndeterminate
         {
@@ -79,12 +78,27 @@ namespace System.Windows.Controls
 
         public override void OnApplyTemplate()
         {
+            if (_track != null)
+            {
+                _track.SizeChanged -= OnTrackSizeChanged;
+            }
+
             base.OnApplyTemplate();
             _track = GetTemplateChild("PART_Track") as FrameworkElement;
             _indicator = GetTemplateChild("PART_Indicator") as FrameworkElement;
-            _glow = GetTemplateChild("PART_GlowRect") as FrameworkElement;
+
+            if (_track != null)
+            {
+                _track.SizeChanged += OnTrackSizeChanged;
+            }
+
             SetProgressBarIndicatorLength();
             UpdateProgressVisualState(false);
+        }
+
+        private void OnTrackSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            SetProgressBarIndicatorLength();
         }
 
         protected override void OnValueChanged(double oldValue, double newValue)
@@ -93,7 +107,7 @@ namespace System.Windows.Controls
             SetProgressBarIndicatorLength();
         }
 
-        private void SetProgressBarIndicatorLength()
+        private void SetProgressBarIndicatorLength(double? trackLengthOverride = null)
         {
             if (_track == null || _indicator == null)
             {
@@ -104,7 +118,8 @@ namespace System.Windows.Controls
             double max = Maximum;
             double val = Value;
             double percent = (IsIndeterminate || max <= min) ? 1.0 : Math.Clamp((val - min) / (max - min), 0.0, 1.0);
-            _indicator.Width = percent * _track.ActualWidth;
+            double trackLength = trackLengthOverride ?? _track.ActualWidth;
+            _indicator.Width = Math.Max(0.0, percent * trackLength);
         }
 
         private void UpdateProgressVisualState(bool useTransitions)
@@ -132,9 +147,17 @@ namespace System.Windows.Controls
 
         protected override Size ArrangeOverride(Size arrangeBounds)
         {
-            Size arranged = base.ArrangeOverride(arrangeBounds);
-            SetProgressBarIndicatorLength();
-            return arranged;
+            if (Template != null && _track != null && _indicator != null)
+            {
+                double estimatedTrackLength = _track.ActualWidth > 0.0
+                    ? _track.ActualWidth
+                    : Math.Max(0.0, Orientation == Orientation.Horizontal
+                        ? arrangeBounds.Width - BorderThickness.Left - BorderThickness.Right
+                        : arrangeBounds.Height - BorderThickness.Top - BorderThickness.Bottom);
+                SetProgressBarIndicatorLength(estimatedTrackLength);
+            }
+
+            return base.ArrangeOverride(arrangeBounds);
         }
 
         protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>

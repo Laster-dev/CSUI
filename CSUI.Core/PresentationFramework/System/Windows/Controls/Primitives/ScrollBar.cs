@@ -191,6 +191,7 @@ namespace System.Windows.Controls.Primitives
         private readonly Thumb _thumb;
         private Track _track;
         private Rect _thumbRect;
+        private bool _hasLegacyThumbVisual;
 
         public Track Track => _track;
 
@@ -198,27 +199,36 @@ namespace System.Windows.Controls.Primitives
         {
             Focusable = false;
             _thumb = new Thumb();
-            AddVisualChild(_thumb);
             _thumb.DragDelta += OnThumbDragDelta;
             _thumb.DragCompleted += OnThumbDragCompleted;
+        }
+
+        private void EnsureLegacyThumbVisual()
+        {
+            if (!_hasLegacyThumbVisual && Template == null)
+            {
+                AddVisualChild(_thumb);
+                _hasLegacyThumbVisual = true;
+            }
         }
 
         public override void OnApplyTemplate()
         {
             base.OnApplyTemplate();
             _track = GetTemplateChild("PART_Track") as Track;
-            if (_track != null && _thumb != null)
+            if (_hasLegacyThumbVisual && _thumb != null)
             {
                 RemoveVisualChild(_thumb);
+                _hasLegacyThumbVisual = false;
             }
         }
 
-        protected override int VisualChildrenCount => Template != null ? base.VisualChildrenCount : 1;
+        protected override int VisualChildrenCount => Template != null ? base.VisualChildrenCount : (_hasLegacyThumbVisual ? 1 : 0);
 
         protected override Visual GetVisualChild(int index)
         {
             if (Template != null) return base.GetVisualChild(index);
-            if (index == 0) return _thumb;
+            if (_hasLegacyThumbVisual && index == 0) return _thumb;
             throw new ArgumentOutOfRangeException(nameof(index));
         }
 
@@ -262,6 +272,7 @@ namespace System.Windows.Controls.Primitives
             {
                 return base.MeasureOverride(availableSize);
             }
+            EnsureLegacyThumbVisual();
             const double DefaultThickness = 10.0;
             if (Orientation == Orientation.Vertical)
             {
@@ -283,6 +294,7 @@ namespace System.Windows.Controls.Primitives
             {
                 return base.ArrangeOverride(finalSize);
             }
+            EnsureLegacyThumbVisual();
             bool isVert = Orientation == Orientation.Vertical;
             double trackLength = isVert ? finalSize.Height : finalSize.Width;
             double crossLength = isVert ? finalSize.Width : finalSize.Height;
