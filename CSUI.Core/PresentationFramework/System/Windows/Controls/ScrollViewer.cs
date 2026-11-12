@@ -246,6 +246,20 @@ namespace System.Windows.Controls
             ClipToBounds = true;
         }
 
+        protected override void OnContentChanged(object oldContent, object newContent)
+        {
+            base.OnContentChanged(oldContent, newContent);
+
+            if (oldContent is Visual oldVisual)
+            {
+                RemoveVisualChild(oldVisual);
+            }
+            if (newContent is Visual newVisual)
+            {
+                AddVisualChild(newVisual);
+            }
+        }
+
         protected override int VisualChildrenCount
         {
             get

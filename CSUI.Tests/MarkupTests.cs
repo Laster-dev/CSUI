@@ -1264,14 +1264,19 @@ internal static class MarkupTests
         var xTb = panel.Children[4] as TextBox;
         Assert(xTb != null && xTb.Text == "AOT WPF Controls" && xTb.MaxLength == 32, "Parsed TextBox from XAML");
 
+        var scrollViewer = new ScrollViewer { Content = panel };
+        Assert(VisualTreeHelper.GetParent(panel) == scrollViewer, "ScrollViewer Content must have ScrollViewer as Visual parent");
+
         var testWin = new Window
         {
             Width = 400,
             Height = 300,
-            Content = panel
+            Content = scrollViewer
         };
         testWin.Show();
         Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+
+        Assert(PresentationSource.FromDependencyObject(xBtn) != null, "PresentationSource for control inside ScrollViewer must not be null");
 
         Point btnPos = xBtn.TranslatePoint(new Point(10, 10), testWin);
         IInputElement? hitElement = testWin.InputHitTest(btnPos);
@@ -1291,7 +1296,7 @@ internal static class MarkupTests
 
         Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
 
-        Assert(xBtnClicked, "Mouse click routed through live Win32 HWND must invoke Button.Click");
+        Assert(xBtnClicked, "Mouse click routed through live Win32 HWND inside ScrollViewer must invoke Button.Click");
         testWin.Close();
 
         Pass("CONTROL-1. Standard WPF Basic Control Hierarchy (Button, ToggleButton, CheckBox, RadioButton, RangeBase, Slider, TextBox, PasswordBox & XAML/Fluent)",
