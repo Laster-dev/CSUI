@@ -918,6 +918,13 @@ namespace CSUI.Markup
         internal static object ConvertStringValue(string raw, Type targetType)
         {
             if (raw == null) return null;
+            Type underlying = Nullable.GetUnderlyingType(targetType);
+            if (underlying != null)
+            {
+                if (string.Equals(raw, "{x:Null}", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(raw))
+                    return null;
+                return ConvertStringValue(raw, underlying);
+            }
             if (targetType == typeof(string) || targetType == typeof(object))
             {
                 return raw;
@@ -1050,6 +1057,14 @@ namespace CSUI.Markup
             if (targetType == typeof(Orientation))
             {
                 return Enum.Parse<Orientation>(raw, ignoreCase: true);
+            }
+            if (targetType == typeof(ClickMode))
+            {
+                return Enum.Parse<ClickMode>(raw, ignoreCase: true);
+            }
+            if (targetType == typeof(TickPlacement))
+            {
+                return Enum.Parse<TickPlacement>(raw, ignoreCase: true);
             }
             if (targetType == typeof(WindowStartupLocation))
             {
@@ -1930,6 +1945,58 @@ namespace CSUI.Markup
             RegisterProperty(typeof(TextFlowView), nameof(TextFlowView.Foreground), TextFlowView.ForegroundProperty);
             RegisterProperty(typeof(TextFlowView), nameof(TextFlowView.Padding), TextFlowView.PaddingProperty);
             RegisterProperty(typeof(TextFlowView), nameof(TextFlowView.LineSpacing), TextFlowView.LineSpacingProperty);
+
+            // 1C. Standard Basic Controls: Button, Toggle, CheckBox, Radio, Range & TextBox
+            RegisterType<Button>(contentProperty: ContentControl.ContentProperty);
+            RegisterProperty(typeof(Button), nameof(Button.Command), ButtonBase.CommandProperty);
+            RegisterProperty(typeof(Button), nameof(Button.CommandParameter), ButtonBase.CommandParameterProperty);
+            RegisterProperty(typeof(Button), nameof(Button.ClickMode), ButtonBase.ClickModeProperty);
+            RegisterProperty(typeof(Button), nameof(Button.IsDefault), Button.IsDefaultProperty);
+            RegisterProperty(typeof(Button), nameof(Button.IsCancel), Button.IsCancelProperty);
+
+            RegisterType<ToggleButton>(contentProperty: ContentControl.ContentProperty);
+            RegisterProperty(typeof(ToggleButton), nameof(ToggleButton.IsChecked), ToggleButton.IsCheckedProperty);
+            RegisterProperty(typeof(ToggleButton), nameof(ToggleButton.IsThreeState), ToggleButton.IsThreeStateProperty);
+
+            RegisterType<CheckBox>(contentProperty: ContentControl.ContentProperty);
+            RegisterProperty(typeof(CheckBox), nameof(CheckBox.IsChecked), ToggleButton.IsCheckedProperty);
+            RegisterProperty(typeof(CheckBox), nameof(CheckBox.IsThreeState), ToggleButton.IsThreeStateProperty);
+
+            RegisterType<RadioButton>(contentProperty: ContentControl.ContentProperty);
+            RegisterProperty(typeof(RadioButton), nameof(RadioButton.IsChecked), ToggleButton.IsCheckedProperty);
+            RegisterProperty(typeof(RadioButton), nameof(RadioButton.GroupName), RadioButton.GroupNameProperty);
+
+            RegisterType<ProgressBar>();
+            RegisterProperty(typeof(ProgressBar), nameof(ProgressBar.Minimum), RangeBase.MinimumProperty);
+            RegisterProperty(typeof(ProgressBar), nameof(ProgressBar.Maximum), RangeBase.MaximumProperty);
+            RegisterProperty(typeof(ProgressBar), nameof(ProgressBar.Value), RangeBase.ValueProperty);
+            RegisterProperty(typeof(ProgressBar), nameof(ProgressBar.IsIndeterminate), ProgressBar.IsIndeterminateProperty);
+            RegisterProperty(typeof(ProgressBar), nameof(ProgressBar.Orientation), ProgressBar.OrientationProperty);
+
+            RegisterType<Slider>();
+            RegisterProperty(typeof(Slider), nameof(Slider.Minimum), RangeBase.MinimumProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.Maximum), RangeBase.MaximumProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.Value), RangeBase.ValueProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.SmallChange), RangeBase.SmallChangeProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.LargeChange), RangeBase.LargeChangeProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.Orientation), Slider.OrientationProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.TickFrequency), Slider.TickFrequencyProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.TickPlacement), Slider.TickPlacementProperty);
+            RegisterProperty(typeof(Slider), nameof(Slider.IsSnapToTickEnabled), Slider.IsSnapToTickEnabledProperty);
+
+            RegisterType<TextBox>(contentProperty: TextBox.TextProperty);
+            RegisterProperty(typeof(TextBox), nameof(TextBox.Text), TextBox.TextProperty);
+            RegisterProperty(typeof(TextBox), nameof(TextBox.IsReadOnly), TextBoxBase.IsReadOnlyProperty);
+            RegisterProperty(typeof(TextBox), nameof(TextBox.AcceptsReturn), TextBoxBase.AcceptsReturnProperty);
+            RegisterProperty(typeof(TextBox), nameof(TextBox.AcceptsTab), TextBoxBase.AcceptsTabProperty);
+            RegisterProperty(typeof(TextBox), nameof(TextBox.TextWrapping), TextBox.TextWrappingProperty);
+            RegisterProperty(typeof(TextBox), nameof(TextBox.TextAlignment), TextBox.TextAlignmentProperty);
+            RegisterProperty(typeof(TextBox), nameof(TextBox.MaxLength), TextBox.MaxLengthProperty);
+
+            RegisterType<PasswordBox>();
+            RegisterProperty(typeof(PasswordBox), nameof(PasswordBox.Password), PasswordBox.PasswordProperty);
+            RegisterProperty(typeof(PasswordBox), nameof(PasswordBox.PasswordChar), PasswordBox.PasswordCharProperty);
+            RegisterProperty(typeof(PasswordBox), nameof(PasswordBox.MaxLength), PasswordBox.MaxLengthProperty);
 
             // 2. 2D Brushes, Transforms & Geometries
             RegisterType<SolidColorBrush>();

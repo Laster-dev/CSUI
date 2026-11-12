@@ -1490,5 +1490,156 @@ namespace CSUI.Markup
             view.Padding = new Thickness(uniform);
             return view;
         }
+
+        // =====================================================================
+        // Basic Controls: ButtonBase, Button, Toggle, Range, Slider, TextBox
+        // =====================================================================
+
+        public static T OnClick<T>(this T button, RoutedEventHandler handler) where T : ButtonBase
+        {
+            button.Click += handler;
+            return button;
+        }
+
+        public static T Command<T>(this T button, ICommand command, object parameter = null) where T : ButtonBase
+        {
+            button.Command = command;
+            if (parameter != null) button.CommandParameter = parameter;
+            return button;
+        }
+
+        public static T ClickMode<T>(this T button, ClickMode mode) where T : ButtonBase
+        {
+            button.ClickMode = mode;
+            return button;
+        }
+
+        public static Button IsDefault(this Button btn, bool isDefault)
+        {
+            btn.IsDefault = isDefault;
+            return btn;
+        }
+
+        public static Button IsCancel(this Button btn, bool isCancel)
+        {
+            btn.IsCancel = isCancel;
+            return btn;
+        }
+
+        public static T IsChecked<T>(this T button, bool? isChecked) where T : ToggleButton
+        {
+            button.IsChecked = isChecked;
+            return button;
+        }
+
+        public static T IsThreeState<T>(this T button, bool isThreeState) where T : ToggleButton
+        {
+            button.IsThreeState = isThreeState;
+            return button;
+        }
+
+        public static RadioButton GroupName(this RadioButton rb, string groupName)
+        {
+            rb.GroupName = groupName;
+            return rb;
+        }
+
+        public static T Range<T>(this T range, double min, double max, double value) where T : RangeBase
+        {
+            range.Minimum = min;
+            range.Maximum = max;
+            range.Value = value;
+            return range;
+        }
+
+        public static T Value<T>(this T range, double value) where T : RangeBase
+        {
+            range.Value = value;
+            return range;
+        }
+
+        public static ProgressBar IsIndeterminate(this ProgressBar pb, bool isIndeterminate)
+        {
+            pb.IsIndeterminate = isIndeterminate;
+            return pb;
+        }
+
+        public static Slider Orientation(this Slider slider, Orientation orientation)
+        {
+            slider.Orientation = orientation;
+            return slider;
+        }
+
+        public static Slider TickFrequency(this Slider slider, double frequency)
+        {
+            slider.TickFrequency = frequency;
+            return slider;
+        }
+
+        public static Slider TickPlacement(this Slider slider, TickPlacement placement)
+        {
+            slider.TickPlacement = placement;
+            return slider;
+        }
+
+        public static Slider IsSnapToTickEnabled(this Slider slider, bool enabled)
+        {
+            slider.IsSnapToTickEnabled = enabled;
+            return slider;
+        }
+
+        public static TextBox Text(this TextBox tb, string text)
+        {
+            tb.Text = text;
+            return tb;
+        }
+
+        public static T IsReadOnly<T>(this T tb, bool isReadOnly) where T : TextBoxBase
+        {
+            tb.IsReadOnly = isReadOnly;
+            return tb;
+        }
+
+        public static T AcceptsReturn<T>(this T tb, bool acceptsReturn) where T : TextBoxBase
+        {
+            tb.AcceptsReturn = acceptsReturn;
+            return tb;
+        }
+
+        public static T AcceptsTab<T>(this T tb, bool acceptsTab) where T : TextBoxBase
+        {
+            tb.AcceptsTab = acceptsTab;
+            return tb;
+        }
+
+        public static TextBox TextWrapping(this TextBox tb, TextWrapping wrapping)
+        {
+            tb.TextWrapping = wrapping;
+            return tb;
+        }
+
+        public static TextBox TextAlignment(this TextBox tb, TextAlignment alignment)
+        {
+            tb.TextAlignment = alignment;
+            return tb;
+        }
+
+        public static TextBox MaxLength(this TextBox tb, int maxLength)
+        {
+            tb.MaxLength = maxLength;
+            return tb;
+        }
+
+        public static PasswordBox Password(this PasswordBox pb, string password)
+        {
+            pb.Password = password;
+            return pb;
+        }
+
+        public static PasswordBox PasswordChar(this PasswordBox pb, char ch)
+        {
+            pb.PasswordChar = ch;
+            return pb;
+        }
     }
 }

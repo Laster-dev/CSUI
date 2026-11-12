@@ -12,6 +12,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Media3D;
 using System.Windows.Media.Svg;
 using System.Windows.Media.Composition;
+using System.Windows.Input;
 using System.Windows.Input.Gestures;
 using System.Windows.Threading;
 using CSUI.Markup;
@@ -34,6 +35,7 @@ internal static class MarkupTests
         TestModernEffectsAndAcrylicMaterial();
         TestStandardLayoutMatrix();
         TestModernLayoutPanels();
+        TestBasicControlsMatrix();
         TestScrollViewerAndSmoothInertia();
         TestVariableHeightVirtualizingStackPanel();
         TestDirectWriteTextEngineAndTextFlow();
@@ -1111,6 +1113,158 @@ internal static class MarkupTests
 
         Pass("LAYOUT-2. Modern Layout Matrix 2 (Border Padding/CornerRadius, Canvas Coordinates, UniformGrid Dimensions, Viewbox Scaling & XAML/Fluent)",
             $"borderDesired={border.DesiredSize.Width}x{border.DesiredSize.Height}, canvasDesired={canvas.DesiredSize.Width}x{canvas.DesiredSize.Height}, uGridCell={((UIElement)uGrid.Children[0]).RenderSize.Width}x{((UIElement)uGrid.Children[0]).RenderSize.Height}, vbScale={((ScaleTransform)vb.Child.RenderTransform).ScaleX}");
+    }
+
+    private static void TestBasicControlsMatrix()
+    {
+        // =====================================================================
+        // 1. Button & ButtonBase: ClickMode, IsPressed & Command Execution
+        // =====================================================================
+        int clickCount = 0;
+        object? executedParam = null;
+        var testCmd = new RelayCommand<object>(p =>
+        {
+            clickCount++;
+            executedParam = p;
+        });
+
+        var btn = new Button()
+            .Command(testCmd, "payload123")
+            .ClickMode(ClickMode.Press);
+
+        btn.OnClick();
+        AssertEqual(clickCount, 1, "Button Click raised and executed Command");
+        AssertEqual((string?)executedParam, "payload123", "CommandParameter delivered to command");
+
+        // Test space key click
+        btn.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, null, 0, Key.Space) { RoutedEvent = UIElement.KeyDownEvent });
+        Assert(btn.IsPressed, "Button is pressed on Space key down");
+        btn.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, null, 0, Key.Space) { RoutedEvent = UIElement.KeyUpEvent });
+        Assert(!btn.IsPressed, "Button is released on Space key up");
+        AssertEqual(clickCount, 2, "Space key invoked Button Click");
+
+        // =====================================================================
+        // 2. ToggleButton & CheckBox: Two-State, Three-State & Event Lifecycle
+        // =====================================================================
+        var chk = new CheckBox().IsThreeState(false);
+        AssertEqual(chk.IsChecked, false, "CheckBox initially unchecked");
+
+        chk.OnToggle();
+        AssertEqual(chk.IsChecked, true, "CheckBox toggled to true");
+
+        chk.OnToggle();
+        AssertEqual(chk.IsChecked, false, "CheckBox toggled back to false");
+
+        // Three-state cycle: false -> true -> null -> false
+        chk.IsThreeState = true;
+        chk.IsChecked = false;
+        chk.OnToggle();
+        AssertEqual(chk.IsChecked, true, "ThreeState step 1: true");
+        chk.OnToggle();
+        AssertEqual(chk.IsChecked, null, "ThreeState step 2: null (indeterminate)");
+        chk.OnToggle();
+        AssertEqual(chk.IsChecked, false, "ThreeState step 3: false");
+
+        // =====================================================================
+        // 3. RadioButton: GroupName Mutual Exclusion
+        // =====================================================================
+        var radioPanel = new StackPanel();
+        var rb1 = new RadioButton().GroupName("TestGroup").IsChecked(false);
+        var rb2 = new RadioButton().GroupName("TestGroup").IsChecked(false);
+        radioPanel.Children.Add(rb1);
+        radioPanel.Children.Add(rb2);
+
+        rb1.IsChecked = true;
+        AssertEqual(rb1.IsChecked, true, "RadioButton 1 checked");
+        AssertEqual(rb2.IsChecked, false, "RadioButton 2 unchecked");
+
+        rb2.IsChecked = true;
+        AssertEqual(rb2.IsChecked, true, "RadioButton 2 checked");
+        AssertEqual(rb1.IsChecked, false, "RadioButton 1 automatically unchecked by group exclusion");
+
+        // =====================================================================
+        // 4. RangeBase, ProgressBar & Slider: Coercion, Clamp & Keyboard
+        // =====================================================================
+        var pb = new ProgressBar().Range(min: 0, max: 100, value: 45);
+        AssertNear(pb.Value, 45.0, 1e-4, "ProgressBar value");
+
+        // Out-of-bounds coercion
+        pb.Value = 150.0;
+        AssertNear(pb.Value, 100.0, 1e-4, "ProgressBar value clamped to Maximum");
+        pb.Value = -20.0;
+        AssertNear(pb.Value, 0.0, 1e-4, "ProgressBar value clamped to Minimum");
+
+        // Slider tick snapping & navigation
+        var slider = new Slider()
+            .Range(0, 10, 5)
+            .TickFrequency(2.0)
+            .IsSnapToTickEnabled(true);
+
+        slider.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, null, 0, Key.Right) { RoutedEvent = UIElement.KeyDownEvent });
+        // Value 5 + SmallChange(0.1) snapped to nearest tick multiple of 2 (min 0) -> Math.Round(5.1/2)*2 = 6.0
+        AssertNear(slider.Value, 6.0, 1e-4, "Slider snapped to tick mark 6.0");
+
+        // =====================================================================
+        // 5. TextBox & PasswordBox: Grapheme Cluster Backspace, Selection & Masking
+        // =====================================================================
+        var tb = new TextBox().Text("Hello CSUI");
+        AssertEqual(tb.Text, "Hello CSUI", "TextBox initial text");
+
+        // Text selection and replacement
+        tb.Select(6, 4); // "CSUI"
+        AssertEqual(tb.SelectedText, "CSUI", "TextBox selected text");
+        tb.SelectedText = "World!";
+        AssertEqual(tb.Text, "Hello World!", "TextBox selected text replaced");
+
+        // Unicode Emoji Cluster boundary deletion test: "👨‍👩‍👧‍👦"
+        string familyEmoji = "👨‍👩‍👧‍👦";
+        tb.Text = "Team " + familyEmoji;
+        tb.CaretIndex = tb.Text.Length;
+        // Press Backspace -> entire 25-byte ZWJ multi-character cluster deleted as ONE atom
+        tb.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, null, 0, Key.Back) { RoutedEvent = UIElement.KeyDownEvent });
+        AssertEqual(tb.Text, "Team ", "Family Emoji cluster deleted atomically without surrogate residue");
+
+        // PasswordBox masking
+        var pwd = new PasswordBox().Password("Secret123").PasswordChar('*');
+        AssertEqual(pwd.Password, "Secret123", "PasswordBox stored plaintext");
+        AssertEqual(pwd.PasswordChar, '*', "PasswordBox masked with *");
+
+        // =====================================================================
+        // 6. Zero-Reflection NativeAOT XAML Parsing of Basic Controls
+        // =====================================================================
+        const string xamlSnippet = """
+        <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Spacing="8">
+            <Button Content="Submit" ClickMode="Press" />
+            <CheckBox Content="Remember Me" IsChecked="True" />
+            <RadioButton Content="Option A" GroupName="Opts" IsChecked="True" />
+            <Slider Minimum="10" Maximum="50" Value="25" />
+            <TextBox Text="AOT WPF Controls" MaxLength="32" />
+        </StackPanel>
+        """;
+
+        object parsed = XamlMarkup.Load<StackPanel>(xamlSnippet);
+        var panel = parsed as StackPanel;
+        Assert(panel != null, "Parsed StackPanel container");
+        if (panel == null) return;
+        AssertEqual(panel.Children.Count, 5, "StackPanel contains 5 basic controls");
+
+        var xBtn = panel.Children[0] as Button;
+        Assert(xBtn != null && (string)xBtn.Content == "Submit" && xBtn.ClickMode == ClickMode.Press, "Parsed Button from XAML");
+
+        var xChk = panel.Children[1] as CheckBox;
+        Assert(xChk != null && xChk.IsChecked == true, "Parsed CheckBox from XAML");
+
+        var xRb = panel.Children[2] as RadioButton;
+        Assert(xRb != null && xRb.GroupName == "Opts" && xRb.IsChecked == true, "Parsed RadioButton from XAML");
+
+        var xSld = panel.Children[3] as Slider;
+        Assert(xSld != null && Math.Abs(xSld.Value - 25.0) < 1e-4, "Parsed Slider from XAML");
+
+        var xTb = panel.Children[4] as TextBox;
+        Assert(xTb != null && xTb.Text == "AOT WPF Controls" && xTb.MaxLength == 32, "Parsed TextBox from XAML");
+
+        Pass("CONTROL-1. Standard WPF Basic Control Hierarchy (Button, ToggleButton, CheckBox, RadioButton, RangeBase, Slider, TextBox, PasswordBox & XAML/Fluent)",
+            $"btnClicks={clickCount}, chkState={chk.IsChecked}, rbChecked={rb2.IsChecked}, sliderVal={slider.Value}, tbText='{tb.Text}'");
     }
 
     private static void TestScrollViewerAndSmoothInertia()
