@@ -1,14 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Controls.Ribbon;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Ink;
@@ -17,6 +20,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Microsoft.Win32;
 using static CSUI.Tests.TestHelpers;
 
 namespace CSUI.Tests;
@@ -58,6 +62,7 @@ internal static class WpfAllControlsTests
         TestBatch4CalendarAndDatePicker();
         TestBatch5DataGridSuite();
         TestBatch6NavigationInkDocumentsAndHosting();
+        TestBatch7MessageBoxFileDialogsGlyphsAndRibbon();
     }
 
     private static void TestShapesAndGpuRendering()
@@ -428,5 +433,197 @@ internal static class WpfAllControlsTests
         Assert(UIElementAutomationPeer.CreatePeerForElement(fdReader) is FlowDocumentReaderAutomationPeer, "FlowDocumentReader peer");
 
         Pass("CTRL-7. Navigation, InkCanvas, RichTextBox, DocumentViewers, HwndHost, WebBrowser, MediaElement & Peers");
+    }
+
+    private static void TestBatch7MessageBoxFileDialogsGlyphsAndRibbon()
+    {
+        // 1. MessageBox validation & Win32 flags
+        AssertThrows<InvalidEnumArgumentException>(() =>
+            MessageBox.Show("Test", "Cap", (MessageBoxButton)999), "Invalid MessageBoxButton");
+        AssertThrows<InvalidEnumArgumentException>(() =>
+            MessageBox.Show("Test", "Cap", MessageBoxButton.OK, (MessageBoxImage)999), "Invalid MessageBoxImage");
+        AssertThrows<ArgumentException>(() =>
+            MessageBox.ShowCore(new IntPtr(1), "Test", "Cap", MessageBoxButton.OK, MessageBoxImage.None, MessageBoxResult.None, MessageBoxOptions.ServiceNotification),
+            "ServiceNotification with owner");
+        AssertEqual(MessageBox.DefaultResultToButtonNumber(MessageBoxResult.Cancel, MessageBoxButton.YesNoCancel), 0x200, "MessageBox MB_DEFBUTTON3");
+        AssertEqual(MessageBox.Win32ToMessageBoxResult(6), MessageBoxResult.Yes, "MessageBox IDYES mapping");
+
+        // 2. Microsoft.Win32 File & Folder Dialogs
+        var ofd = new OpenFileDialog
+        {
+            Title = "Open",
+            Filter = "Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
+            DefaultExt = ".txt",
+            Multiselect = true,
+            FileName = @"C:\Temp\sample.txt"
+        };
+        AssertEqual(ofd.DefaultExt, "txt", "OpenFileDialog stripped dot in DefaultExt");
+        AssertEqual(ofd.SafeFileName, "sample.txt", "OpenFileDialog SafeFileName");
+        AssertThrows<ArgumentException>(() => ofd.Filter = "BrokenFilterOnlyOnePart", "Invalid Filter string");
+        ofd.CustomPlaces.Add(FileDialogCustomPlaces.Documents);
+        AssertEqual(ofd.CustomPlaces.Count, 1, "OpenFileDialog CustomPlaces");
+        ofd.Reset();
+        AssertEqual(ofd.Multiselect, false, "OpenFileDialog Reset");
+
+        var sfd = new SaveFileDialog { OverwritePrompt = true, CreatePrompt = true };
+        Assert(sfd.OverwritePrompt && sfd.CreatePrompt, "SaveFileDialog flags");
+
+        var folderDlg = new OpenFolderDialog { Multiselect = true, FolderName = @"C:\Windows\System32" };
+        AssertEqual(folderDlg.SafeFolderName, "System32", "OpenFolderDialog SafeFolderName");
+        folderDlg.Reset();
+        AssertEqual(folderDlg.Multiselect, false, "OpenFolderDialog Reset");
+
+        // 3. Glyphs element & GlyphRun rendering
+        string fontPath = File.Exists(@"C:\Windows\Fonts\segoeui.ttf")
+            ? @"C:\Windows\Fonts\segoeui.ttf"
+            : @"C:\Windows\Fonts\arial.ttf";
+        if (File.Exists(fontPath))
+        {
+            var glyphs = new Glyphs
+            {
+                FontUri = new Uri(fontPath, UriKind.Absolute),
+                FontRenderingEmSize = 18.0,
+                UnicodeString = "CSUI",
+                Fill = Brushes.Navy,
+                OriginX = 8,
+                OriginY = 24,
+                Width = 100,
+                Height = 40
+            };
+            GlyphRun run = glyphs.ToGlyphRun();
+            Assert(run != null && run.GlyphIndices.Count == 4, "Glyphs ToGlyphRun built 4 glyphs");
+            glyphs.Measure(new Size(100, 40));
+            glyphs.Arrange(new Rect(0, 0, 100, 40));
+            byte[] glyphPixels = RenderToBgra32(glyphs, 100, 40);
+            Assert(HasNonBackgroundPixels(glyphPixels, 100, 40, 100 * 4), "Glyphs rendered pixels");
+        }
+
+        // 4. Complete System.Windows.Controls.Ribbon suite
+        var conv = new RibbonControlLengthConverter();
+        object? converted = conv.ConvertFromString("2*");
+        Assert(converted is RibbonControlLength starLen && starLen.IsStar && Math.Abs(starLen.Value - 2.0) < 1e-6, "RibbonControlLengthConverter star");
+
+        var ribbonWindow = new RibbonWindow { Title = "App" };
+        Assert(UIElementAutomationPeer.CreatePeerForElement(ribbonWindow) is RibbonWindowAutomationPeer, "RibbonWindow peer");
+
+        var ribbonBtn = new RibbonButton { Label = "Paste", KeyTip = "V" };
+        int splitClicks = 0;
+        var splitBtn = new RibbonSplitButton { Label = "Split", IsCheckable = true };
+        splitBtn.Click += (_, _) => splitClicks++;
+        var toggleBtn = new RibbonToggleButton { Label = "Bold", IsChecked = true };
+        var radioBtn = new RibbonRadioButton { Label = "Opt1" };
+        var checkBtn = new RibbonCheckBox { Label = "Gridlines", IsChecked = true };
+        var rTextBox = new RibbonTextBox { Text = "Find", TextBoxWidth = 80 };
+        var rCombo = new RibbonComboBox { Label = "Font", IsEditable = true, Text = "Segoe UI" };
+        var rFilter = new RibbonFilterMenuButton { Label = "Filter" };
+        var rSep = new RibbonSeparator { Label = "More" };
+        var rTwoLine = new RibbonTwoLineText { Text = "Wrap Text", HasTwoLines = true };
+        var rTip = new RibbonToolTip { Title = "Help", Description = "Desc", FooterTitle = "F1" };
+        Assert(rTip.HasHeader && rTip.HasFooter, "RibbonToolTip HasHeader/HasFooter");
+
+        var gItem1 = new RibbonGalleryItem { Content = "Style1" };
+        var gItem2 = new RibbonGalleryItem { Content = "Style2" };
+        var gCat = new RibbonGalleryCategory { Header = "Styles" };
+        gCat.Items.Add(gItem1);
+        gCat.Items.Add(gItem2);
+        var gallery = new RibbonGallery { MaxColumnCount = 4 };
+        gallery.Items.Add(gCat);
+
+        var appMenu = new RibbonApplicationMenu { Label = "File" };
+        appMenu.Items.Add(new RibbonApplicationMenuItem { Header = "New" });
+        appMenu.Items.Add(new RibbonApplicationSplitMenuItem { Header = "Save As" });
+
+        var qat = new RibbonQuickAccessToolBar();
+        qat.Items.Add(new RibbonButton { Label = "Save" });
+
+        var ctrlGroup = new RibbonControlGroup();
+        ctrlGroup.Items.Add(toggleBtn);
+        ctrlGroup.Items.Add(radioBtn);
+
+        var groupSizeDef = new RibbonGroupSizeDefinition();
+        groupSizeDef.ControlDefinitions.Add(new RibbonControlSizeDefinition { ImageSize = RibbonImageSize.Large });
+
+        var homeGroup = new RibbonGroup { Header = "Clipboard" };
+        homeGroup.GroupSizeDefinitions.Add(groupSizeDef);
+        homeGroup.Items.Add(ribbonBtn);
+        homeGroup.Items.Add(splitBtn);
+        homeGroup.Items.Add(ctrlGroup);
+        homeGroup.Items.Add(checkBtn);
+        homeGroup.Items.Add(rTextBox);
+        homeGroup.Items.Add(rCombo);
+        homeGroup.Items.Add(rFilter);
+        homeGroup.Items.Add(rSep);
+        homeGroup.Items.Add(rTwoLine);
+        homeGroup.Items.Add(gallery);
+
+        var homeTab = new RibbonTab { Header = "Home" };
+        homeTab.Items.Add(homeGroup);
+        var insertTab = new RibbonTab { Header = "Insert" };
+
+        var ribbon = new Ribbon
+        {
+            Width = 640,
+            Height = 140,
+            ApplicationMenu = appMenu,
+            QuickAccessToolBar = qat
+        };
+        ribbon.ContextualTabGroups.Add(new RibbonContextualTabGroup { Header = "Tools" });
+        ribbon.Items.Add(homeTab);
+        ribbon.Items.Add(insertTab);
+
+        AssertEqual(ribbon.SelectedIndex, 0, "Ribbon auto-selects first RibbonTab");
+        ribbon.Measure(new Size(640, 140));
+        ribbon.Arrange(new Rect(0, 0, 640, 140));
+        byte[] ribbonPixels = RenderToBgra32(ribbon, 640, 140);
+        Assert(HasNonBackgroundPixels(ribbonPixels, 640, 140, 640 * 4), "Ribbon rendered visual chrome & controls");
+
+        RibbonCommands.MinimizeRibbonCommand.Execute(null, ribbon);
+        Assert(ribbon.IsMinimized, "RibbonCommands.MinimizeRibbonCommand sets IsMinimized");
+        RibbonCommands.MaximizeRibbonCommand.Execute(null, ribbon);
+        Assert(!ribbon.IsMinimized, "RibbonCommands.MaximizeRibbonCommand clears IsMinimized");
+
+        var rPeer = UIElementAutomationPeer.CreatePeerForElement(ribbon) as RibbonAutomationPeer;
+        Assert(rPeer != null, "RibbonAutomationPeer");
+        Assert(UIElementAutomationPeer.CreatePeerForElement(homeTab) is RibbonTabAutomationPeer, "RibbonTabAutomationPeer");
+        Assert(UIElementAutomationPeer.CreatePeerForElement(homeGroup) is RibbonGroupAutomationPeer, "RibbonGroupAutomationPeer");
+        Assert(UIElementAutomationPeer.CreatePeerForElement(ribbonBtn) is RibbonButtonAutomationPeer, "RibbonButtonAutomationPeer");
+        Assert(UIElementAutomationPeer.CreatePeerForElement(toggleBtn) is RibbonToggleButtonAutomationPeer, "RibbonToggleButtonAutomationPeer");
+        Assert(UIElementAutomationPeer.CreatePeerForElement(appMenu) is RibbonApplicationMenuAutomationPeer, "RibbonApplicationMenuAutomationPeer");
+        Assert(UIElementAutomationPeer.CreatePeerForElement(qat) is RibbonQuickAccessToolBarAutomationPeer, "RibbonQuickAccessToolBarAutomationPeer");
+
+        var splitPeer = UIElementAutomationPeer.CreatePeerForElement(splitBtn) as RibbonSplitButtonAutomationPeer;
+        Assert(splitPeer != null, "RibbonSplitButtonAutomationPeer");
+        ((IToggleProvider)splitPeer!).Toggle();
+        Assert(splitBtn.IsChecked, "RibbonSplitButton IToggleProvider.Toggle");
+        splitBtn.IsCheckable = false;
+        ((IInvokeProvider)splitPeer).Invoke();
+        AssertEqual(splitClicks, 1, "RibbonSplitButton IInvokeProvider.Invoke");
+
+        var giPeer = UIElementAutomationPeer.CreatePeerForElement(gItem2) as RibbonGalleryItemAutomationPeer;
+        Assert(giPeer != null, "RibbonGalleryItemAutomationPeer");
+        ((ISelectionItemProvider)giPeer!).Select();
+        Assert(gItem2.IsSelected, "RibbonGalleryItem ISelectionItemProvider.Select");
+
+        KeyTipService.SetKeyTip(ribbonBtn, "PT");
+        AssertEqual(KeyTipService.GetKeyTip(ribbonBtn), "PT", "KeyTipService GetKeyTip");
+
+        Pass("CTRL-8. MessageBox, FileDialogs, Glyphs & Complete Ribbon Suite + Peers");
+    }
+
+    private static bool HasNonBackgroundPixels(byte[] pixels, int width, int height, int stride)
+    {
+        for (int y = 0; y < height; y++)
+        {
+            int row = y * stride;
+            for (int x = 0; x < width; x++)
+            {
+                int i = row + x * 4;
+                if (pixels[i + 3] != 0)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

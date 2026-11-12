@@ -844,9 +844,7 @@ namespace System.Windows.Controls.Primitives
             InputManager.UnsecureCurrent.PushMenuMode(_pushedMenuMode);
         }
 
-        // **** Note:  This method is called via private reflection from RibbonMenuButton.
-        //             Do not rename, remove, or change the method signature without fixing RibbonMenuButton.
-        private void PopMenuMode()
+        internal void PopMenuMode()
         {
             Debug.Assert(_pushedMenuMode != null);
 
@@ -856,9 +854,7 @@ namespace System.Windows.Controls.Primitives
             InputManager.UnsecureCurrent.PopMenuMode(pushedMenuMode);
         }
 
-        // **** Note:  This property is read via private reflection from RibbonMenuButton.
-        //             Do not rename/remove this property without fixing RibbonMenuButton.
-        private bool HasPushedMenuMode
+        internal bool HasPushedMenuMode
         {
             get
             {
