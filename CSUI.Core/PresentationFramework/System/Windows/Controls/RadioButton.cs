@@ -66,8 +66,11 @@ namespace System.Windows.Controls
 
         protected override void OnRender(DrawingContext dc)
         {
+            double w = RenderSize.Width;
             double h = RenderSize.Height;
-            if (h <= 0) return;
+            if (w <= 0 || h <= 0) return;
+
+            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
 
             const double radius = 9.0;
             Point center = new Point(radius, h * 0.5);

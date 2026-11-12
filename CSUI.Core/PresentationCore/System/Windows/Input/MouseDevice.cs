@@ -2117,6 +2117,7 @@ namespace System.Windows.Input
                     // See if this is one of our windows.
                     sourceHit = HwndSource.CriticalFromHwnd(hwndHit);
                 }
+                sourceHit ??= source;
                 if (sourceHit != null && sourceHit.Dispatcher == inputSource.CompositionTarget.Dispatcher)
                 {
                     Point ptClientHit = PointUtil.ScreenToClient(ptScreen, sourceHit);

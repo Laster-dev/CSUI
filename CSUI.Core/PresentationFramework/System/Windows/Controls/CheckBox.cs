@@ -50,8 +50,11 @@ namespace System.Windows.Controls
 
         protected override void OnRender(DrawingContext dc)
         {
+            double w = RenderSize.Width;
             double h = RenderSize.Height;
-            if (h <= 0) return;
+            if (w <= 0 || h <= 0) return;
+
+            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
 
             const double boxSize = 18.0;
             double boxY = Math.Max(0, (h - boxSize) * 0.5);

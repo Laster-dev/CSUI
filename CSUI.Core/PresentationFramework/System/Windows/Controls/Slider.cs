@@ -185,6 +185,8 @@ namespace System.Windows.Controls
             double h = RenderSize.Height;
             if (w <= 0 || h <= 0) return;
 
+            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
+
             double min = Minimum;
             double max = Maximum;
             double range = max - min;

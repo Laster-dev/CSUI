@@ -1243,7 +1243,12 @@ namespace System.Windows.Interop
                             System.Diagnostics.Debug.WriteLine("HwndMouseInputProvider: WindowFromPoint failed!");
                         }
 
-                        if(hwnd != hwndToCheck)
+                        bool isButtonEvent = (actions & (RawMouseActions.Button1Press | RawMouseActions.Button1Release |
+                                                        RawMouseActions.Button2Press | RawMouseActions.Button2Release |
+                                                        RawMouseActions.Button3Press | RawMouseActions.Button3Release |
+                                                        RawMouseActions.VerticalWheelRotate)) != 0;
+
+                        if(hwndToCheck != IntPtr.Zero && hwnd != hwndToCheck && !isButtonEvent)
                         {
                             // If we get this far:
                             // - the mouse is NOT over "A"

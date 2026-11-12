@@ -1250,6 +1250,7 @@ internal static class MarkupTests
 
         var xBtn = panel.Children[0] as Button;
         Assert(xBtn != null && (string)xBtn.Content == "Submit" && xBtn.ClickMode == ClickMode.Press, "Parsed Button from XAML");
+        if (xBtn == null) return;
 
         var xChk = panel.Children[1] as CheckBox;
         Assert(xChk != null && xChk.IsChecked == true, "Parsed CheckBox from XAML");
@@ -1262,6 +1263,36 @@ internal static class MarkupTests
 
         var xTb = panel.Children[4] as TextBox;
         Assert(xTb != null && xTb.Text == "AOT WPF Controls" && xTb.MaxLength == 32, "Parsed TextBox from XAML");
+
+        var testWin = new Window
+        {
+            Width = 400,
+            Height = 300,
+            Content = panel
+        };
+        testWin.Show();
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+
+        Point btnPos = xBtn.TranslatePoint(new Point(10, 10), testWin);
+        IInputElement? hitElement = testWin.InputHitTest(btnPos);
+        Assert(hitElement != null, "InputHitTest on live window at xBtn position must hit element");
+
+        bool xBtnClicked = false;
+        xBtn.Click += (s, e) => { xBtnClicked = true; };
+
+        IntPtr hwnd = new WindowInteropHelper(testWin).Handle;
+        int clientX = (int)btnPos.X;
+        int clientY = (int)btnPos.Y;
+        IntPtr lParam = (IntPtr)((clientY << 16) | (clientX & 0xFFFF));
+
+        MS.Win32.UnsafeNativeMethods.SendMessage(hwnd, MS.Internal.Interop.WindowMessage.WM_MOUSEMOVE, IntPtr.Zero, lParam);
+        MS.Win32.UnsafeNativeMethods.SendMessage(hwnd, MS.Internal.Interop.WindowMessage.WM_LBUTTONDOWN, (IntPtr)1, lParam);
+        MS.Win32.UnsafeNativeMethods.SendMessage(hwnd, MS.Internal.Interop.WindowMessage.WM_LBUTTONUP, IntPtr.Zero, lParam);
+
+        Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
+
+        Assert(xBtnClicked, "Mouse click routed through live Win32 HWND must invoke Button.Click");
+        testWin.Close();
 
         Pass("CONTROL-1. Standard WPF Basic Control Hierarchy (Button, ToggleButton, CheckBox, RadioButton, RangeBase, Slider, TextBox, PasswordBox & XAML/Fluent)",
             $"btnClicks={clickCount}, chkState={chk.IsChecked}, rbChecked={rb2.IsChecked}, sliderVal={slider.Value}, tbText='{tb.Text}'");
