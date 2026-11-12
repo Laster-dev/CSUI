@@ -767,6 +767,18 @@ namespace System.Windows.Controls
                 vpW = Math.Max(0, availableW - SbThickness);
             }
 
+            // Re-measure content if a scrollbar reduced the constrained dimension
+            if (content != null && ((!canScrollH && showV && !double.IsInfinity(vpW)) || (!canScrollV && showH && !double.IsInfinity(vpH))))
+            {
+                Size refinedConstraint = new Size(
+                    canScrollH ? double.PositiveInfinity : vpW,
+                    canScrollV ? double.PositiveInfinity : vpH);
+                content.Measure(refinedConstraint);
+                contentDesired = content.DesiredSize;
+                extW = _scrollInfo != null ? _scrollInfo.ExtentWidth : contentDesired.Width;
+                extH = _scrollInfo != null ? _scrollInfo.ExtentHeight : contentDesired.Height;
+            }
+
             if (showH)
             {
                 _hScrollBar.Visibility = Visibility.Visible;
@@ -791,11 +803,18 @@ namespace System.Windows.Controls
 
             if (_scrollInfo == null)
             {
-                UpdateScrollInfo(extW, extH, vpW, vpH, HorizontalOffset, VerticalOffset);
+                double clampedOffX = Math.Clamp(HorizontalOffset, 0.0, Math.Max(0.0, extW - vpW));
+                double clampedOffY = Math.Clamp(VerticalOffset, 0.0, Math.Max(0.0, extH - vpH));
+                UpdateScrollInfo(extW, extH, vpW, vpH, clampedOffX, clampedOffY);
             }
 
-            double desiredW = double.IsInfinity(constraint.Width) ? (extW + (showV ? SbThickness : 0)) : constraint.Width;
-            double desiredH = double.IsInfinity(constraint.Height) ? (extH + (showH ? SbThickness : 0)) : constraint.Height;
+            double desiredW = extW + (showV ? SbThickness : 0);
+            double desiredH = extH + (showH ? SbThickness : 0);
+
+            if (!double.IsInfinity(constraint.Width))
+                desiredW = Math.Min(constraint.Width, desiredW);
+            if (!double.IsInfinity(constraint.Height))
+                desiredH = Math.Min(constraint.Height, desiredH);
 
             return new Size(desiredW, desiredH);
         }

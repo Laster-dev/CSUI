@@ -150,7 +150,13 @@ namespace System.Windows.Controls
             if (RenderSize.Width <= 0 || RenderSize.Height <= 0)
                 return;
 
-            Rect rect = new Rect(0, 0, RenderSize.Width, RenderSize.Height);
+            bool snap = SnapsToDevicePixels || UseLayoutRounding;
+            double rectW = snap ? Math.Round(RenderSize.Width) : RenderSize.Width;
+            double rectH = snap ? Math.Round(RenderSize.Height) : RenderSize.Height;
+            if (rectW <= 0 || rectH <= 0)
+                return;
+
+            Rect rect = new Rect(0, 0, rectW, rectH);
 
             bool isUniformCorners = Math.Abs(corners.TopLeft - corners.TopRight) < 0.001
                 && Math.Abs(corners.TopLeft - corners.BottomLeft) < 0.001
@@ -158,41 +164,52 @@ namespace System.Windows.Controls
 
             double uniformRadius = corners.TopLeft;
 
-            bool isUniformBorder = Math.Abs(border.Left - border.Right) < 0.001
-                && Math.Abs(border.Left - border.Top) < 0.001
-                && Math.Abs(border.Left - border.Bottom) < 0.001;
-
             if (isUniformCorners && uniformRadius <= 0.001)
             {
-                // Simple rectangular rendering
-                if (background != null)
+                double tLeft = Math.Max(0.0, snap && border.Left > 0 ? Math.Max(1.0, Math.Round(border.Left)) : border.Left);
+                double tTop = Math.Max(0.0, snap && border.Top > 0 ? Math.Max(1.0, Math.Round(border.Top)) : border.Top);
+                double tRight = Math.Max(0.0, snap && border.Right > 0 ? Math.Max(1.0, Math.Round(border.Right)) : border.Right);
+                double tBottom = Math.Max(0.0, snap && border.Bottom > 0 ? Math.Max(1.0, Math.Round(border.Bottom)) : border.Bottom);
+
+                // Clamp border thicknesses so opposite edges never overlap
+                if (tLeft + tRight > rectW)
                 {
-                    dc.DrawRectangle(background, null, rect);
+                    double scale = rectW / (tLeft + tRight);
+                    tLeft *= scale;
+                    tRight *= scale;
+                }
+                if (tTop + tBottom > rectH)
+                {
+                    double scale = rectH / (tTop + tBottom);
+                    tTop *= scale;
+                    tBottom *= scale;
                 }
 
-                if (borderBrush != null && (border.Left > 0 || border.Top > 0 || border.Right > 0 || border.Bottom > 0))
+                // Draw inner background so semi-transparent borders do not double-blend
+                if (background != null)
                 {
-                    if (isUniformBorder && border.Left > 0)
+                    double innerW = Math.Max(0.0, rectW - tLeft - tRight);
+                    double innerH = Math.Max(0.0, rectH - tTop - tBottom);
+                    if (innerW > 0 && innerH > 0)
                     {
-                        double stroke = border.Left;
-                        Pen pen = new Pen(borderBrush, stroke);
-                        Rect strokeRect = new Rect(
-                            stroke * 0.5,
-                            stroke * 0.5,
-                            Math.Max(0.0, rect.Width - stroke),
-                            Math.Max(0.0, rect.Height - stroke));
-                        dc.DrawRectangle(null, pen, strokeRect);
+                        dc.DrawRectangle(background, null, new Rect(tLeft, tTop, innerW, innerH));
                     }
-                    else
+                }
+
+                // Draw crisp pixel-aligned border strips without half-pixel stroke distortion
+                if (borderBrush != null && (tLeft > 0 || tTop > 0 || tRight > 0 || tBottom > 0))
+                {
+                    if (tTop > 0)
+                        dc.DrawRectangle(borderBrush, null, new Rect(0, 0, rectW, tTop));
+                    if (tBottom > 0)
+                        dc.DrawRectangle(borderBrush, null, new Rect(0, rectH - tBottom, rectW, tBottom));
+                    double midH = Math.Max(0.0, rectH - tTop - tBottom);
+                    if (midH > 0)
                     {
-                        if (border.Top > 0)
-                            dc.DrawLine(new Pen(borderBrush, border.Top), new Point(0, border.Top * 0.5), new Point(rect.Width, border.Top * 0.5));
-                        if (border.Bottom > 0)
-                            dc.DrawLine(new Pen(borderBrush, border.Bottom), new Point(0, rect.Height - border.Bottom * 0.5), new Point(rect.Width, rect.Height - border.Bottom * 0.5));
-                        if (border.Left > 0)
-                            dc.DrawLine(new Pen(borderBrush, border.Left), new Point(border.Left * 0.5, 0), new Point(border.Left * 0.5, rect.Height));
-                        if (border.Right > 0)
-                            dc.DrawLine(new Pen(borderBrush, border.Right), new Point(rect.Width - border.Right * 0.5, 0), new Point(rect.Width - border.Right * 0.5, rect.Height));
+                        if (tLeft > 0)
+                            dc.DrawRectangle(borderBrush, null, new Rect(0, tTop, tLeft, midH));
+                        if (tRight > 0)
+                            dc.DrawRectangle(borderBrush, null, new Rect(rectW - tRight, tTop, tRight, midH));
                     }
                 }
             }

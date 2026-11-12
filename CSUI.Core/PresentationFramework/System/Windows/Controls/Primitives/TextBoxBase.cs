@@ -117,18 +117,19 @@ namespace System.Windows.Controls.Primitives
         {
             MS.Internal.Controls.ControlFoundationHooks.IsTextBoxBaseHook = static d => d is TextBoxBase;
             FocusableProperty.OverrideMetadata(typeof(TextBoxBase), new FrameworkPropertyMetadata(true));
+            PaddingProperty.OverrideMetadata(typeof(TextBoxBase), new FrameworkPropertyMetadata(new Thickness(2, 0, 2, 0)));
             RegisterDefaultTheme();
         }
 
         private static DependencyProperty s_selectionBrushProperty;
         public static DependencyProperty SelectionBrushProperty =>
             s_selectionBrushProperty ??= DependencyProperty.Register(nameof(SelectionBrush), typeof(System.Windows.Media.Brush), typeof(TextBoxBase),
-                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+                new FrameworkPropertyMetadata(SystemColors.HighlightBrush, FrameworkPropertyMetadataOptions.AffectsRender));
 
         private static DependencyProperty s_selectionTextBrushProperty;
         public static DependencyProperty SelectionTextBrushProperty =>
             s_selectionTextBrushProperty ??= DependencyProperty.Register(nameof(SelectionTextBrush), typeof(System.Windows.Media.Brush), typeof(TextBoxBase),
-                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+                new FrameworkPropertyMetadata(SystemColors.HighlightTextBrush, FrameworkPropertyMetadataOptions.AffectsRender));
 
         private static DependencyProperty s_selectionOpacityProperty;
         public static DependencyProperty SelectionOpacityProperty =>
@@ -223,6 +224,119 @@ namespace System.Windows.Controls.Primitives
         protected virtual void OnSelectionChanged(RoutedEventArgs e)
         {
             RaiseEvent(e);
+        }
+
+        protected override void OnGotFocus(RoutedEventArgs e)
+        {
+            base.OnGotFocus(e);
+            if (s_isSelectionActivePropertyKey != null)
+            {
+                SetValue(s_isSelectionActivePropertyKey, true);
+            }
+            InvalidateVisual();
+        }
+
+        protected override void OnLostFocus(RoutedEventArgs e)
+        {
+            base.OnLostFocus(e);
+            if (s_isSelectionActivePropertyKey != null && !IsKeyboardFocused)
+            {
+                SetValue(s_isSelectionActivePropertyKey, false);
+            }
+            InvalidateVisual();
+        }
+
+        protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
+        {
+            base.OnGotKeyboardFocus(e);
+            if (s_isSelectionActivePropertyKey != null)
+            {
+                SetValue(s_isSelectionActivePropertyKey, true);
+            }
+            InvalidateVisual();
+        }
+
+        protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+        {
+            base.OnLostKeyboardFocus(e);
+            if (s_isSelectionActivePropertyKey != null && !IsFocused)
+            {
+                SetValue(s_isSelectionActivePropertyKey, false);
+            }
+            InvalidateVisual();
+        }
+
+        protected override HitTestResult HitTestCore(PointHitTestParameters hitTestParameters)
+        {
+            Point pt = hitTestParameters.HitPoint;
+            if (pt.X >= 0 && pt.X <= RenderSize.Width && pt.Y >= 0 && pt.Y <= RenderSize.Height)
+            {
+                return new PointHitTestResult(this, pt);
+            }
+            return base.HitTestCore(hitTestParameters);
+        }
+
+        internal static Brush ResolveSelectionBrush(Brush selectionBrush, double selectionOpacity)
+        {
+            Brush brush = selectionBrush ?? SystemColors.HighlightBrush;
+            double opacity = Math.Clamp(selectionOpacity, 0.0, 1.0);
+            if (opacity < 1.0)
+            {
+                if (brush is SolidColorBrush scb)
+                {
+                    Color c = scb.Color;
+                    return new SolidColorBrush(Color.FromArgb((byte)(c.A * opacity), c.R, c.G, c.B));
+                }
+                Brush clone = brush.Clone();
+                clone.Opacity = brush.Opacity * opacity;
+                return clone;
+            }
+            return brush;
+        }
+
+        internal static double GetVerticalAlignmentOffset(VerticalAlignment alignment, double availableHeight, double contentHeight)
+        {
+            return alignment switch
+            {
+                VerticalAlignment.Center => Math.Max(0.0, (availableHeight - contentHeight) * 0.5),
+                VerticalAlignment.Bottom => Math.Max(0.0, availableHeight - contentHeight),
+                _ => 0.0,
+            };
+        }
+
+        internal static void ScrollCaretIntoView(ScrollViewer scrollViewer, double caretX, double caretY, double caretHeight)
+        {
+            if (scrollViewer == null) return;
+
+            double vpW = scrollViewer.ViewportWidth;
+            double vpH = scrollViewer.ViewportHeight;
+            double offX = scrollViewer.HorizontalOffset;
+            double offY = scrollViewer.VerticalOffset;
+
+            if (vpW > 0)
+            {
+                const double caretMargin = 2.0;
+                if (caretX < offX)
+                {
+                    scrollViewer.ScrollToHorizontalOffset(Math.Max(0.0, caretX));
+                }
+                else if (caretX + caretMargin > offX + vpW)
+                {
+                    scrollViewer.ScrollToHorizontalOffset(caretX + caretMargin - vpW);
+                }
+            }
+
+            if (vpH > 0)
+            {
+                if (caretY < offY)
+                {
+                    scrollViewer.ScrollToVerticalOffset(Math.Max(0.0, caretY));
+                }
+                else if (caretY + caretHeight > offY + vpH)
+                {
+                    scrollViewer.ScrollToVerticalOffset(caretY + caretHeight - vpH);
+                }
+            }
         }
 
         internal static TextContentHostView AttachContentHost(

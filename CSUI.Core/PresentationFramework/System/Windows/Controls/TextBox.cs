@@ -37,7 +37,8 @@ namespace System.Windows.Controls
                 typeof(TextBox),
                 new FrameworkPropertyMetadata(
                     TextWrapping.NoWrap,
-                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender));
+                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender,
+                    OnTextWrappingChanged));
 
         public static readonly DependencyProperty TextAlignmentProperty =
             DependencyProperty.Register(
@@ -94,6 +95,7 @@ namespace System.Windows.Controls
 
         private int _selectionStart = 0;
         private int _selectionLength = 0;
+        private int _selectionAnchor = 0;
         private readonly SmoothCaretTracker _caretTracker = new(new Point(0, 0));
         private bool _isSelecting = false;
 
@@ -106,8 +108,11 @@ namespace System.Windows.Controls
                 if (_selectionStart != clamped)
                 {
                     _selectionStart = clamped;
+                    _selectionAnchor = clamped;
                     CaretIndex = clamped;
                     OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
+                    _contentHostView?.InvalidateVisual();
+                    InvalidateVisual();
                 }
             }
         }
@@ -123,6 +128,8 @@ namespace System.Windows.Controls
                 {
                     _selectionLength = clamped;
                     OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
+                    _contentHostView?.InvalidateVisual();
+                    InvalidateVisual();
                 }
             }
         }
@@ -169,15 +176,37 @@ namespace System.Windows.Controls
         }
 
         private TextContentHostView _contentHostView;
+        private ScrollViewer _contentHostScrollViewer;
 
         public override void OnApplyTemplate()
         {
             base.OnApplyTemplate();
+            _contentHostScrollViewer = GetTemplateChild("PART_ContentHost") as ScrollViewer;
+            SyncScrollViewerVisibility();
             _contentHostView = AttachContentHost(
-                GetTemplateChild("PART_ContentHost"),
+                _contentHostScrollViewer,
                 _contentHostView,
                 MeasureContentView,
                 RenderContentView);
+        }
+
+        private void SyncScrollViewerVisibility()
+        {
+            if (_contentHostScrollViewer != null)
+            {
+                _contentHostScrollViewer.HorizontalScrollBarVisibility =
+                    TextWrapping != TextWrapping.NoWrap ? ScrollBarVisibility.Disabled : HorizontalScrollBarVisibility;
+                _contentHostScrollViewer.VerticalScrollBarVisibility = VerticalScrollBarVisibility;
+            }
+        }
+
+        private static void OnTextWrappingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is TextBox tb)
+            {
+                tb.SyncScrollViewerVisibility();
+                tb.UpdateCaretTarget();
+            }
         }
 
         public TextBox()
@@ -189,9 +218,12 @@ namespace System.Windows.Controls
         {
             int textLen = Text.Length;
             _selectionStart = Math.Clamp(start, 0, textLen);
+            _selectionAnchor = _selectionStart;
             _selectionLength = Math.Clamp(length, 0, textLen - _selectionStart);
             CaretIndex = _selectionStart + _selectionLength;
             OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
+            _contentHostView?.InvalidateVisual();
+            InvalidateVisual();
         }
 
         public override void SelectAll()
@@ -261,22 +293,119 @@ namespace System.Windows.Controls
             }
         }
 
-        private void UpdateCaretTarget()
+        private double GetContentConstraintWidth()
         {
-            double xOffset = Padding.Left + BorderThickness.Left;
-            double yOffset = Padding.Top + BorderThickness.Top;
+            if (TextWrapping == TextWrapping.NoWrap)
+                return double.PositiveInfinity;
+            if (Template != null && _contentHostScrollViewer != null && _contentHostScrollViewer.ViewportWidth > 0)
+                return _contentHostScrollViewer.ViewportWidth;
+            double w = RenderSize.Width - Padding.Left - Padding.Right - BorderThickness.Left - BorderThickness.Right;
+            return w > 0 ? w : double.PositiveInfinity;
+        }
 
-            string text = Text;
-            int idx = Math.Clamp(CaretIndex, 0, text.Length);
+        private double GetViewportWidth()
+        {
+            if (Template != null && _contentHostScrollViewer != null && _contentHostScrollViewer.ViewportWidth > 0)
+                return _contentHostScrollViewer.ViewportWidth;
+            if (_contentHostView != null && _contentHostView.RenderSize.Width > 0)
+                return _contentHostView.RenderSize.Width;
+            return Math.Max(0.0, RenderSize.Width - Padding.Left - Padding.Right - BorderThickness.Left - BorderThickness.Right);
+        }
 
-            if (idx > 0)
+        private double GetViewportHeight()
+        {
+            if (Template != null && _contentHostScrollViewer != null && _contentHostScrollViewer.ViewportHeight > 0)
+                return _contentHostScrollViewer.ViewportHeight;
+            if (_contentHostView != null && _contentHostView.RenderSize.Height > 0)
+                return _contentHostView.RenderSize.Height;
+            return Math.Max(0.0, RenderSize.Height - Padding.Top - Padding.Bottom - BorderThickness.Top - BorderThickness.Bottom);
+        }
+
+        private double GetHorizontalTextOffset(FormattedText ft, double availW)
+        {
+            if (TextWrapping != TextWrapping.NoWrap || double.IsInfinity(availW) || availW <= ft.Width)
+                return 0.0;
+
+            if (TextAlignment == TextAlignment.Center || (TextAlignment == TextAlignment.Left && HorizontalContentAlignment == HorizontalAlignment.Center))
+                return (availW - ft.Width) * 0.5;
+            if (TextAlignment == TextAlignment.Right || (TextAlignment == TextAlignment.Left && HorizontalContentAlignment == HorizontalAlignment.Right))
+                return availW - ft.Width;
+            return 0.0;
+        }
+
+        private Rect GetCaretRect(string text, double availW, double xOrigin, double yOrigin, int index)
+        {
+            double defaultH = FontSize > 0 ? FontSize * 1.2 : 18.0;
+            if (string.IsNullOrEmpty(text))
             {
-                string sub = text.Substring(0, idx);
-                FormattedText ft = CreateFormattedText(sub, double.PositiveInfinity);
-                xOffset += ft.Width;
+                FormattedText ftSpace = CreateFormattedText(" ", availW);
+                double cx = xOrigin;
+                if (!double.IsInfinity(availW))
+                {
+                    if (TextAlignment == TextAlignment.Center || (TextAlignment == TextAlignment.Left && HorizontalContentAlignment == HorizontalAlignment.Center))
+                        cx = xOrigin + availW * 0.5;
+                    else if (TextAlignment == TextAlignment.Right || (TextAlignment == TextAlignment.Left && HorizontalContentAlignment == HorizontalAlignment.Right))
+                        cx = xOrigin + availW;
+                }
+                return new Rect(cx, yOrigin, 1.5, Math.Max(ftSpace.Height, defaultH));
             }
 
-            _caretTracker.TargetPosition = new Point(xOffset, yOffset);
+            int idx = Math.Clamp(index, 0, text.Length);
+            if (idx < text.Length && text[idx] != '\r' && text[idx] != '\n')
+            {
+                FormattedText ft = CreateFormattedText(text, availW);
+                Geometry g = ft.BuildHighlightGeometry(new Point(xOrigin, yOrigin), idx, 1);
+                if (g != null && !g.Bounds.IsEmpty)
+                {
+                    return new Rect(g.Bounds.Left, g.Bounds.Top, 1.5, Math.Max(g.Bounds.Height, defaultH));
+                }
+            }
+            else if (idx > 0 && text[idx - 1] != '\r' && text[idx - 1] != '\n')
+            {
+                FormattedText ft = CreateFormattedText(text, availW);
+                Geometry g = ft.BuildHighlightGeometry(new Point(xOrigin, yOrigin), idx - 1, 1);
+                if (g != null && !g.Bounds.IsEmpty)
+                {
+                    return new Rect(g.Bounds.Right, g.Bounds.Top, 1.5, Math.Max(g.Bounds.Height, defaultH));
+                }
+            }
+            else
+            {
+                string withSentinel = text.Insert(idx, " ");
+                FormattedText ftS = CreateFormattedText(withSentinel, availW);
+                Geometry g = ftS.BuildHighlightGeometry(new Point(xOrigin, yOrigin), idx, 1);
+                if (g != null && !g.Bounds.IsEmpty)
+                {
+                    return new Rect(g.Bounds.Left, g.Bounds.Top, 1.5, Math.Max(g.Bounds.Height, defaultH));
+                }
+            }
+
+            return new Rect(xOrigin, yOrigin, 1.5, defaultH);
+        }
+
+        private void UpdateCaretTarget()
+        {
+            string text = Text;
+            double vpW = GetViewportWidth();
+            double vpH = GetViewportHeight();
+            double constraintW = GetContentConstraintWidth();
+            FormattedText ft = CreateFormattedText(string.IsNullOrEmpty(text) ? " " : text, constraintW);
+
+            double baseX = Template != null ? 0.0 : Padding.Left + BorderThickness.Left;
+            double baseY = Template != null ? 0.0 : Padding.Top + BorderThickness.Top;
+            double xOrigin = baseX + GetHorizontalTextOffset(ft, vpW);
+            double yOrigin = baseY + GetVerticalAlignmentOffset(VerticalContentAlignment, vpH, ft.Height);
+
+            Rect caretRect = GetCaretRect(text, constraintW, xOrigin, yOrigin, CaretIndex);
+            _caretTracker.TargetPosition = new Point(caretRect.X, caretRect.Y);
+
+            if (Template != null && _contentHostScrollViewer != null)
+            {
+                ScrollCaretIntoView(_contentHostScrollViewer, caretRect.X, caretRect.Y, caretRect.Height);
+            }
+
+            _contentHostView?.InvalidateVisual();
+            InvalidateVisual();
         }
 
         private FormattedText CreateFormattedText(string text, double constraintWidth)
@@ -293,7 +422,9 @@ namespace System.Windows.Controls
                 TextFormattingMode.Ideal,
                 1.0);
 
-            if (TextWrapping == TextWrapping.Wrap && !double.IsPositiveInfinity(constraintWidth))
+            ft.TextAlignment = TextAlignment;
+
+            if (TextWrapping != TextWrapping.NoWrap && !double.IsPositiveInfinity(constraintWidth))
             {
                 ft.MaxTextWidth = Math.Max(0.0, constraintWidth);
             }
@@ -408,54 +539,93 @@ namespace System.Windows.Controls
             }
             else if (e.Key == Key.Left)
             {
-                if (CaretIndex > 0)
+                if (isShift)
                 {
-                    int prev = GraphemeClusterHelper.GetPreviousClusterIndex(Text, CaretIndex);
-                    if (isShift)
+                    if (_selectionLength == 0) _selectionAnchor = CaretIndex;
+                    if (CaretIndex > 0)
                     {
-                        int anchor = _selectionStart + _selectionLength;
+                        int prev = GraphemeClusterHelper.GetPreviousClusterIndex(Text, CaretIndex);
+                        _selectionStart = Math.Min(prev, _selectionAnchor);
+                        _selectionLength = Math.Abs(_selectionAnchor - prev);
                         CaretIndex = prev;
-                        _selectionStart = Math.Min(prev, anchor);
-                        _selectionLength = Math.Abs(anchor - prev);
+                        OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
                     }
-                    else
-                    {
-                        CaretIndex = prev;
-                        _selectionLength = 0;
-                    }
+                }
+                else
+                {
+                    int target = _selectionLength > 0
+                        ? _selectionStart
+                        : (CaretIndex > 0 ? GraphemeClusterHelper.GetPreviousClusterIndex(Text, CaretIndex) : 0);
+                    _selectionLength = 0;
+                    _selectionStart = target;
+                    _selectionAnchor = target;
+                    CaretIndex = target;
                 }
                 e.Handled = true;
             }
             else if (e.Key == Key.Right)
             {
-                if (CaretIndex < Text.Length)
+                if (isShift)
                 {
-                    int next = GraphemeClusterHelper.GetNextClusterIndex(Text, CaretIndex);
-                    if (isShift)
+                    if (_selectionLength == 0) _selectionAnchor = CaretIndex;
+                    if (CaretIndex < Text.Length)
                     {
-                        int anchor = _selectionStart;
+                        int next = GraphemeClusterHelper.GetNextClusterIndex(Text, CaretIndex);
+                        _selectionStart = Math.Min(next, _selectionAnchor);
+                        _selectionLength = Math.Abs(next - _selectionAnchor);
                         CaretIndex = next;
-                        _selectionStart = Math.Min(next, anchor);
-                        _selectionLength = Math.Abs(next - anchor);
+                        OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
                     }
-                    else
-                    {
-                        CaretIndex = next;
-                        _selectionLength = 0;
-                    }
+                }
+                else
+                {
+                    int target = _selectionLength > 0
+                        ? _selectionStart + _selectionLength
+                        : (CaretIndex < Text.Length ? GraphemeClusterHelper.GetNextClusterIndex(Text, CaretIndex) : Text.Length);
+                    _selectionLength = 0;
+                    _selectionStart = target;
+                    _selectionAnchor = target;
+                    CaretIndex = target;
                 }
                 e.Handled = true;
             }
             else if (e.Key == Key.Home)
             {
-                CaretIndex = 0;
-                if (!isShift) _selectionLength = 0;
+                if (isShift)
+                {
+                    if (_selectionLength == 0) _selectionAnchor = CaretIndex;
+                    _selectionStart = 0;
+                    _selectionLength = _selectionAnchor;
+                    CaretIndex = 0;
+                    OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
+                }
+                else
+                {
+                    _selectionLength = 0;
+                    _selectionStart = 0;
+                    _selectionAnchor = 0;
+                    CaretIndex = 0;
+                }
                 e.Handled = true;
             }
             else if (e.Key == Key.End)
             {
-                CaretIndex = Text.Length;
-                if (!isShift) _selectionLength = 0;
+                int endIdx = Text.Length;
+                if (isShift)
+                {
+                    if (_selectionLength == 0) _selectionAnchor = CaretIndex;
+                    _selectionStart = _selectionAnchor;
+                    _selectionLength = endIdx - _selectionAnchor;
+                    CaretIndex = endIdx;
+                    OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
+                }
+                else
+                {
+                    _selectionLength = 0;
+                    _selectionStart = endIdx;
+                    _selectionAnchor = endIdx;
+                    CaretIndex = endIdx;
+                }
                 e.Handled = true;
             }
             else if (e.Key == Key.Enter && AcceptsReturn)
@@ -479,50 +649,90 @@ namespace System.Windows.Controls
             _isSelecting = true;
 
             Point pt = e.GetPosition(this);
-            double contentX = Math.Max(0.0, pt.X - Padding.Left - BorderThickness.Left);
-
-            // Approximate character hit test
             int bestIdx = GetCharacterIndexFromPoint(pt, snapToText: true);
 
+            _selectionAnchor = bestIdx;
+            _selectionStart = bestIdx;
+            _selectionLength = 0;
             CaretIndex = bestIdx;
-            SelectionStart = bestIdx;
-            SelectionLength = 0;
+            OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
             e.Handled = true;
         }
 
         public int GetCharacterIndexFromPoint(Point point, bool snapToText)
         {
-            double contentX = Math.Max(0.0, point.X - Padding.Left - BorderThickness.Left);
             string text = Text;
             if (string.IsNullOrEmpty(text))
             {
                 return snapToText ? 0 : -1;
             }
 
+            double hOff = _contentHostScrollViewer?.HorizontalOffset ?? 0.0;
+            double vOff = _contentHostScrollViewer?.VerticalOffset ?? 0.0;
+            double localX = point.X - BorderThickness.Left - Padding.Left + hOff;
+            double localY = point.Y - BorderThickness.Top - Padding.Top + vOff;
+
+            double vpW = GetViewportWidth();
+            double vpH = GetViewportHeight();
+            double constraintW = GetContentConstraintWidth();
+            FormattedText ft = CreateFormattedText(text, constraintW);
+
+            double xOrigin = GetHorizontalTextOffset(ft, vpW);
+            double yOrigin = GetVerticalAlignmentOffset(VerticalContentAlignment, vpH, ft.Height);
+
             if (!snapToText)
             {
-                FormattedText fullFt = CreateFormattedText(text, double.PositiveInfinity);
-                if (point.X < 0 || contentX > fullFt.Width + 4.0)
+                if (point.X < 0 || point.Y < 0 || point.X > RenderSize.Width || point.Y > RenderSize.Height ||
+                    localX < xOrigin - 4.0 || localX > xOrigin + ft.Width + 4.0 ||
+                    localY < yOrigin - 4.0 || localY > yOrigin + ft.Height + 4.0)
                 {
                     return -1;
                 }
             }
 
             int bestIdx = 0;
-            double bestDist = double.PositiveInfinity;
+            double bestScore = double.PositiveInfinity;
+            Point origin = new Point(xOrigin, yOrigin);
+
             for (int i = 0; i <= text.Length; i++)
             {
-                string sub = text.Substring(0, i);
-                FormattedText ft = CreateFormattedText(sub, double.PositiveInfinity);
-                double dist = Math.Abs(ft.Width - contentX);
-                if (dist < bestDist)
+                Rect cr = GetCaretRectOnFormattedText(ft, text, origin, constraintW, i);
+                double dy = 0.0;
+                if (localY < cr.Top) dy = cr.Top - localY;
+                else if (localY > cr.Bottom) dy = localY - cr.Bottom;
+
+                double dx = Math.Abs(cr.X - localX);
+                double score = dy * 10000.0 + dx;
+                if (score < bestScore)
                 {
-                    bestDist = dist;
+                    bestScore = score;
                     bestIdx = i;
                 }
             }
 
             return bestIdx;
+        }
+
+        private Rect GetCaretRectOnFormattedText(FormattedText ft, string text, Point origin, double availW, int index)
+        {
+            double defaultH = FontSize > 0 ? FontSize * 1.2 : 18.0;
+            if (index < text.Length && text[index] != '\r' && text[index] != '\n')
+            {
+                Geometry g = ft.BuildHighlightGeometry(origin, index, 1);
+                if (g != null && !g.Bounds.IsEmpty)
+                {
+                    return new Rect(g.Bounds.Left, g.Bounds.Top, 1.5, Math.Max(g.Bounds.Height, defaultH));
+                }
+            }
+            else if (index > 0 && text[index - 1] != '\r' && text[index - 1] != '\n')
+            {
+                Geometry g = ft.BuildHighlightGeometry(origin, index - 1, 1);
+                if (g != null && !g.Bounds.IsEmpty)
+                {
+                    return new Rect(g.Bounds.Right, g.Bounds.Top, 1.5, Math.Max(g.Bounds.Height, defaultH));
+                }
+            }
+            return GetCaretRect(text, availW, origin.X, origin.Y, index);
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -532,28 +742,14 @@ namespace System.Windows.Controls
             if (_isSelecting && IsMouseCaptured)
             {
                 Point pt = e.GetPosition(this);
-                double contentX = Math.Max(0.0, pt.X - Padding.Left - BorderThickness.Left);
+                int bestIdx = GetCharacterIndexFromPoint(pt, snapToText: true);
 
-                string text = Text;
-                int bestIdx = 0;
-                double bestDist = double.PositiveInfinity;
-                for (int i = 0; i <= text.Length; i++)
-                {
-                    string sub = text.Substring(0, i);
-                    FormattedText ft = CreateFormattedText(sub, double.PositiveInfinity);
-                    double dist = Math.Abs(ft.Width - contentX);
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        bestIdx = i;
-                    }
-                }
-
-                int start = Math.Min(_selectionStart, bestIdx);
-                int len = Math.Abs(bestIdx - _selectionStart);
-                _selectionLength = len;
+                _selectionStart = Math.Min(_selectionAnchor, bestIdx);
+                _selectionLength = Math.Abs(bestIdx - _selectionAnchor);
                 CaretIndex = bestIdx;
                 OnSelectionChanged(new RoutedEventArgs(SelectionChangedEvent, this));
+                _contentHostView?.InvalidateVisual();
+                InvalidateVisual();
             }
         }
 
@@ -593,47 +789,57 @@ namespace System.Windows.Controls
 
         private Size MeasureContentView(Size constraint)
         {
-            double hPad = Padding.Left + Padding.Right;
-            double vPad = Padding.Top + Padding.Bottom;
-            double availableW = Math.Max(0.0, constraint.Width - hPad);
+            double availableW = TextWrapping != TextWrapping.NoWrap ? Math.Max(0.0, constraint.Width) : double.PositiveInfinity;
             FormattedText ft = CreateFormattedText(string.IsNullOrEmpty(Text) ? " " : Text, availableW);
-            return new Size(ft.Width + hPad, ft.Height + vPad);
+            return new Size(ft.Width + 2.0, ft.Height);
+        }
+
+        private void RenderTextContent(DrawingContext dc, double baseX, double baseY, double availW, double availH)
+        {
+            string text = Text;
+            double constraintW = TextWrapping != TextWrapping.NoWrap ? availW : double.PositiveInfinity;
+            FormattedText ft = CreateFormattedText(string.IsNullOrEmpty(text) ? " " : text, constraintW);
+
+            double xStart = baseX + GetHorizontalTextOffset(ft, availW);
+            double yStart = baseY + GetVerticalAlignmentOffset(VerticalContentAlignment, availH, ft.Height);
+
+            if (!string.IsNullOrEmpty(text) && _selectionLength > 0 && _selectionStart < text.Length)
+            {
+                int selLen = Math.Min(_selectionLength, text.Length - _selectionStart);
+                Geometry selGeo = ft.BuildHighlightGeometry(new Point(xStart, yStart), _selectionStart, selLen);
+                if (selGeo != null && !selGeo.Bounds.IsEmpty)
+                {
+                    Brush selBrush = ResolveSelectionBrush(SelectionBrush, SelectionOpacity);
+                    dc.DrawGeometry(selBrush, null, selGeo);
+                }
+
+                Brush selTextBrush = SelectionTextBrush ?? SystemColors.HighlightTextBrush;
+                ft.SetForegroundBrush(selTextBrush, _selectionStart, selLen);
+            }
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                dc.DrawText(ft, new Point(xStart, yStart));
+            }
+
+            if ((IsFocused || IsKeyboardFocused) && (!IsReadOnly || IsReadOnlyCaretVisible))
+            {
+                Rect caretRect = GetCaretRect(text, constraintW, xStart, yStart, CaretIndex);
+                Pen caretPen = new(CaretBrush ?? Foreground ?? Brushes.Black, 1.5);
+                dc.DrawLine(caretPen, new Point(caretRect.X, caretRect.Y), new Point(caretRect.X, caretRect.Y + caretRect.Height));
+            }
         }
 
         private void RenderContentView(DrawingContext dc, Size bounds)
         {
             if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
-            double xStart = Padding.Left;
-            double yStart = Padding.Top;
+            double vpW = GetViewportWidth();
+            double vpH = GetViewportHeight();
+            double availW = vpW > 0 ? vpW : bounds.Width;
+            double availH = vpH > 0 ? vpH : bounds.Height;
 
-            if (_selectionLength > 0 && _selectionStart < Text.Length)
-            {
-                string before = Text.Substring(0, _selectionStart);
-                string selected = SelectedText;
-                FormattedText ftBefore = CreateFormattedText(before, double.PositiveInfinity);
-                FormattedText ftSelected = CreateFormattedText(selected, double.PositiveInfinity);
-
-                Rect selRect = new(xStart + ftBefore.Width, yStart, ftSelected.Width, ftSelected.Height);
-                Brush selBrush = SelectionBrush ?? new SolidColorBrush(Color.FromArgb(100, 0, 120, 215));
-                dc.DrawRectangle(selBrush, null, selRect);
-            }
-
-            if (!string.IsNullOrEmpty(Text))
-            {
-                FormattedText ft = CreateFormattedText(Text, Math.Max(0, bounds.Width - xStart - Padding.Right));
-                dc.DrawText(ft, new Point(xStart, yStart));
-            }
-
-            if (IsFocused && !IsReadOnly)
-            {
-                Point caretPt = _caretTracker.TargetPosition;
-                double cx = Math.Max(xStart, caretPt.X - BorderThickness.Left);
-                double cy = Math.Max(yStart, caretPt.Y - BorderThickness.Top);
-                double h = FontSize > 0 ? FontSize * 1.2 : 18.0;
-                Pen caretPen = new(CaretBrush ?? Foreground ?? Brushes.Black, 1.5);
-                dc.DrawLine(caretPen, new Point(cx, cy), new Point(cx, cy + h));
-            }
+            RenderTextContent(dc, 0.0, 0.0, availW, availH);
         }
 
         protected override void OnRender(DrawingContext dc)
@@ -662,36 +868,12 @@ namespace System.Windows.Controls
                 dc.DrawRectangle(null, pen, new Rect(borderThickness.Left * 0.5, borderThickness.Top * 0.5, Math.Max(0, bounds.Width - borderThickness.Left), Math.Max(0, bounds.Height - borderThickness.Top)));
             }
 
-            // 3. Selection Highlight
             double xStart = Padding.Left + borderThickness.Left;
             double yStart = Padding.Top + borderThickness.Top;
+            double availW = Math.Max(0, bounds.Width - xStart - Padding.Right - borderThickness.Right);
+            double availH = Math.Max(0, bounds.Height - yStart - Padding.Bottom - borderThickness.Bottom);
 
-            if (_selectionLength > 0 && _selectionStart < Text.Length)
-            {
-                string before = Text.Substring(0, _selectionStart);
-                string selected = SelectedText;
-                FormattedText ftBefore = CreateFormattedText(before, double.PositiveInfinity);
-                FormattedText ftSelected = CreateFormattedText(selected, double.PositiveInfinity);
-
-                Rect selRect = new(xStart + ftBefore.Width, yStart, ftSelected.Width, ftSelected.Height);
-                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(100, 0, 120, 215)), null, selRect);
-            }
-
-            // 4. Text
-            if (!string.IsNullOrEmpty(Text))
-            {
-                FormattedText ft = CreateFormattedText(Text, Math.Max(0, bounds.Width - xStart - Padding.Right - borderThickness.Right));
-                dc.DrawText(ft, new Point(xStart, yStart));
-            }
-
-            // 5. Smooth Caret
-            if (IsFocused && !IsReadOnly)
-            {
-                Point caretPt = _caretTracker.TargetPosition;
-                double h = FontSize > 0 ? FontSize * 1.2 : 18.0;
-                Pen caretPen = new(Foreground ?? Brushes.Black, 1.5);
-                dc.DrawLine(caretPen, caretPt, new Point(caretPt.X, caretPt.Y + h));
-            }
+            RenderTextContent(dc, xStart, yStart, availW, availH);
         }
 
         protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
