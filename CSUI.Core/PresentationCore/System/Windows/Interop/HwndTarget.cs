@@ -737,7 +737,7 @@ namespace System.Windows.Interop
                 }
                 finally
                 {
-                    _dxTarget.EndDrawAndPresent(_damageTracker.GetDirtyRectsSpan());
+                    _dxTarget.EndDrawAndPresent(_damageTracker.GetDirtyRectsSpan(), inResize);
                     _damageTracker.Reset();
                 }
             }
@@ -999,7 +999,12 @@ namespace System.Windows.Interop
                         }
 
                         _isMinimized = false;
-                        DoPaint();
+
+                        // Validate any pending Win32 update region without calling InvalidateRect/PostRender,
+                        // because OnResize() synchronously renders the resized swapchain frame right below.
+                        NativeMethods.PAINTSTRUCT ps = new NativeMethods.PAINTSTRUCT();
+                        UnsafeNativeMethods.BeginPaint(_hWnd.MakeHandleRef(this), ref ps);
+                        UnsafeNativeMethods.EndPaint(_hWnd.MakeHandleRef(this), ref ps);
 
                         OnResize();
                     }

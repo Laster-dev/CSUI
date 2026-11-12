@@ -72,7 +72,11 @@ namespace System.Windows.Media
                 return;
             }
 
-            void* d2dFactory = MediaSystem.EnsureSharedDevice().D2DFactory;
+            void* d2dFactory = ctx.D2dFactory;
+            if (d2dFactory == null)
+            {
+                d2dFactory = MediaSystem.EnsureSharedDevice().D2DFactory;
+            }
 
             double opacity = Math.Clamp(VisualOpacity, 0.0, 1.0);
             if (opacity <= 0.0)
@@ -81,7 +85,8 @@ namespace System.Windows.Media
                 return;
             }
 
-            ID2D1DeviceContextExVtbl.GetTransform(d2dContext, out D2D1_MATRIX_3X2_F savedTransform);
+            D2D1_MATRIX_3X2_F savedTransform = default;
+            bool pushedTransform = false;
             bool pushedScrollClip = false;
             int clipLayerOrAxis = 0; // 0 = none, 1 = axis-aligned clip, 2 = geometric layer
             bool pushedOpacityLayer = false;
@@ -95,14 +100,27 @@ namespace System.Windows.Media
 
                 if (hasTransform || hasOffset)
                 {
-                    Matrix local = hasTransform ? transform.Value : Matrix.Identity;
-                    if (hasOffset)
-                    {
-                        local.Translate(offset.X, offset.Y);
-                    }
+                    ID2D1DeviceContextExVtbl.GetTransform(d2dContext, out savedTransform);
+                    pushedTransform = true;
 
-                    Matrix world = Matrix.Multiply(local, MILUtilities.ConvertFromD2DMatrix(savedTransform));
-                    ID2D1DeviceContextVtbl.SetTransform(d2dContext, MILUtilities.ConvertToD2DMatrix(world));
+                    if (!hasTransform)
+                    {
+                        D2D1_MATRIX_3X2_F nextTransform = savedTransform;
+                        nextTransform.M31 += (float)(offset.X * savedTransform.M11 + offset.Y * savedTransform.M21);
+                        nextTransform.M32 += (float)(offset.X * savedTransform.M12 + offset.Y * savedTransform.M22);
+                        ID2D1DeviceContextVtbl.SetTransform(d2dContext, nextTransform);
+                    }
+                    else
+                    {
+                        Matrix local = transform.Value;
+                        if (hasOffset)
+                        {
+                            local.Translate(offset.X, offset.Y);
+                        }
+
+                        Matrix world = Matrix.Multiply(local, MILUtilities.ConvertFromD2DMatrix(savedTransform));
+                        ID2D1DeviceContextVtbl.SetTransform(d2dContext, MILUtilities.ConvertToD2DMatrix(world));
+                    }
                 }
 
                 Rect? scrollClip = VisualScrollableAreaClip;
@@ -220,7 +238,10 @@ namespace System.Windows.Media
                     ID2D1DeviceContextVtbl.PopAxisAlignedClip(d2dContext);
                 }
 
-                ID2D1DeviceContextVtbl.SetTransform(d2dContext, savedTransform);
+                if (pushedTransform)
+                {
+                    ID2D1DeviceContextVtbl.SetTransform(d2dContext, savedTransform);
+                }
             }
         }
 

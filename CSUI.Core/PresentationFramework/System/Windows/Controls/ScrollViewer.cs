@@ -139,14 +139,14 @@ namespace System.Windows.Controls
                 if (e.DeltaPan.Y != 0 && sv.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
                 {
                     double target = Math.Clamp(sv.VerticalOffset - e.DeltaPan.Y, 0, Math.Max(0, sv.ExtentHeight - sv.ViewportHeight));
-                    sv._targetVerticalOffset = target;
+                    sv._vScrollAnim.Stop(target);
                     sv.ApplyVerticalOffset(target);
                     e.Handled = true;
                 }
                 if (e.DeltaPan.X != 0 && sv.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled)
                 {
                     double target = Math.Clamp(sv.HorizontalOffset - e.DeltaPan.X, 0, Math.Max(0, sv.ExtentWidth - sv.ViewportWidth));
-                    sv._targetHorizontalOffset = target;
+                    sv._hScrollAnim.Stop(target);
                     sv.ApplyHorizontalOffset(target);
                     e.Handled = true;
                 }
@@ -230,12 +230,207 @@ namespace System.Windows.Controls
         private readonly ScrollBar _vScrollBar;
         private IScrollInfo _scrollInfo;
 
-        // Smooth physics inertia state
-        private double _targetVerticalOffset;
-        private double _targetHorizontalOffset;
+        // Chromium cc::ScrollOffsetAnimationCurve smooth scroll state
+        internal struct ChromiumScrollCubicBezier
+        {
+            private readonly double _ax, _bx, _cx;
+            private readonly double _ay, _by, _cy;
+
+            public ChromiumScrollCubicBezier(double p1x, double p1y, double p2x, double p2y)
+            {
+                _cx = 3.0 * p1x;
+                _bx = 3.0 * (p2x - p1x) - _cx;
+                _ax = 1.0 - _cx - _bx;
+
+                _cy = 3.0 * p1y;
+                _by = 3.0 * (p2y - p1y) - _cy;
+                _ay = 1.0 - _cy - _by;
+            }
+
+            private double SampleX(double u) => ((_ax * u + _bx) * u + _cx) * u;
+            private double SampleY(double u) => ((_ay * u + _by) * u + _cy) * u;
+            private double SampleDerivativeX(double u) => (3.0 * _ax * u + 2.0 * _bx) * u + _cx;
+            private double SampleDerivativeY(double u) => (3.0 * _ay * u + 2.0 * _by) * u + _cy;
+
+            private double SolveCurveX(double t)
+            {
+                const double eps = 1e-6;
+                double u = t;
+                for (int i = 0; i < 8; i++)
+                {
+                    double x2 = SampleX(u) - t;
+                    if (Math.Abs(x2) < eps)
+                    {
+                        return u;
+                    }
+                    double d2 = SampleDerivativeX(u);
+                    if (Math.Abs(d2) < eps)
+                    {
+                        break;
+                    }
+                    u -= x2 / d2;
+                }
+
+                double lo = 0.0;
+                double hi = 1.0;
+                u = Math.Clamp(t, 0.0, 1.0);
+                for (int i = 0; i < 20; i++)
+                {
+                    double x2 = SampleX(u);
+                    if (Math.Abs(x2 - t) < eps)
+                    {
+                        return u;
+                    }
+                    if (t > x2)
+                    {
+                        lo = u;
+                    }
+                    else
+                    {
+                        hi = u;
+                    }
+                    u = 0.5 * (lo + hi);
+                    if (hi - lo < 1e-7)
+                    {
+                        break;
+                    }
+                }
+                return u;
+            }
+
+            public double Sample(double t)
+            {
+                if (t <= 0.0) return 0.0;
+                if (t >= 1.0) return 1.0;
+                return SampleY(SolveCurveX(t));
+            }
+
+            public double Slope(double t)
+            {
+                if (t <= 0.0)
+                {
+                    return _cx > 1e-6 ? (_cy / _cx) : 0.0;
+                }
+                if (t >= 1.0)
+                {
+                    return 0.0;
+                }
+                double u = SolveCurveX(t);
+                double dx = SampleDerivativeX(u);
+                return dx > 1e-6 ? (SampleDerivativeY(u) / dx) : 0.0;
+            }
+        }
+
+        internal struct ChromiumScrollAxis
+        {
+            public bool IsActive;
+            public double StartOffset;
+            public double TargetOffset;
+            public long StartTimestamp;
+            public double DurationSeconds;
+            public ChromiumScrollCubicBezier Curve;
+
+            public static double SegmentDuration(double delta)
+            {
+                double absDelta = Math.Abs(delta);
+                if (absDelta < 0.01)
+                {
+                    return 0.0;
+                }
+                // Chromium InverseDelta / Impulse distance-scaled duration bounds
+                return Math.Clamp(0.12 + 0.012 * Math.Sqrt(absDelta), 0.16, 0.36);
+            }
+
+            public void UpdateTarget(double currentOffset, double newTarget, long nowTimestamp)
+            {
+                double effectiveStart = currentOffset;
+                double currentVelocity = 0.0;
+
+                if (IsActive && DurationSeconds > 0.0)
+                {
+                    double elapsed = Math.Max(0.0, (double)(nowTimestamp - StartTimestamp) / Stopwatch.Frequency);
+                    double t = elapsed / DurationSeconds;
+                    if (t < 1.0)
+                    {
+                        double oldDelta = TargetOffset - StartOffset;
+                        effectiveStart = StartOffset + oldDelta * Curve.Sample(t);
+                        currentVelocity = (oldDelta / DurationSeconds) * Curve.Slope(t);
+                    }
+                }
+
+                double delta = newTarget - effectiveStart;
+                if (Math.Abs(delta) < 0.01)
+                {
+                    StartOffset = newTarget;
+                    TargetOffset = newTarget;
+                    DurationSeconds = 0.0;
+                    IsActive = false;
+                    return;
+                }
+
+                double duration = SegmentDuration(delta);
+                if (Math.Abs(currentVelocity) < 1e-3)
+                {
+                    Curve = new ChromiumScrollCubicBezier(0.25, 0.1, 0.25, 1.0);
+                }
+                else
+                {
+                    double normalizedSlope = (currentVelocity * duration) / delta;
+                    if (normalizedSlope > 0.0)
+                    {
+                        // EaseInOutWithInitialSlope: preserve instantaneous velocity C1-continuously
+                        double x1 = 0.25;
+                        double y1 = x1 * normalizedSlope;
+                        if (y1 > 1.0)
+                        {
+                            y1 = 1.0;
+                            x1 = 1.0 / normalizedSlope;
+                        }
+                        Curve = new ChromiumScrollCubicBezier(x1, y1, 0.25, 1.0);
+                    }
+                    else
+                    {
+                        Curve = new ChromiumScrollCubicBezier(0.25, 0.0, 0.25, 1.0);
+                    }
+                }
+
+                StartOffset = effectiveStart;
+                TargetOffset = newTarget;
+                StartTimestamp = nowTimestamp;
+                DurationSeconds = duration;
+                IsActive = true;
+            }
+
+            public void Stop(double offset)
+            {
+                IsActive = false;
+                StartOffset = offset;
+                TargetOffset = offset;
+                DurationSeconds = 0.0;
+            }
+
+            public double Evaluate(long nowTimestamp)
+            {
+                if (!IsActive)
+                {
+                    return TargetOffset;
+                }
+
+                double elapsed = Math.Max(0.0, (double)(nowTimestamp - StartTimestamp) / Stopwatch.Frequency);
+                if (DurationSeconds <= 0.0 || elapsed >= DurationSeconds)
+                {
+                    IsActive = false;
+                    return TargetOffset;
+                }
+
+                double t = elapsed / DurationSeconds;
+                return StartOffset + (TargetOffset - StartOffset) * Curve.Sample(t);
+            }
+        }
+
+        private ChromiumScrollAxis _vScrollAnim;
+        private ChromiumScrollAxis _hScrollAnim;
         private bool _isSmoothScrollingActive;
-        private bool _isFirstSmoothFrame;
-        private long _lastSmoothTickTimestamp;
         private RectangleGeometry _contentClip;
 
         public ScrollViewer()
@@ -497,9 +692,9 @@ namespace System.Windows.Controls
                 e.ScrollEventType == ScrollEventType.EndScroll)
             {
                 double clamped = Math.Clamp(e.NewValue, 0, Math.Max(0, ExtentWidth - ViewportWidth));
-                _targetHorizontalOffset = clamped;
+                _hScrollAnim.Stop(clamped);
                 ApplyHorizontalOffset(clamped);
-                if (Math.Abs(_targetVerticalOffset - VerticalOffset) < 0.5)
+                if (!_vScrollAnim.IsActive)
                 {
                     StopSmoothScroll();
                 }
@@ -515,9 +710,9 @@ namespace System.Windows.Controls
                 e.ScrollEventType == ScrollEventType.EndScroll)
             {
                 double clamped = Math.Clamp(e.NewValue, 0, Math.Max(0, ExtentHeight - ViewportHeight));
-                _targetVerticalOffset = clamped;
+                _vScrollAnim.Stop(clamped);
                 ApplyVerticalOffset(clamped);
-                if (Math.Abs(_targetHorizontalOffset - HorizontalOffset) < 0.5)
+                if (!_hScrollAnim.IsActive)
                 {
                     StopSmoothScroll();
                 }
@@ -531,19 +726,19 @@ namespace System.Windows.Controls
             offset = Math.Clamp(offset, 0, Math.Max(0, ExtentHeight - ViewportHeight));
             if (IsSmoothScrollingEnabled)
             {
-                _targetVerticalOffset = offset;
-                if (Math.Abs(offset - VerticalOffset) >= 0.5)
+                _vScrollAnim.UpdateTarget(VerticalOffset, offset, Stopwatch.GetTimestamp());
+                if (_vScrollAnim.IsActive)
                 {
                     StartSmoothScroll();
                 }
-                else
+                else if (offset != VerticalOffset)
                 {
                     ApplyVerticalOffset(offset);
                 }
             }
             else
             {
-                _targetVerticalOffset = offset;
+                _vScrollAnim.Stop(offset);
                 ApplyVerticalOffset(offset);
             }
         }
@@ -553,19 +748,19 @@ namespace System.Windows.Controls
             offset = Math.Clamp(offset, 0, Math.Max(0, ExtentWidth - ViewportWidth));
             if (IsSmoothScrollingEnabled)
             {
-                _targetHorizontalOffset = offset;
-                if (Math.Abs(offset - HorizontalOffset) >= 0.5)
+                _hScrollAnim.UpdateTarget(HorizontalOffset, offset, Stopwatch.GetTimestamp());
+                if (_hScrollAnim.IsActive)
                 {
                     StartSmoothScroll();
                 }
-                else
+                else if (offset != HorizontalOffset)
                 {
                     ApplyHorizontalOffset(offset);
                 }
             }
             else
             {
-                _targetHorizontalOffset = offset;
+                _hScrollAnim.Stop(offset);
                 ApplyHorizontalOffset(offset);
             }
         }
@@ -631,18 +826,16 @@ namespace System.Windows.Controls
             if (e.Handled) return;
 
             double delta = e.Delta;
-            double step = (delta / 120.0) * 64.0;
+            // Chromium Windows desktop wheel notch delta (~100 DIPs per 120 wheel units)
+            double step = (delta / 120.0) * 100.0;
 
             if (IsSmoothScrollingEnabled)
             {
-                if (!_isSmoothScrollingActive)
-                {
-                    _targetVerticalOffset = VerticalOffset;
-                }
                 double maxV = Math.Max(0, ExtentHeight - ViewportHeight);
-                double nextTarget = Math.Clamp(_targetVerticalOffset - step, 0, maxV);
-                _targetVerticalOffset = nextTarget;
-                if (Math.Abs(nextTarget - VerticalOffset) >= 0.5)
+                double baseTarget = _vScrollAnim.IsActive ? _vScrollAnim.TargetOffset : VerticalOffset;
+                double nextTarget = Math.Clamp(baseTarget - step, 0, maxV);
+                _vScrollAnim.UpdateTarget(VerticalOffset, nextTarget, Stopwatch.GetTimestamp());
+                if (_vScrollAnim.IsActive)
                 {
                     StartSmoothScroll();
                 }
@@ -664,8 +857,6 @@ namespace System.Windows.Controls
             if (!_isSmoothScrollingActive)
             {
                 _isSmoothScrollingActive = true;
-                _isFirstSmoothFrame = true;
-                _lastSmoothTickTimestamp = Stopwatch.GetTimestamp();
                 CompositionTarget.Rendering += OnSmoothRenderFrame;
             }
             MediaContext.From(Dispatcher)?.PostRender();
@@ -688,57 +879,32 @@ namespace System.Windows.Controls
             }
 
             long now = Stopwatch.GetTimestamp();
-            double dt;
-            if (_isFirstSmoothFrame)
-            {
-                _isFirstSmoothFrame = false;
-                dt = 1.0 / 60.0;
-            }
-            else
-            {
-                dt = (double)(now - _lastSmoothTickTimestamp) / Stopwatch.Frequency;
-                if (dt <= 0.0005)
-                {
-                    dt = 1.0 / 60.0;
-                }
-                else if (dt > 0.05)
-                {
-                    dt = 0.05;
-                }
-            }
-            _lastSmoothTickTimestamp = now;
-
             double maxV = Math.Max(0.0, ExtentHeight - ViewportHeight);
             double maxH = Math.Max(0.0, ExtentWidth - ViewportWidth);
-            double targetV = Math.Clamp(_targetVerticalOffset, 0.0, maxV);
-            double targetH = Math.Clamp(_targetHorizontalOffset, 0.0, maxH);
-            _targetVerticalOffset = targetV;
-            _targetHorizontalOffset = targetH;
-
-            double curV = VerticalOffset;
-            double curH = HorizontalOffset;
-            double diffV = targetV - curV;
-            double diffH = targetH - curH;
-
-            double friction = Math.Clamp(Friction, 0.1, 0.95);
-            double alpha = 1.0 - Math.Pow(friction, dt * 60.0);
-
-            bool doneV = Math.Abs(diffV) < 0.5;
-            bool doneH = Math.Abs(diffH) < 0.5;
-
-            double nextV = doneV ? targetV : curV + (diffV * alpha);
-            double nextH = doneH ? targetH : curH + (diffH * alpha);
 
             bool changed = false;
-            if (nextV != curV)
+            if (_vScrollAnim.IsActive)
             {
-                ApplyVerticalOffset(nextV);
-                changed = true;
+                double targetV = Math.Clamp(_vScrollAnim.TargetOffset, 0.0, maxV);
+                _vScrollAnim.TargetOffset = targetV;
+                double nextV = Math.Clamp(_vScrollAnim.Evaluate(now), 0.0, maxV);
+                if (nextV != VerticalOffset)
+                {
+                    ApplyVerticalOffset(nextV);
+                    changed = true;
+                }
             }
-            if (nextH != curH)
+
+            if (_hScrollAnim.IsActive)
             {
-                ApplyHorizontalOffset(nextH);
-                changed = true;
+                double targetH = Math.Clamp(_hScrollAnim.TargetOffset, 0.0, maxH);
+                _hScrollAnim.TargetOffset = targetH;
+                double nextH = Math.Clamp(_hScrollAnim.Evaluate(now), 0.0, maxH);
+                if (nextH != HorizontalOffset)
+                {
+                    ApplyHorizontalOffset(nextH);
+                    changed = true;
+                }
             }
 
             if (changed)
@@ -746,7 +912,7 @@ namespace System.Windows.Controls
                 UpdateLayout();
             }
 
-            if (doneV && doneH)
+            if (!_vScrollAnim.IsActive && !_hScrollAnim.IsActive)
             {
                 StopSmoothScroll();
             }

@@ -27,14 +27,39 @@ namespace System.Windows.Media
             public D2D1_MATRIX_3X2_F SavedTransform;
         }
 
-        private readonly void* _d2dContext;
-        private readonly void* _d2dFactory;
-        private readonly Stack<PushState> _pushStack = new(4);
+        [ThreadStatic]
+        private static Direct2DRenderWalker t_pooledWalker;
+
+        private void* _d2dContext;
+        private void* _d2dFactory;
+        private readonly Stack<PushState> _pushStack = new(8);
 
         private Direct2DRenderWalker(void* d2dContext, void* d2dFactory)
         {
             _d2dContext = d2dContext;
             _d2dFactory = d2dFactory;
+        }
+
+        private static Direct2DRenderWalker Acquire(void* d2dContext, void* d2dFactory)
+        {
+            Direct2DRenderWalker walker = t_pooledWalker;
+            if (walker != null)
+            {
+                t_pooledWalker = null;
+                walker._d2dContext = d2dContext;
+                walker._d2dFactory = d2dFactory;
+                walker._pushStack.Clear();
+                return walker;
+            }
+            return new Direct2DRenderWalker(d2dContext, d2dFactory);
+        }
+
+        private static void Release(Direct2DRenderWalker walker)
+        {
+            walker._pushStack.Clear();
+            walker._d2dContext = null;
+            walker._d2dFactory = null;
+            t_pooledWalker ??= walker;
         }
 
         internal static void Render(IDrawingContent content, void* d2dContext)
@@ -45,9 +70,16 @@ namespace System.Windows.Media
             }
 
             void* d2dFactory = MediaSystem.EnsureSharedDevice().D2DFactory;
-            var walker = new Direct2DRenderWalker(d2dContext, d2dFactory);
-            content.WalkContent(walker);
-            walker.FlushUnpoppedStates();
+            Direct2DRenderWalker walker = Acquire(d2dContext, d2dFactory);
+            try
+            {
+                content.WalkContent(walker);
+                walker.FlushUnpoppedStates();
+            }
+            finally
+            {
+                Release(walker);
+            }
         }
 
         internal static void Render(Drawing drawing, void* d2dContext)
@@ -58,9 +90,16 @@ namespace System.Windows.Media
             }
 
             void* d2dFactory = MediaSystem.EnsureSharedDevice().D2DFactory;
-            var walker = new Direct2DRenderWalker(d2dContext, d2dFactory);
-            drawing.WalkCurrentValue(walker);
-            walker.FlushUnpoppedStates();
+            Direct2DRenderWalker walker = Acquire(d2dContext, d2dFactory);
+            try
+            {
+                drawing.WalkCurrentValue(walker);
+                walker.FlushUnpoppedStates();
+            }
+            finally
+            {
+                Release(walker);
+            }
         }
 
         private void FlushUnpoppedStates()

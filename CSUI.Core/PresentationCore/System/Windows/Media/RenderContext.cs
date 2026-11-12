@@ -11,6 +11,7 @@ namespace System.Windows.Media
     internal sealed unsafe class RenderContext
     {
         private void* _d2dDeviceContext;
+        private void* _d2dFactory;
 
         internal RenderContext()
         {
@@ -19,13 +20,16 @@ namespace System.Windows.Media
         internal void Initialize(void* d2dDeviceContext)
         {
             _d2dDeviceContext = d2dDeviceContext;
+            _d2dFactory = MediaSystem.EnsureSharedDevice().D2DFactory;
         }
 
         internal void Reset()
         {
             _d2dDeviceContext = null;
+            _d2dFactory = null;
         }
 
         internal void* D2dDeviceContext => _d2dDeviceContext;
+        internal void* D2dFactory => _d2dFactory;
     }
 }

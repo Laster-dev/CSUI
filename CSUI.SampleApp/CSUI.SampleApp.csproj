@@ -9,6 +9,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <IsAotCompatible>true</IsAotCompatible>
     <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StripSymbols>true</StripSymbols>
+    <EventSourceSupport>false</EventSourceSupport>
     <WarningsAsErrors>IL2026;IL2050;IL2060;IL2070;IL2072;IL2075;IL2087;IL2091;IL3050</WarningsAsErrors>
   </PropertyGroup>
 

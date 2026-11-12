@@ -1371,6 +1371,31 @@ internal static class MarkupTests
         smoothWin.Close();
         Dispatcher.CurrentDispatcher.Invoke(static () => { }, DispatcherPriority.SystemIdle);
 
+        // 2b. Verify Chromium cc::ScrollOffsetAnimationCurve (CubicBezier + InverseDelta + C1-continuous retargeting)
+        var restCurve = new ScrollViewer.ChromiumScrollCubicBezier(0.25, 0.1, 0.25, 1.0);
+        AssertNear(restCurve.Sample(0.0), 0.0, 1e-6, "Chromium CubicBezier Sample(0) == 0");
+        AssertNear(restCurve.Sample(1.0), 1.0, 1e-6, "Chromium CubicBezier Sample(1) == 1");
+        Assert(restCurve.Sample(0.25) > 0.35 && restCurve.Sample(0.5) > 0.75, "Chromium ease curve accelerates quickly and eases out smoothly");
+        AssertNear(restCurve.Slope(1.0), 0.0, 1e-6, "Chromium curve decelerates to zero slope at arrival");
+
+        double durSmall = ScrollViewer.ChromiumScrollAxis.SegmentDuration(64.0);
+        double durLarge = ScrollViewer.ChromiumScrollAxis.SegmentDuration(2000.0);
+        Assert(durSmall >= 0.16 && durSmall < durLarge && durLarge <= 0.36, "Chromium InverseDelta segment duration scales monotonically within [0.16s, 0.36s]");
+
+        long t0 = 1_000_000_000L;
+        var axis = new ScrollViewer.ChromiumScrollAxis();
+        axis.UpdateTarget(0.0, 100.0, t0);
+        Assert(axis.IsActive, "ChromiumScrollAxis becomes active on target update");
+        long tMid = t0 + (long)(axis.DurationSeconds * 0.4 * System.Diagnostics.Stopwatch.Frequency);
+        double posBeforeRetarget = axis.Evaluate(tMid);
+        Assert(posBeforeRetarget > 0.0 && posBeforeRetarget < 100.0, "ChromiumScrollAxis progresses smoothly mid-segment");
+        axis.UpdateTarget(posBeforeRetarget, 220.0, tMid);
+        Assert(axis.IsActive && axis.TargetOffset == 220.0, "ChromiumScrollAxis retargets mid-scroll cleanly");
+        Assert(axis.Curve.Slope(0.0) > 0.0, "Chromium EaseInOutWithInitialSlope preserves positive incoming velocity slope on same-direction retarget");
+        long tEnd = tMid + (long)((axis.DurationSeconds + 0.01) * System.Diagnostics.Stopwatch.Frequency);
+        AssertNear(axis.Evaluate(tEnd), 220.0, 1e-6, "ChromiumScrollAxis finishes at exact target without asymptotic creep");
+        Assert(!axis.IsActive, "ChromiumScrollAxis deactivates deterministically at t >= 1.0");
+
         viewer.ScrollToVerticalOffset(600.0);
         viewer.ScrollToVerticalOffset(400.0);
         viewer.LineDown();

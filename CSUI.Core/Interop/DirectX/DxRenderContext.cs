@@ -294,10 +294,15 @@ internal sealed unsafe class DxWindowRenderTarget : IDisposable
 
     public void EndDrawAndPresent()
     {
-        EndDrawAndPresent(default);
+        EndDrawAndPresent(default, inResize: false);
     }
 
     public void EndDrawAndPresent(ReadOnlySpan<RECT> dirtyRects)
+    {
+        EndDrawAndPresent(dirtyRects, inResize: false);
+    }
+
+    public void EndDrawAndPresent(ReadOnlySpan<RECT> dirtyRects, bool inResize)
     {
         int hr = ID2D1DeviceContextVtbl.EndDraw(_d2dContext.Ptr);
         if (hr == HResult.D2DERR_RECREATE_TARGET || hr == HResult.DXGI_ERROR_DEVICE_REMOVED || hr == HResult.DXGI_ERROR_DEVICE_RESET)
@@ -306,6 +311,8 @@ internal sealed unsafe class DxWindowRenderTarget : IDisposable
             return;
         }
         HResult.ThrowIfFailed(hr, "EndDraw");
+
+        uint syncInterval = inResize ? 0u : 1u;
 
         if (dirtyRects.Length > 0)
         {
@@ -318,12 +325,12 @@ internal sealed unsafe class DxWindowRenderTarget : IDisposable
                     ScrollRect = null,
                     ScrollOffset = null
                 };
-                hr = IDXGISwapChain1Vtbl.Present1(_swapChain.Ptr, 1, 0, &presentParams);
+                hr = IDXGISwapChain1Vtbl.Present1(_swapChain.Ptr, syncInterval, 0, &presentParams);
             }
         }
         else
         {
-            hr = IDXGISwapChain1Vtbl.Present(_swapChain.Ptr, 1, 0);
+            hr = IDXGISwapChain1Vtbl.Present(_swapChain.Ptr, syncInterval, 0);
         }
 
         if (hr == HResult.DXGI_ERROR_DEVICE_REMOVED || hr == HResult.DXGI_ERROR_DEVICE_RESET)
