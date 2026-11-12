@@ -1755,7 +1755,9 @@ namespace CSUI.Generators
                 {
                     return false;
                 }
-                if (!TryResolveAttributeValueExpr(valAttr, ctx.Compilation.GetSpecialType(SpecialType.System_Object), trigEl, ctx, out string valExpr))
+                ITypeSymbol valueType = TryInferBindingValueType(trigEl, "Binding", "DataTrigger.Binding", defaultTargetType, ctx)
+                    ?? ctx.Compilation.GetSpecialType(SpecialType.System_Object);
+                if (!TryResolveAttributeValueExpr(valAttr, valueType, trigEl, ctx, out string valExpr))
                 {
                     return false;
                 }
@@ -1783,7 +1785,7 @@ namespace CSUI.Generators
                     {
                         foreach (XElement condEl in child.Elements())
                         {
-                            if (!TryEmitBindingCondition(sb, trigVar + ".Conditions", condEl, ctx))
+                            if (!TryEmitBindingCondition(sb, trigVar + ".Conditions", condEl, defaultTargetType, ctx))
                             {
                                 return false;
                             }
@@ -1897,7 +1899,7 @@ namespace CSUI.Generators
             return true;
         }
 
-        private static bool TryEmitBindingCondition(StringBuilder sb, string condsExpr, XElement condEl, XamlCompileContext ctx)
+        private static bool TryEmitBindingCondition(StringBuilder sb, string condsExpr, XElement condEl, INamedTypeSymbol? defaultTargetType, XamlCompileContext ctx)
         {
             if (condEl.Name.LocalName != "Condition") return false;
             if (!TryEmitBindingFromAttrOrChild(sb, condEl, "Binding", "Condition.Binding", ctx, out string bindingExpr))
@@ -1906,12 +1908,169 @@ namespace CSUI.Generators
             }
             string? valAttr = condEl.Attribute("Value")?.Value;
             if (valAttr is null) return false;
-            if (!TryResolveAttributeValueExpr(valAttr, ctx.Compilation.GetSpecialType(SpecialType.System_Object), condEl, ctx, out string valExpr))
+            ITypeSymbol valueType = TryInferBindingValueType(condEl, "Binding", "Condition.Binding", defaultTargetType, ctx)
+                ?? ctx.Compilation.GetSpecialType(SpecialType.System_Object);
+            if (!TryResolveAttributeValueExpr(valAttr, valueType, condEl, ctx, out string valExpr))
             {
                 return false;
             }
             sb.Append(condsExpr).Append(".Add(new global::System.Windows.Condition(").Append(bindingExpr).Append(", ").Append(valExpr).AppendLine("));");
             return true;
+        }
+
+        private static ITypeSymbol? TryInferBindingValueType(
+            XElement ownerEl,
+            string attrName,
+            string childPropName,
+            INamedTypeSymbol? defaultTargetType,
+            XamlCompileContext ctx)
+        {
+            string? path = null;
+            string? sourceRaw = null;
+            string? relSourceRaw = null;
+            string? elementName = null;
+
+            string? bAttr = ownerEl.Attribute(attrName)?.Value;
+            if (!string.IsNullOrWhiteSpace(bAttr))
+            {
+                string trimmed = bAttr!.Trim();
+                if (!trimmed.StartsWith("{", StringComparison.Ordinal) || !trimmed.EndsWith("}", StringComparison.Ordinal))
+                    return null;
+                string inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
+                if (!inner.Equals("Binding", StringComparison.Ordinal) && !inner.StartsWith("Binding ", StringComparison.Ordinal))
+                    return null;
+
+                string args = inner.Length > 7 ? inner.Substring(7).Trim() : string.Empty;
+                if (!string.IsNullOrEmpty(args))
+                {
+                    foreach (string rawPart in SplitMarkupArgs(args))
+                    {
+                        string part = rawPart.Trim();
+                        if (string.IsNullOrEmpty(part)) continue;
+                        int eq = part.IndexOf('=');
+                        if (eq < 0)
+                        {
+                            path ??= UnquoteMarkupArg(part);
+                            continue;
+                        }
+                        string k = part.Substring(0, eq).Trim();
+                        string rawV = part.Substring(eq + 1).Trim();
+                        switch (k)
+                        {
+                            case "Path": path = UnquoteMarkupArg(rawV); break;
+                            case "Source": sourceRaw = rawV; break;
+                            case "RelativeSource": relSourceRaw = rawV; break;
+                            case "ElementName": elementName = UnquoteMarkupArg(rawV); break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                XElement? childWrap = ownerEl.Elements().FirstOrDefault(e => e.Name.LocalName == childPropName);
+                XElement? bEl = childWrap?.Elements().FirstOrDefault();
+                if (bEl is null || bEl.Name.LocalName != "Binding")
+                    return null;
+                path = bEl.Attribute("Path")?.Value;
+                sourceRaw = bEl.Attribute("Source")?.Value;
+                relSourceRaw = bEl.Attribute("RelativeSource")?.Value;
+                elementName = bEl.Attribute("ElementName")?.Value;
+            }
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                if (!string.IsNullOrWhiteSpace(sourceRaw))
+                {
+                    string sTrim = sourceRaw!.Trim();
+                    if (sTrim.StartsWith("{x:Static ", StringComparison.Ordinal) && sTrim.EndsWith("}", StringComparison.Ordinal))
+                    {
+                        string memberRef = sTrim.Substring("{x:Static ".Length, sTrim.Length - "{x:Static ".Length - 1).Trim();
+                        int dot = memberRef.LastIndexOf('.');
+                        if (dot > 0)
+                        {
+                            INamedTypeSymbol? staticType = ResolveMarkupType(memberRef.Substring(0, dot).Trim(), ownerEl, ctx);
+                            string memberName = memberRef.Substring(dot + 1).Trim();
+                            if (staticType is not null)
+                            {
+                                IPropertySymbol? sp = FindProperty(staticType, memberName);
+                                if (sp is not null) return sp.Type;
+                                IFieldSymbol? sf = staticType.GetMembers(memberName).OfType<IFieldSymbol>().FirstOrDefault();
+                                if (sf is not null) return sf.Type;
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+
+            ITypeSymbol? currentType = defaultTargetType;
+            if (!string.IsNullOrWhiteSpace(elementName) && ctx.TemplateNamedElementTypes.TryGetValue(elementName!, out var elemNamedType))
+            {
+                currentType = elemNamedType;
+            }
+            else if (!string.IsNullOrWhiteSpace(relSourceRaw))
+            {
+                string rsTrim = relSourceRaw!.Trim();
+                int ancIdx = rsTrim.IndexOf("AncestorType=", StringComparison.Ordinal);
+                if (ancIdx >= 0)
+                {
+                    string after = rsTrim.Substring(ancIdx + "AncestorType=".Length).Trim();
+                    if (after.StartsWith("{x:Type ", StringComparison.Ordinal))
+                    {
+                        int endBrace = after.IndexOf('}');
+                        if (endBrace > 0)
+                        {
+                            string typePart = after.Substring("{x:Type ".Length, endBrace - "{x:Type ".Length).Trim();
+                            INamedTypeSymbol? ancSym = ResolveMarkupType(typePart, ownerEl, ctx);
+                            if (ancSym is not null) currentType = ancSym;
+                        }
+                    }
+                }
+            }
+
+            // Walk path segments (splitting on '.' outside parentheses)
+            int pos = 0;
+            string p = path!.Trim();
+            while (pos < p.Length)
+            {
+                int depth = 0;
+                int nextDot = -1;
+                for (int i = pos; i < p.Length; i++)
+                {
+                    char ch = p[i];
+                    if (ch == '(') depth++;
+                    else if (ch == ')') depth--;
+                    else if (ch == '.' && depth == 0)
+                    {
+                        nextDot = i;
+                        break;
+                    }
+                }
+
+                string seg = (nextDot >= 0 ? p.Substring(pos, nextDot - pos) : p.Substring(pos)).Trim();
+                pos = nextDot >= 0 ? nextDot + 1 : p.Length;
+
+                if (seg.StartsWith("(", StringComparison.Ordinal) && seg.EndsWith(")", StringComparison.Ordinal))
+                {
+                    string inner = seg.Substring(1, seg.Length - 2).Trim();
+                    int dot = inner.LastIndexOf('.');
+                    if (dot <= 0) return null;
+                    INamedTypeSymbol? propOwner = ResolveMarkupType(inner.Substring(0, dot).Trim(), ownerEl, ctx);
+                    string propName = inner.Substring(dot + 1).Trim();
+                    if (propOwner is null) return null;
+                    currentType = FindProperty(propOwner, propName)?.Type
+                        ?? FindStaticGetMethod(propOwner, "Get" + propName)?.ReturnType;
+                }
+                else
+                {
+                    if (currentType is not INamedTypeSymbol named) return null;
+                    currentType = FindProperty(named, seg)?.Type;
+                }
+
+                if (currentType is null) return null;
+            }
+
+            return currentType;
         }
 
         private static bool TryEmitBindingFromAttrOrChild(
@@ -2456,13 +2615,63 @@ namespace CSUI.Generators
                 string trimmed = attr.Value.Trim();
                 if (trimmed.StartsWith("{TemplateBinding ", StringComparison.Ordinal) && trimmed.EndsWith("}", StringComparison.Ordinal))
                 {
-                    string srcPropName = trimmed.Substring("{TemplateBinding ".Length, trimmed.Length - "{TemplateBinding ".Length - 1).Trim();
-                    INamedTypeSymbol? srcOwner = templateTargetType ?? elemType;
-                    if (!TryResolveDependencyPropertyRef(srcPropName, srcOwner, el, ctx, out string srcDpExpr, out _))
+                    string tbArgs = trimmed.Substring("{TemplateBinding ".Length, trimmed.Length - "{TemplateBinding ".Length - 1).Trim();
+                    string? srcPropName = null;
+                    string? converterExpr = null;
+                    string? converterParamExpr = null;
+                    INamedTypeSymbol? converterType = ctx.Compilation.GetTypeByMetadataName("System.Windows.Data.IValueConverter");
+                    ITypeSymbol objType = ctx.Compilation.GetSpecialType(SpecialType.System_Object);
+
+                    foreach (string rawPart in SplitMarkupArgs(tbArgs))
+                    {
+                        string part = rawPart.Trim();
+                        if (string.IsNullOrEmpty(part)) continue;
+                        int eq = part.IndexOf('=');
+                        if (eq < 0)
+                        {
+                            srcPropName ??= UnquoteMarkupArg(part);
+                            continue;
+                        }
+                        string k = part.Substring(0, eq).Trim();
+                        string rawV = part.Substring(eq + 1).Trim();
+                        switch (k)
+                        {
+                            case "Property":
+                                srcPropName = UnquoteMarkupArg(rawV);
+                                break;
+                            case "Converter":
+                                if (!TryResolveMarkupValueExpr(rawV, el, converterType, ctx, out converterExpr))
+                                    return false;
+                                break;
+                            case "ConverterParameter":
+                                if (!TryResolveAttributeValueExpr(rawV, objType, el, ctx, out converterParamExpr))
+                                    return false;
+                                break;
+                            default:
+                                return false;
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(srcPropName))
                     {
                         return false;
                     }
-                    sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", new global::System.Windows.TemplateBindingExtension(").Append(srcDpExpr).AppendLine("));");
+
+                    INamedTypeSymbol? srcOwner = templateTargetType ?? elemType;
+                    if (!TryResolveDependencyPropertyRef(srcPropName!, srcOwner, el, ctx, out string srcDpExpr, out _))
+                    {
+                        return false;
+                    }
+
+                    sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", new global::System.Windows.TemplateBindingExtension(").Append(srcDpExpr).Append(')');
+                    var tbInits = new List<string>();
+                    if (converterExpr is not null) tbInits.Add("Converter = " + converterExpr);
+                    if (converterParamExpr is not null) tbInits.Add("ConverterParameter = " + converterParamExpr);
+                    if (tbInits.Count > 0)
+                    {
+                        sb.Append(" { ").Append(string.Join(", ", tbInits)).Append(" }");
+                    }
+                    sb.AppendLine(");");
                     continue;
                 }
 
@@ -3269,14 +3478,21 @@ namespace CSUI.Generators
             }
 
             var bsb = new StringBuilder();
-            bsb.Append("new global::System.Windows.Data.Binding(");
-            if (path is not null)
-            {
-                bsb.Append(ToCSharpStringLiteral(path));
-            }
-            bsb.Append(')');
-
             var inits = new List<string>();
+            if (path is not null && path.IndexOf('(') >= 0)
+            {
+                bsb.Append("new global::System.Windows.Data.Binding()");
+                inits.Add("Path = " + BuildPropertyPathExpr(path, el, ctx));
+            }
+            else
+            {
+                bsb.Append("new global::System.Windows.Data.Binding(");
+                if (path is not null)
+                {
+                    bsb.Append(ToCSharpStringLiteral(path));
+                }
+                bsb.Append(')');
+            }
             if (mode is not null) inits.Add("Mode = global::System.Windows.Data.BindingMode." + mode);
             if (updateSourceTrigger is not null) inits.Add("UpdateSourceTrigger = global::System.Windows.Data.UpdateSourceTrigger." + updateSourceTrigger);
             if (elementName is not null) inits.Add("ElementName = " + ToCSharpStringLiteral(elementName));
@@ -4242,6 +4458,11 @@ namespace CSUI.Generators
                                 }
                             }
                         }
+                        else if (!rk.StartsWith("{", StringComparison.Ordinal))
+                        {
+                            regKeyExpr = ToCSharpStringLiteral(rk);
+                            ownerType = ResolveAero2FileOwnerType(compilation, stem);
+                        }
                     }
 
                     themeIndex[normKey] = (fullThemeClass, methodName);
@@ -4362,6 +4583,23 @@ namespace CSUI.Generators
                                 }
                             }
                         }
+
+                        // Also register on the Aero2 file's own control type so cross-type keys
+                        // (e.g. GridView.GridViewScrollViewerStyleKey in ListView.xaml) and unhooked types
+                        // (e.g. PresentationUIStyleResources in DocumentViewer.xaml) are registered when the control loads.
+                        var fileOwnerSym = ResolveAero2FileOwnerType(compilation, entry.FileStem);
+                        if (fileOwnerSym is not null && !SymbolEqualityComparer.Default.Equals(fileOwnerSym, entry.OwnerType))
+                        {
+                            if (!ownerRegistrations.TryGetValue(fileOwnerSym, out var fileList))
+                            {
+                                fileList = new List<(string KeyExpr, string CallExpr)>();
+                                ownerRegistrations[fileOwnerSym] = fileList;
+                            }
+                            if (!fileList.Any(r => r.KeyExpr == entry.RegKeyExpr! && r.CallExpr == callExpr))
+                            {
+                                fileList.Add((entry.RegKeyExpr!, callExpr));
+                            }
+                        }
                     }
                 }
 
@@ -4430,6 +4668,29 @@ namespace CSUI.Generators
                     spc.AddSource("Aero2.Registrations.g.cs", SourceText.From(regSb.ToString(), Encoding.UTF8));
                 }
             }
+        }
+
+        private static INamedTypeSymbol? ResolveAero2FileOwnerType(Compilation compilation, string stem)
+        {
+            string[] prefixes =
+            {
+                "System.Windows.Controls.",
+                "System.Windows.Controls.Primitives.",
+                "System.Windows.Documents.",
+                "System.Windows.Navigation.",
+                "System.Windows."
+            };
+            foreach (string prefix in prefixes)
+            {
+                INamedTypeSymbol? sym = compilation.GetTypeByMetadataName(prefix + stem);
+                if (sym is not null && sym.GetMembers("RegisterDefaultTheme")
+                        .OfType<IMethodSymbol>()
+                        .Any(static m => m.IsStatic && m.Parameters.Length == 0 && m.IsPartialDefinition))
+                {
+                    return sym;
+                }
+            }
+            return null;
         }
 
         private static string SanitizeIdentifier(string raw)

@@ -53,6 +53,56 @@ namespace System.Windows
         //[CodeAnalysis("AptcaMethodsShouldOnlyCallAptcaMethods")] //Tracking Bug: 29647
         private static readonly ConcurrentDictionary<object, Func<object>> _perKeyThemeFactories = new ConcurrentDictionary<object, Func<object>>();
 
+        static SystemResources()
+        {
+            RegisterStaticBoolAccessor(
+                typeof(FrameworkAppContextSwitches),
+                nameof(FrameworkAppContextSwitches.UseAdornerForTextboxSelectionRendering),
+                static () => FrameworkAppContextSwitches.UseAdornerForTextboxSelectionRendering);
+            RegisterStaticBoolAccessor(
+                typeof(SystemParameters),
+                nameof(SystemParameters.HighContrast),
+                static () => SystemParameters.HighContrast);
+            RegisterStaticBoolAccessor(
+                typeof(AccessibilitySwitches),
+                nameof(AccessibilitySwitches.UseNetFx47CompatibleAccessibilityFeatures),
+                static () => AccessibilitySwitches.UseNetFx47CompatibleAccessibilityFeatures);
+            RegisterStaticBoolAccessor(
+                typeof(AccessibilitySwitches),
+                nameof(AccessibilitySwitches.UseNetFx471CompatibleAccessibilityFeatures),
+                static () => AccessibilitySwitches.UseNetFx471CompatibleAccessibilityFeatures);
+            RegisterStaticBoolAccessor(
+                typeof(AccessibilitySwitches),
+                nameof(AccessibilitySwitches.UseNetFx472CompatibleAccessibilityFeatures),
+                static () => AccessibilitySwitches.UseNetFx472CompatibleAccessibilityFeatures);
+        }
+
+        private static void RegisterStaticBoolAccessor(Type ownerType, string propertyName, Func<bool> getter)
+        {
+            System.Windows.Data.PropertyAccessorRegistry.Register(new StaticPropertyAccessor<bool>(ownerType, propertyName, getter));
+        }
+
+        private sealed class StaticPropertyAccessor<TValue> : System.Windows.Data.IPropertyAccessor
+        {
+            private readonly Func<TValue> _getter;
+
+            public StaticPropertyAccessor(Type sourceType, string propertyName, Func<TValue> getter)
+            {
+                SourceType = sourceType;
+                PropertyName = propertyName;
+                _getter = getter;
+            }
+
+            public string PropertyName { get; }
+            public Type SourceType { get; }
+            public Type PropertyType => typeof(TValue);
+            public bool IsReadOnly => true;
+            public bool IsStatic => true;
+            public object GetValue(object item) => _getter();
+            public void SetValue(object item, object value) =>
+                throw new InvalidOperationException($"Property '{PropertyName}' on '{SourceType.Name}' is read-only.");
+        }
+
         internal static void RegisterDefaultThemeFactory(object key, Func<object> factory)
         {
             if (key == null || factory == null)
@@ -136,7 +186,8 @@ namespace System.Windows
             }
 
 
-            if ((typeKey == null) && (resourceKey == null))
+            bool hasPerKeyFactory = key != null && _perKeyThemeFactories.ContainsKey(key);
+            if ((typeKey == null) && (resourceKey == null) && !hasPerKeyFactory)
             {
                 // Not a valid key
                 if (isTraceEnabled)
@@ -186,7 +237,7 @@ namespace System.Windows
                             }
                         }
 
-                        if (resource == null)
+                        if (resource == null && (typeKey != null || resourceKey != null))
                         {
                             // Do a dictionary lookup
                             resource = FindDictionaryResource(key, typeKey, resourceKey, isTraceEnabled, allowDeferredResourceReference, mustReturnDeferredResourceReference, out canCache);
