@@ -1,0 +1,24 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+//
+//
+// Description: Implementation of GeometryCollection
+//
+
+using System.Collections;
+using System.Windows.Media.Animation;
+
+
+#nullable disable
+using SR = MS.Internal.PresentationCore.SR;
+
+namespace System.Windows.Media
+{
+    /// <summary>
+    /// The class definition for GeometryCollection
+    /// </summary>    
+    public sealed partial class GeometryCollection : Animatable, IList, IList<Geometry>
+    {
+    }
+}

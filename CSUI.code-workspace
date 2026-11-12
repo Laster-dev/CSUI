@@ -1,0 +1,20 @@
+{
+    "folders": [
+        {
+            "path": "CSUI.Core"
+        },
+        {
+            "path": "CSUI.Generators"
+        },
+        {
+            "path": "CSUI.Markup"
+        },
+        {
+            "path": "CSUI.SampleApp"
+        },
+        {
+            "path": "CSUI.Tests"
+        }
+    ],
+    "settings": {}
+}
