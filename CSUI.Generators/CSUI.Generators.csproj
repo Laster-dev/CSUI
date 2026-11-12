@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
+    <_RoslynBinDir Condition="Exists('$(RoslynTargetsPath)\Microsoft.CodeAnalysis.dll')">$(RoslynTargetsPath)</_RoslynBinDir>
+    <_RoslynBinDir Condition="'$(_RoslynBinDir)' == '' and Exists('$(RoslynTargetsPath)\bincore\Microsoft.CodeAnalysis.dll')">$(RoslynTargetsPath)\bincore</_RoslynBinDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(_RoslynBinDir)\Microsoft.CodeAnalysis.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(_RoslynBinDir)\Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
