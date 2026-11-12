@@ -23,8 +23,9 @@ namespace System.Windows.Controls
     ///     Control that implements a selectable item inside a ListBox.
     /// </summary>
     [DefaultEvent("Selected")]
-    public class ListBoxItem : ContentControl
+    public partial class ListBoxItem : ContentControl
     {
+        static partial void RegisterDefaultTheme();
         //-------------------------------------------------------------------
         //
         //  Constructors
@@ -51,6 +52,7 @@ namespace System.Windows.Controls
             IsMouseOverPropertyKey.OverrideMetadata(typeof(ListBoxItem), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
             Selector.IsSelectionActivePropertyKey.OverrideMetadata(typeof(ListBoxItem), new FrameworkPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
             AutomationProperties.IsOffscreenBehaviorProperty.OverrideMetadata(typeof(ListBoxItem), new FrameworkPropertyMetadata(IsOffscreenBehavior.FromClip));
+            RegisterDefaultTheme();
         }
 
         #endregion

@@ -23,6 +23,19 @@ namespace System.Windows.Controls
                 typeof(DefinitionBase),
                 new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits));
 
+        public static readonly DependencyProperty SharedSizeGroupProperty =
+            DependencyProperty.Register(
+                nameof(SharedSizeGroup),
+                typeof(string),
+                typeof(DefinitionBase),
+                new FrameworkPropertyMetadata(string.Empty));
+
+        public string SharedSizeGroup
+        {
+            get => (string)GetValue(SharedSizeGroupProperty);
+            set => SetValue(SharedSizeGroupProperty, value);
+        }
+
         internal Grid ParentGrid { get; set; }
 
         internal double FinalOffset { get; set; }

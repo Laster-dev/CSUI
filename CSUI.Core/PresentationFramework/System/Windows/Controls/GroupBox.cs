@@ -9,8 +9,10 @@ using System.Windows.Input;
 namespace System.Windows.Controls
 {
     [Localizability(LocalizationCategory.None, Readability = Readability.Unreadable)]
-    public class GroupBox : HeaderedContentControl
+    public partial class GroupBox : HeaderedContentControl
     {
+        static partial void RegisterDefaultTheme();
+
         static GroupBox()
         {
             FocusableProperty.OverrideMetadata(typeof(GroupBox), new FrameworkPropertyMetadata(MS.Internal.KnownBoxes.BooleanBoxes.FalseBox));
@@ -18,6 +20,7 @@ namespace System.Windows.Controls
             DefaultStyleKeyProperty.OverrideMetadata(typeof(GroupBox), new FrameworkPropertyMetadata(typeof(GroupBox)));
 
             EventManager.RegisterClassHandler(typeof(GroupBox), AccessKeyManager.AccessKeyPressedEvent, new AccessKeyPressedEventHandler(OnAccessKeyPressed));
+            RegisterDefaultTheme();
         }
 
         protected override AutomationPeer OnCreateAutomationPeer()

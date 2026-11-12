@@ -11,8 +11,9 @@ namespace System.Windows.Controls
     /// <summary>
     /// Represents a Windows button control, which reacts to the Click event.
     /// </summary>
-    public class Button : ButtonBase
+    public partial class Button : ButtonBase
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty IsDefaultProperty =
             DependencyProperty.Register(
                 nameof(IsDefault),
@@ -27,6 +28,16 @@ namespace System.Windows.Controls
                 typeof(Button),
                 new FrameworkPropertyMetadata(false));
 
+        private static readonly DependencyPropertyKey IsDefaultedPropertyKey =
+            DependencyProperty.RegisterReadOnly(
+                nameof(IsDefaulted),
+                typeof(bool),
+                typeof(Button),
+                new FrameworkPropertyMetadata(false));
+
+        public static readonly DependencyProperty IsDefaultedProperty =
+            IsDefaultedPropertyKey.DependencyProperty;
+
         public bool IsDefault
         {
             get => (bool)GetValue(IsDefaultProperty);
@@ -39,9 +50,12 @@ namespace System.Windows.Controls
             set => SetValue(IsCancelProperty, value);
         }
 
+        public bool IsDefaulted => (bool)GetValue(IsDefaultedProperty);
+
         static Button()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Button), new FrameworkPropertyMetadata(typeof(Button)));
+            RegisterDefaultTheme();
         }
 
         public Button()

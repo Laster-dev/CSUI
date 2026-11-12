@@ -34,8 +34,9 @@ namespace System.Windows.Controls
     [ContentProperty("Items")]
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(FrameworkElement))]
     [Localizability(LocalizationCategory.None, Readability = Readability.Unreadable)] // cannot be read & localized as string
-    public class ItemsControl : Control, IAddChild, IGeneratorHost, IContainItemStorage
+    public partial class ItemsControl : Control, IAddChild, IGeneratorHost, IContainItemStorage
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         /// <summary>
@@ -55,6 +56,7 @@ namespace System.Windows.Controls
         {
             // Define default style in code instead of in theme files.
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ItemsControl), new FrameworkPropertyMetadata(typeof(ItemsControl)));
+            RegisterDefaultTheme();
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(ItemsControl));
             EventManager.RegisterClassHandler(typeof(ItemsControl), Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnGotFocus));
             VirtualizingPanel.ScrollUnitProperty.OverrideMetadata(typeof(ItemsControl), new FrameworkPropertyMetadata(new PropertyChangedCallback(OnScrollingModeChanged), new CoerceValueCallback(CoerceScrollingMode)));

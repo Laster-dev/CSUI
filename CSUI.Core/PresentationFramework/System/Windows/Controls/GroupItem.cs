@@ -21,8 +21,9 @@ namespace System.Windows.Controls
     /// <summary>
     ///     A GroupItem appears as the root of the visual subtree generated for a CollectionViewGroup.
     /// </summary>
-    public class GroupItem : ContentControl, IHierarchicalVirtualizationAndScrollInfo, IContainItemStorage, IGroupItemHost
+    public partial class GroupItem : ContentControl, IHierarchicalVirtualizationAndScrollInfo, IContainItemStorage, IGroupItemHost
     {
+        static partial void RegisterDefaultTheme();
         static GroupItem()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(GroupItem), new FrameworkPropertyMetadata(typeof(GroupItem)));
@@ -31,6 +32,7 @@ namespace System.Windows.Controls
             // GroupItems should not be focusable by default
             FocusableProperty.OverrideMetadata(typeof(GroupItem), new FrameworkPropertyMetadata(false));
             AutomationProperties.IsOffscreenBehaviorProperty.OverrideMetadata(typeof(GroupItem), new FrameworkPropertyMetadata(IsOffscreenBehavior.FromClip));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

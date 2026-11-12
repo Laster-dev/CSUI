@@ -19,8 +19,9 @@ namespace System.Windows.Controls
     }
 
     [Localizability(LocalizationCategory.None, Readability = Readability.Unreadable)]
-    public class Expander : HeaderedContentControl
+    public partial class Expander : HeaderedContentControl
     {
+        static partial void RegisterDefaultTheme();
         static Expander()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Expander), new FrameworkPropertyMetadata(typeof(Expander)));
@@ -29,6 +30,7 @@ namespace System.Windows.Controls
             IsTabStopProperty.OverrideMetadata(typeof(Expander), new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
             IsMouseOverPropertyKey.OverrideMetadata(typeof(Expander), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
             IsEnabledProperty.OverrideMetadata(typeof(Expander), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
+            RegisterDefaultTheme();
         }
 
         public static readonly DependencyProperty ExpandDirectionProperty =

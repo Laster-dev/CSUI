@@ -19,8 +19,9 @@ namespace System.Windows.Controls
     /// Features modern smooth physics inertia, full IScrollInfo virtualization delegation,
     /// and zero-allocation high-performance viewport management.
     /// </summary>
-    public class ScrollViewer : ContentControl
+    public partial class ScrollViewer : ContentControl
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty HorizontalScrollBarVisibilityProperty =
             DependencyProperty.RegisterAttached(
                 "HorizontalScrollBarVisibility",
@@ -55,6 +56,31 @@ namespace System.Windows.Controls
                 typeof(double),
                 typeof(ScrollViewer),
                 new FrameworkPropertyMetadata(0.80));
+
+        public static readonly DependencyProperty PanningModeProperty =
+            DependencyProperty.RegisterAttached(
+                "PanningMode",
+                typeof(PanningMode),
+                typeof(ScrollViewer),
+                new FrameworkPropertyMetadata(PanningMode.None));
+
+        public static PanningMode GetPanningMode(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (PanningMode)element.GetValue(PanningModeProperty);
+        }
+
+        public static void SetPanningMode(DependencyObject element, PanningMode panningMode)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(PanningModeProperty, panningMode);
+        }
+
+        public PanningMode PanningMode
+        {
+            get => (PanningMode)GetValue(PanningModeProperty);
+            set => SetValue(PanningModeProperty, value);
+        }
 
         private static readonly DependencyPropertyKey HorizontalOffsetPropertyKey =
             DependencyProperty.RegisterReadOnly(
@@ -116,6 +142,46 @@ namespace System.Windows.Controls
         public static readonly DependencyProperty ViewportHeightProperty =
             ViewportHeightPropertyKey.DependencyProperty;
 
+        private static readonly DependencyPropertyKey ScrollableWidthPropertyKey =
+            DependencyProperty.RegisterReadOnly(
+                nameof(ScrollableWidth),
+                typeof(double),
+                typeof(ScrollViewer),
+                new FrameworkPropertyMetadata(0.0));
+
+        public static readonly DependencyProperty ScrollableWidthProperty =
+            ScrollableWidthPropertyKey.DependencyProperty;
+
+        private static readonly DependencyPropertyKey ScrollableHeightPropertyKey =
+            DependencyProperty.RegisterReadOnly(
+                nameof(ScrollableHeight),
+                typeof(double),
+                typeof(ScrollViewer),
+                new FrameworkPropertyMetadata(0.0));
+
+        public static readonly DependencyProperty ScrollableHeightProperty =
+            ScrollableHeightPropertyKey.DependencyProperty;
+
+        private static readonly DependencyPropertyKey ComputedHorizontalScrollBarVisibilityPropertyKey =
+            DependencyProperty.RegisterReadOnly(
+                nameof(ComputedHorizontalScrollBarVisibility),
+                typeof(Visibility),
+                typeof(ScrollViewer),
+                new FrameworkPropertyMetadata(Visibility.Collapsed));
+
+        public static readonly DependencyProperty ComputedHorizontalScrollBarVisibilityProperty =
+            ComputedHorizontalScrollBarVisibilityPropertyKey.DependencyProperty;
+
+        private static readonly DependencyPropertyKey ComputedVerticalScrollBarVisibilityPropertyKey =
+            DependencyProperty.RegisterReadOnly(
+                nameof(ComputedVerticalScrollBarVisibility),
+                typeof(Visibility),
+                typeof(ScrollViewer),
+                new FrameworkPropertyMetadata(Visibility.Collapsed));
+
+        public static readonly DependencyProperty ComputedVerticalScrollBarVisibilityProperty =
+            ComputedVerticalScrollBarVisibilityPropertyKey.DependencyProperty;
+
         public static readonly RoutedEvent ScrollChangedEvent =
             EventManager.RegisterRoutedEvent(
                 "ScrollChanged",
@@ -125,10 +191,12 @@ namespace System.Windows.Controls
 
         static ScrollViewer()
         {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(ScrollViewer), new FrameworkPropertyMetadata(typeof(ScrollViewer)));
             EventManager.RegisterClassHandler(
                 typeof(ScrollViewer),
                 ModernGestureEngine.ModernGestureDeltaEvent,
                 new ModernGestureDeltaEventHandler(OnModernGestureDeltaThunk));
+            RegisterDefaultTheme();
         }
 
         private static void OnModernGestureDeltaThunk(object sender, ModernGestureDeltaEventArgs e)
@@ -441,6 +509,10 @@ namespace System.Windows.Controls
         private ChromiumScrollAxis _hScrollAnim;
         private bool _isSmoothScrollingActive;
         private RectangleGeometry _contentClip;
+        private ScrollContentPresenter _scrollContentPresenter;
+        private ScrollBar _templateHScrollBar;
+        private ScrollBar _templateVScrollBar;
+        private Visual _directContentVisual;
 
         public ScrollViewer()
         {
@@ -457,6 +529,35 @@ namespace System.Windows.Controls
             ClipToBounds = true;
         }
 
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+
+            if (_directContentVisual != null)
+            {
+                RemoveVisualChild(_directContentVisual);
+                _directContentVisual = null;
+            }
+
+            if (_templateHScrollBar != null) _templateHScrollBar.Scroll -= OnHScroll;
+            if (_templateVScrollBar != null) _templateVScrollBar.Scroll -= OnVScroll;
+
+            _scrollContentPresenter = GetTemplateChild(ScrollContentPresenterTemplateName) as ScrollContentPresenter;
+            _templateHScrollBar = GetTemplateChild("PART_HorizontalScrollBar") as ScrollBar;
+            _templateVScrollBar = GetTemplateChild("PART_VerticalScrollBar") as ScrollBar;
+
+            if (_templateHScrollBar != null) _templateHScrollBar.Scroll += OnHScroll;
+            if (_templateVScrollBar != null) _templateVScrollBar.Scroll += OnVScroll;
+
+            if (_scrollContentPresenter != null)
+            {
+                _scrollInfo = _scrollContentPresenter;
+                _scrollContentPresenter.ScrollOwner = this;
+                _scrollContentPresenter.CanHorizontallyScroll = HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                _scrollContentPresenter.CanVerticallyScroll = VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
+            }
+        }
+
         private void OnScrollViewerUnloaded(object sender, RoutedEventArgs e)
         {
             StopSmoothScroll();
@@ -466,12 +567,14 @@ namespace System.Windows.Controls
         {
             base.OnContentChanged(oldContent, newContent);
 
-            if (oldContent is Visual oldVisual)
+            if (_directContentVisual != null)
             {
-                RemoveVisualChild(oldVisual);
+                RemoveVisualChild(_directContentVisual);
+                _directContentVisual = null;
             }
-            if (newContent is Visual newVisual)
+            if (Template == null && newContent is Visual newVisual)
             {
+                _directContentVisual = newVisual;
                 AddVisualChild(newVisual);
             }
         }
@@ -480,6 +583,10 @@ namespace System.Windows.Controls
         {
             get
             {
+                if (Template != null)
+                {
+                    return TemplateChild != null ? 1 : 0;
+                }
                 int count = 2; // two scrollbars
                 if (Content is Visual) count++;
                 return count;
@@ -488,6 +595,11 @@ namespace System.Windows.Controls
 
         protected override Visual GetVisualChild(int index)
         {
+            if (Template != null)
+            {
+                if (index == 0 && TemplateChild != null) return TemplateChild;
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
             if (Content is Visual cv)
             {
                 if (index == 0) return cv;
@@ -530,6 +642,8 @@ namespace System.Windows.Controls
             SetValue(ExtentHeightPropertyKey, extH);
             SetValue(ViewportWidthPropertyKey, vpW);
             SetValue(ViewportHeightPropertyKey, vpH);
+            SetValue(ScrollableWidthPropertyKey, Math.Max(0.0, extW - vpW));
+            SetValue(ScrollableHeightPropertyKey, Math.Max(0.0, extH - vpH));
             SetValue(HorizontalOffsetPropertyKey, offX);
             SetValue(VerticalOffsetPropertyKey, offY);
 
@@ -543,6 +657,34 @@ namespace System.Windows.Controls
             _vScrollBar.Maximum = Math.Max(0, extH - vpH);
             _vScrollBar.ViewportSize = vpH;
             _vScrollBar.Value = offY;
+
+            if (_templateHScrollBar != null)
+            {
+                _templateHScrollBar.Minimum = 0;
+                _templateHScrollBar.Maximum = Math.Max(0, extW - vpW);
+                _templateHScrollBar.ViewportSize = vpW;
+                _templateHScrollBar.Value = offX;
+            }
+
+            if (_templateVScrollBar != null)
+            {
+                _templateVScrollBar.Minimum = 0;
+                _templateVScrollBar.Maximum = Math.Max(0, extH - vpH);
+                _templateVScrollBar.ViewportSize = vpH;
+                _templateVScrollBar.Value = offY;
+            }
+
+            if (Template != null)
+            {
+                ScrollBarVisibility hMode = HorizontalScrollBarVisibility;
+                ScrollBarVisibility vMode = VerticalScrollBarVisibility;
+                Visibility hVis = hMode == ScrollBarVisibility.Visible || (hMode == ScrollBarVisibility.Auto && extW > vpW + 0.5)
+                    ? Visibility.Visible : Visibility.Collapsed;
+                Visibility vVis = vMode == ScrollBarVisibility.Visible || (vMode == ScrollBarVisibility.Auto && extH > vpH + 0.5)
+                    ? Visibility.Visible : Visibility.Collapsed;
+                SetValue(ComputedHorizontalScrollBarVisibilityPropertyKey, hVis);
+                SetValue(ComputedVerticalScrollBarVisibilityPropertyKey, vVis);
+            }
 
             if (oldOffX != offX || oldOffY != offY || oldExtW != extW || oldExtH != extH || oldVpW != vpW || oldVpH != vpH)
             {
@@ -562,6 +704,20 @@ namespace System.Windows.Controls
 
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                if (_directContentVisual != null)
+                {
+                    RemoveVisualChild(_directContentVisual);
+                    _directContentVisual = null;
+                }
+                if (_scrollContentPresenter != null)
+                {
+                    _scrollContentPresenter.CanHorizontallyScroll = HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                    _scrollContentPresenter.CanVerticallyScroll = VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                }
+                return base.MeasureOverride(constraint);
+            }
             UIElement content = Content as UIElement;
             _scrollInfo = (CanContentScroll && content is IScrollInfo si) ? si : null;
 
@@ -620,6 +776,7 @@ namespace System.Windows.Controls
             {
                 _hScrollBar.Visibility = Visibility.Collapsed;
             }
+            SetValue(ComputedHorizontalScrollBarVisibilityPropertyKey, _hScrollBar.Visibility);
 
             if (showV)
             {
@@ -630,6 +787,7 @@ namespace System.Windows.Controls
             {
                 _vScrollBar.Visibility = Visibility.Collapsed;
             }
+            SetValue(ComputedVerticalScrollBarVisibilityPropertyKey, _vScrollBar.Visibility);
 
             if (_scrollInfo == null)
             {
@@ -644,6 +802,10 @@ namespace System.Windows.Controls
 
         protected override Size ArrangeOverride(Size finalSize)
         {
+            if (Template != null)
+            {
+                return base.ArrangeOverride(finalSize);
+            }
             const double SbThickness = 10.0;
             bool showH = _hScrollBar.Visibility == Visibility.Visible;
             bool showV = _vScrollBar.Visibility == Visibility.Visible;
@@ -730,9 +892,13 @@ namespace System.Windows.Controls
             ScrollToVerticalOffset(e.NewValue);
         }
 
-        public double ScrollableWidth => Math.Max(0.0, ExtentWidth - ViewportWidth);
+        public double ScrollableWidth => (double)GetValue(ScrollableWidthProperty);
 
-        public double ScrollableHeight => Math.Max(0.0, ExtentHeight - ViewportHeight);
+        public double ScrollableHeight => (double)GetValue(ScrollableHeightProperty);
+
+        public Visibility ComputedHorizontalScrollBarVisibility => (Visibility)GetValue(ComputedHorizontalScrollBarVisibilityProperty);
+
+        public Visibility ComputedVerticalScrollBarVisibility => (Visibility)GetValue(ComputedVerticalScrollBarVisibilityProperty);
 
         public void ScrollToVerticalOffset(double offset)
         {

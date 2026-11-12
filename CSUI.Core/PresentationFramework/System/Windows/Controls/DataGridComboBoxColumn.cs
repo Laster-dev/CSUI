@@ -12,13 +12,15 @@ namespace System.Windows.Controls
     /// <summary>
     ///     A column that displays a drop-down list while in edit mode.
     /// </summary>
-    public class DataGridComboBoxColumn : DataGridColumn
+    public partial class DataGridComboBoxColumn : DataGridColumn
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static DataGridComboBoxColumn()
         {
             SortMemberPathProperty.OverrideMetadata(typeof(DataGridComboBoxColumn), new FrameworkPropertyMetadata(null, OnCoerceSortMemberPath));
+            RegisterDefaultTheme();
         }
 
         #endregion

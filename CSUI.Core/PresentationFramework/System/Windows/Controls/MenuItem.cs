@@ -60,8 +60,9 @@ namespace System.Windows.Controls
     [Localizability(LocalizationCategory.Menu)]
     [TemplatePart(Name = "PART_Popup", Type = typeof(Popup))]
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(MenuItem))]
-    public class MenuItem : HeaderedItemsControl, ICommandSource
+    public partial class MenuItem : HeaderedItemsControl, ICommandSource
     {
+        static partial void RegisterDefaultTheme();
         // ----------------------------------------------------------------------------
         //  Defines the names of the resources to be consumed by the MenuItem style.
         //  Used to restyle several roles of MenuItem without having to restyle
@@ -187,6 +188,7 @@ namespace System.Windows.Controls
             // dispatched to IME/TIP.
             InputMethod.IsInputMethodSuspendedProperty.OverrideMetadata(typeof(MenuItem), new FrameworkPropertyMetadata(BooleanBoxes.TrueBox, FrameworkPropertyMetadataOptions.Inherits));
             AutomationProperties.IsOffscreenBehaviorProperty.OverrideMetadata(typeof(MenuItem), new FrameworkPropertyMetadata(IsOffscreenBehavior.FromClip));
+            RegisterDefaultTheme();
         }
 
         #endregion

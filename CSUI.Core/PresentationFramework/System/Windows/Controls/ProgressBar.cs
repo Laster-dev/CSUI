@@ -13,14 +13,16 @@ namespace System.Windows.Controls
     /// <summary>
     /// Indicates the progress of an operation.
     /// </summary>
-    public class ProgressBar : RangeBase
+    public partial class ProgressBar : RangeBase
     {
+        static partial void RegisterDefaultTheme();
+
         public static readonly DependencyProperty IsIndeterminateProperty =
             DependencyProperty.Register(
                 nameof(IsIndeterminate),
                 typeof(bool),
                 typeof(ProgressBar),
-                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender, OnIsIndeterminateChanged));
 
         public static readonly DependencyProperty OrientationProperty =
             DependencyProperty.Register(
@@ -28,6 +30,10 @@ namespace System.Windows.Controls
                 typeof(Orientation),
                 typeof(ProgressBar),
                 new FrameworkPropertyMetadata(Orientation.Horizontal, FrameworkPropertyMetadataOptions.AffectsMeasure));
+
+        private FrameworkElement _track;
+        private FrameworkElement _indicator;
+        private FrameworkElement _glow;
 
         public bool IsIndeterminate
         {
@@ -45,14 +51,73 @@ namespace System.Windows.Controls
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ProgressBar), new FrameworkPropertyMetadata(typeof(ProgressBar)));
             FocusableProperty.OverrideMetadata(typeof(ProgressBar), new FrameworkPropertyMetadata(false));
+            MinimumProperty.OverrideMetadata(typeof(ProgressBar), new FrameworkPropertyMetadata(0.0, OnMinimumOrMaximumChanged));
+            MaximumProperty.OverrideMetadata(typeof(ProgressBar), new FrameworkPropertyMetadata(100.0, OnMinimumOrMaximumChanged));
+            RegisterDefaultTheme();
         }
 
         public ProgressBar()
         {
         }
 
+        private static void OnIsIndeterminateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is ProgressBar pb)
+            {
+                pb.SetProgressBarIndicatorLength();
+                pb.UpdateProgressVisualState(true);
+            }
+        }
+
+        private static void OnMinimumOrMaximumChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is ProgressBar pb)
+            {
+                pb.SetProgressBarIndicatorLength();
+            }
+        }
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            _track = GetTemplateChild("PART_Track") as FrameworkElement;
+            _indicator = GetTemplateChild("PART_Indicator") as FrameworkElement;
+            _glow = GetTemplateChild("PART_GlowRect") as FrameworkElement;
+            SetProgressBarIndicatorLength();
+            UpdateProgressVisualState(false);
+        }
+
+        protected override void OnValueChanged(double oldValue, double newValue)
+        {
+            base.OnValueChanged(oldValue, newValue);
+            SetProgressBarIndicatorLength();
+        }
+
+        private void SetProgressBarIndicatorLength()
+        {
+            if (_track == null || _indicator == null)
+            {
+                return;
+            }
+
+            double min = Minimum;
+            double max = Maximum;
+            double val = Value;
+            double percent = (IsIndeterminate || max <= min) ? 1.0 : Math.Clamp((val - min) / (max - min), 0.0, 1.0);
+            _indicator.Width = percent * _track.ActualWidth;
+        }
+
+        private void UpdateProgressVisualState(bool useTransitions)
+        {
+            VisualStateManager.GoToState(this, IsIndeterminate ? "Indeterminate" : "Determinate", useTransitions);
+        }
+
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                return base.MeasureOverride(constraint);
+            }
             if (Orientation == Orientation.Horizontal)
             {
                 double w = double.IsInfinity(constraint.Width) ? 160.0 : Math.Max(40.0, constraint.Width);
@@ -65,12 +130,23 @@ namespace System.Windows.Controls
             }
         }
 
+        protected override Size ArrangeOverride(Size arrangeBounds)
+        {
+            Size arranged = base.ArrangeOverride(arrangeBounds);
+            SetProgressBarIndicatorLength();
+            return arranged;
+        }
+
         protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
             new System.Windows.Automation.Peers.ProgressBarAutomationPeer(this);
 
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
+            if (Template != null)
+            {
+                return;
+            }
             double w = RenderSize.Width;
             double h = RenderSize.Height;
             if (w <= 0 || h <= 0) return;

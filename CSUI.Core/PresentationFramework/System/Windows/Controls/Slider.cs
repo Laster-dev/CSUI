@@ -14,8 +14,9 @@ namespace System.Windows.Controls
     /// <summary>
     /// Represents a control that lets the user select from a range of values by moving a Thumb control along a track.
     /// </summary>
-    public class Slider : RangeBase
+    public partial class Slider : RangeBase
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty OrientationProperty =
             DependencyProperty.Register(
                 nameof(Orientation),
@@ -218,6 +219,38 @@ namespace System.Windows.Controls
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Slider), new FrameworkPropertyMetadata(typeof(Slider)));
             FocusableProperty.OverrideMetadata(typeof(Slider), new FrameworkPropertyMetadata(true));
+            EventManager.RegisterClassHandler(typeof(Slider), Thumb.DragDeltaEvent, new DragDeltaEventHandler(OnThumbDragDeltaThunk));
+            CommandManager.RegisterClassCommandBinding(typeof(Slider), new CommandBinding(DecreaseLarge, OnDecreaseLargeCommand));
+            CommandManager.RegisterClassCommandBinding(typeof(Slider), new CommandBinding(IncreaseLarge, OnIncreaseLargeCommand));
+            RegisterDefaultTheme();
+        }
+
+        private static void OnThumbDragDeltaThunk(object sender, DragDeltaEventArgs e)
+        {
+            if (sender is Slider slider && slider._track != null)
+            {
+                double delta = slider._track.ValueFromDistance(e.HorizontalChange, e.VerticalChange);
+                if (!double.IsNaN(delta) && !double.IsInfinity(delta) && delta != 0.0)
+                {
+                    slider.ChangeValue(delta);
+                }
+            }
+        }
+
+        private static void OnDecreaseLargeCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (sender is Slider slider)
+            {
+                slider.ChangeValue(-slider.LargeChange);
+            }
+        }
+
+        private static void OnIncreaseLargeCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (sender is Slider slider)
+            {
+                slider.ChangeValue(slider.LargeChange);
+            }
         }
 
         public Slider()
@@ -226,6 +259,10 @@ namespace System.Windows.Controls
 
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                return base.MeasureOverride(constraint);
+            }
             if (Orientation == Orientation.Horizontal)
             {
                 double w = double.IsInfinity(constraint.Width) ? 160.0 : Math.Max(60.0, constraint.Width);
@@ -253,7 +290,7 @@ namespace System.Windows.Controls
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonDown(e);
-            if (!IsEnabled) return;
+            if (_track != null || Template != null || !IsEnabled) return;
             Focus();
             CaptureMouse();
             UpdateValueFromMouse(e.GetPosition(this));
@@ -263,7 +300,7 @@ namespace System.Windows.Controls
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            if (IsMouseCaptured)
+            if (_track == null && IsMouseCaptured)
             {
                 UpdateValueFromMouse(e.GetPosition(this));
                 e.Handled = true;
@@ -273,7 +310,7 @@ namespace System.Windows.Controls
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonUp(e);
-            if (IsMouseCaptured)
+            if (_track == null && IsMouseCaptured)
             {
                 ReleaseMouseCapture();
                 e.Handled = true;
@@ -313,6 +350,7 @@ namespace System.Windows.Controls
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
+            if (Template != null) return;
             double w = RenderSize.Width;
             double h = RenderSize.Height;
             if (w <= 0 || h <= 0) return;

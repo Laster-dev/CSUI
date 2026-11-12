@@ -21,8 +21,9 @@ namespace System.Windows.Controls.Primitives
     ///     using a special collection to avoid keeping multiple references to the
     ///     same object.
     /// </summary>
-    public class DataGridCellsPresenter : ItemsControl
+    public partial class DataGridCellsPresenter : ItemsControl
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         /// <summary>
@@ -31,7 +32,8 @@ namespace System.Windows.Controls.Primitives
         static DataGridCellsPresenter()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(DataGridCellsPresenter), new FrameworkPropertyMetadata(typeof(DataGridCellsPresenter)));
-            ItemsPanelProperty.OverrideMetadata(typeof(DataGridCellsPresenter), new FrameworkPropertyMetadata(new ItemsPanelTemplate(new FrameworkElementFactory(typeof(DataGridCellsPanel)))));
+            RegisterDefaultTheme();
+            ItemsPanelProperty.OverrideMetadata(typeof(DataGridCellsPresenter), new FrameworkPropertyMetadata(new ItemsPanelTemplate(FrameworkElementFactory.Create<DataGridCellsPanel>())));
             FocusableProperty.OverrideMetadata(typeof(DataGridCellsPresenter), new FrameworkPropertyMetadata(false));
 
             HeightProperty.OverrideMetadata(typeof(DataGridCellsPresenter), new FrameworkPropertyMetadata(OnNotifyHeightPropertyChanged, OnCoerceHeight));

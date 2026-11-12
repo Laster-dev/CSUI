@@ -16,8 +16,9 @@ namespace System.Windows.Controls
     [DefaultProperty(nameof(Source)), DefaultEvent(nameof(Navigated))]
     [ContentProperty]
     [TemplatePart(Name = "PART_FrameCP", Type = typeof(ContentPresenter))]
-    public class Frame : ContentControl, INavigator, INavigationHost, IAddChild, IUriContext
+    public partial class Frame : ContentControl, INavigator, INavigationHost, IAddChild, IUriContext
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty SourceProperty =
             DependencyProperty.Register(
                 nameof(Source),
@@ -90,6 +91,7 @@ namespace System.Windows.Controls
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Frame), new FrameworkPropertyMetadata(typeof(Frame)));
             KeyboardNavigation.TabNavigationProperty.OverrideMetadata(typeof(Frame), new FrameworkPropertyMetadata(KeyboardNavigationMode.Local));
             KeyboardNavigation.ControlTabNavigationProperty.OverrideMetadata(typeof(Frame), new FrameworkPropertyMetadata(KeyboardNavigationMode.Once));
+            RegisterDefaultTheme();
         }
 
         public Frame()

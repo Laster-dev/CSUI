@@ -13,8 +13,9 @@ using MS.Internal.Controls;
 namespace System.Windows.Controls
 {
     [ContentProperty(nameof(Content))]
-    public class Page : FrameworkElement, IWindowService, IAddChild
+    public partial class Page : FrameworkElement, IWindowService, IAddChild
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty ContentProperty =
             ContentControl.ContentProperty.AddOwner(
                 typeof(Page),
@@ -59,6 +60,7 @@ namespace System.Windows.Controls
             ControlFoundationHooks.IsValidControlTemplateTargetTypeHook = static t => typeof(Page).IsAssignableFrom(t);
             FocusableProperty.OverrideMetadata(typeof(Page), new FrameworkPropertyMetadata(false));
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Page), new FrameworkPropertyMetadata(typeof(Page)));
+            RegisterDefaultTheme();
         }
 
         public Page()

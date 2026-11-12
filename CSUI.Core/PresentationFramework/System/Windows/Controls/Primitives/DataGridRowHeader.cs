@@ -15,8 +15,9 @@ namespace System.Windows.Controls.Primitives
     /// </summary>
     [TemplatePart(Name = "PART_TopHeaderGripper", Type = typeof(Thumb))]
     [TemplatePart(Name = "PART_BottomHeaderGripper", Type = typeof(Thumb))]
-    public class DataGridRowHeader : ButtonBase
+    public partial class DataGridRowHeader : ButtonBase
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
 
         private const byte DATAGRIDROWHEADER_stateMouseOverCode = 0;
@@ -116,6 +117,7 @@ namespace System.Windows.Controls.Primitives
         static DataGridRowHeader()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(DataGridRowHeader), new FrameworkPropertyMetadata(typeof(DataGridRowHeader)));
+            RegisterDefaultTheme();
 
             ContentProperty.OverrideMetadata(typeof(DataGridRowHeader), new FrameworkPropertyMetadata(OnNotifyPropertyChanged, OnCoerceContent));
             ContentTemplateProperty.OverrideMetadata(typeof(DataGridRowHeader), new FrameworkPropertyMetadata(OnNotifyPropertyChanged, OnCoerceContentTemplate));

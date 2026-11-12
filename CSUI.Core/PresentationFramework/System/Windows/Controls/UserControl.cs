@@ -8,8 +8,9 @@ using System.Windows.Input;
 
 namespace System.Windows.Controls
 {
-    public class UserControl : ContentControl
+    public partial class UserControl : ContentControl
     {
+        static partial void RegisterDefaultTheme();
         static UserControl()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(UserControl), new FrameworkPropertyMetadata(typeof(UserControl)));
@@ -20,6 +21,7 @@ namespace System.Windows.Controls
 
             HorizontalContentAlignmentProperty.OverrideMetadata(typeof(UserControl), new FrameworkPropertyMetadata(HorizontalAlignment.Stretch));
             VerticalContentAlignmentProperty.OverrideMetadata(typeof(UserControl), new FrameworkPropertyMetadata(VerticalAlignment.Stretch));
+            RegisterDefaultTheme();
         }
 
         public UserControl()

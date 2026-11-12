@@ -13,8 +13,9 @@ namespace System.Windows.Controls
     /// <summary>
     ///     Control that defines a menu of choices for users to invoke.
     /// </summary>
-    public class Menu : MenuBase
+    public partial class Menu : MenuBase
     {
+        static partial void RegisterDefaultTheme();
         //-------------------------------------------------------------------
         //
         //  Constructors
@@ -46,11 +47,12 @@ namespace System.Windows.Controls
             KeyboardNavigation.DirectionalNavigationProperty.OverrideMetadata(typeof(Menu), new FrameworkPropertyMetadata(KeyboardNavigationMode.Cycle));
 
             EventManager.RegisterClassHandler(typeof(Menu), AccessKeyManager.AccessKeyPressedEvent, new AccessKeyPressedEventHandler(OnAccessKeyPressed));
+            RegisterDefaultTheme();
         }
 
         private static ItemsPanelTemplate GetDefaultPanel()
         {
-            FrameworkElementFactory panel = new FrameworkElementFactory(typeof(WrapPanel));
+            FrameworkElementFactory panel = FrameworkElementFactory.Create<WrapPanel>();
             ItemsPanelTemplate template = new ItemsPanelTemplate(panel);
             template.Seal();
             return template;

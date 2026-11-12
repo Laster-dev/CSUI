@@ -11,8 +11,9 @@ namespace System.Windows.Controls.Primitives
     /// <summary>
     /// Represents a button control used in Calendar Control, which reacts to the Click event.
     /// </summary>
-    public sealed class CalendarDayButton : Button
+    public sealed partial class CalendarDayButton : Button
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
         /// <summary>
         /// Default content for the CalendarDayButton
@@ -27,6 +28,7 @@ namespace System.Windows.Controls.Primitives
         static CalendarDayButton()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(CalendarDayButton), new FrameworkPropertyMetadata(typeof(CalendarDayButton)));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

@@ -20,8 +20,10 @@ namespace System.Windows.Controls
     /// Managed RichTextBox operating on FlowDocument with DirectWrite GPU rendering (zero PresentationNative C++ PTS dependency).
     /// </summary>
     [ContentProperty(nameof(Document))]
-    public class RichTextBox : TextBoxBase, IAddChild
+    public partial class RichTextBox : TextBoxBase, IAddChild
     {
+        static partial void RegisterDefaultTheme();
+
         public static readonly DependencyProperty IsDocumentEnabledProperty =
             DependencyProperty.Register(nameof(IsDocumentEnabled), typeof(bool), typeof(RichTextBox), new FrameworkPropertyMetadata(false));
 
@@ -29,12 +31,24 @@ namespace System.Windows.Controls
         private int _caretOffset;
         private int _selectionLength;
         private TextSelection _selection;
+        private TextContentHostView _contentHostView;
 
         static RichTextBox()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(RichTextBox), new FrameworkPropertyMetadata(typeof(RichTextBox)));
             KeyboardNavigation.AcceptsReturnProperty.OverrideMetadata(typeof(RichTextBox), new FrameworkPropertyMetadata(true));
             AcceptsReturnProperty.OverrideMetadata(typeof(RichTextBox), new FrameworkPropertyMetadata(true));
+            RegisterDefaultTheme();
+        }
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            _contentHostView = AttachContentHost(
+                GetTemplateChild("PART_ContentHost"),
+                _contentHostView,
+                MeasureContentView,
+                RenderContentView);
         }
 
         public RichTextBox() : this(null)
@@ -216,6 +230,11 @@ namespace System.Windows.Controls
 
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                _contentHostView?.InvalidateMeasure();
+                return base.MeasureOverride(constraint);
+            }
             string plain = _document?.GetPlainText() ?? string.Empty;
             Thickness pad = Padding;
             Thickness border = BorderThickness;
@@ -231,8 +250,37 @@ namespace System.Windows.Controls
                 double.IsInfinity(constraint.Height) ? Math.Max(48.0, h) : Math.Min(constraint.Height, Math.Max(24.0, h)));
         }
 
+        private Size MeasureContentView(Size constraint)
+        {
+            string plain = _document?.GetPlainText() ?? string.Empty;
+            Thickness pad = Padding;
+            double availW = double.IsInfinity(constraint.Width)
+                ? double.PositiveInfinity
+                : Math.Max(0.0, constraint.Width - pad.Left - pad.Right);
+            FormattedText ft = CreateFormattedText(plain.Length > 0 ? plain : " ", availW);
+            return new Size(Math.Max(10.0, ft.Width + pad.Left + pad.Right), Math.Max(18.0, ft.Height + pad.Top + pad.Bottom));
+        }
+
+        private void RenderContentView(DrawingContext dc, Size bounds)
+        {
+            string plain = _document?.GetPlainText() ?? string.Empty;
+            if (!string.IsNullOrEmpty(plain))
+            {
+                Thickness pad = Padding;
+                double availW = Math.Max(0.0, bounds.Width - pad.Left - pad.Right);
+                FormattedText ft = CreateFormattedText(plain, availW);
+                dc.DrawText(ft, new Point(pad.Left, pad.Top));
+            }
+        }
+
         protected override void OnRender(DrawingContext dc)
         {
+            if (Template != null)
+            {
+                base.OnRender(dc);
+                _contentHostView?.InvalidateVisual();
+                return;
+            }
             Rect bounds = new Rect(0, 0, RenderSize.Width, RenderSize.Height);
             Brush bg = Background ?? Brushes.White;
             dc.DrawRectangle(bg, null, bounds);

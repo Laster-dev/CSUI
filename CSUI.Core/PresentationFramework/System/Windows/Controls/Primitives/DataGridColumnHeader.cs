@@ -18,13 +18,15 @@ namespace System.Windows.Controls.Primitives
     /// </summary>
     [TemplatePart(Name = "PART_LeftHeaderGripper", Type = typeof(Thumb))]
     [TemplatePart(Name = "PART_RightHeaderGripper", Type = typeof(Thumb))]
-    public class DataGridColumnHeader : ButtonBase, IProvideDataGridColumn
+    public partial class DataGridColumnHeader : ButtonBase, IProvideDataGridColumn
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static DataGridColumnHeader()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(DataGridColumnHeader), new FrameworkPropertyMetadata(typeof(DataGridColumnHeader)));
+            RegisterDefaultTheme();
 
             ContentProperty.OverrideMetadata(typeof(DataGridColumnHeader), new FrameworkPropertyMetadata(OnNotifyPropertyChanged, OnCoerceContent));
             ContentTemplateProperty.OverrideMetadata(typeof(DataGridColumnHeader), new FrameworkPropertyMetadata(null, OnNotifyPropertyChanged, OnCoerceContentTemplate));

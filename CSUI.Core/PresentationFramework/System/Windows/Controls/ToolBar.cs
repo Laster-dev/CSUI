@@ -50,8 +50,9 @@ namespace System.Windows.Controls
     /// </summary>
     [TemplatePart(Name = "PART_ToolBarPanel", Type = typeof(ToolBarPanel))]
     [TemplatePart(Name = "PART_ToolBarOverflowPanel", Type = typeof(ToolBarOverflowPanel))]
-    public class ToolBar : HeaderedItemsControl
+    public partial class ToolBar : HeaderedItemsControl
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static ToolBar()
@@ -71,6 +72,7 @@ namespace System.Windows.Controls
 
             EventManager.RegisterClassHandler(typeof(ToolBar), Mouse.MouseDownEvent, new MouseButtonEventHandler(OnMouseButtonDown), true);
             EventManager.RegisterClassHandler(typeof(ToolBar), ButtonBase.ClickEvent, new RoutedEventHandler(_OnClick));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

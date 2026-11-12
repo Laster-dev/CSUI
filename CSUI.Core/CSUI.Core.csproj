@@ -15,6 +15,13 @@
     <CompositeFontSource Include="PresentationCore\Fonts\*.CompositeFont" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\CSUI.Generators\CSUI.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <AdditionalFiles Include="Themes\Aero2\*.xaml" />
+  </ItemGroup>
+
   <UsingTask TaskName="MinifyCompositeFontTask"
              TaskFactory="RoslynCodeTaskFactory"
              AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">

@@ -14,8 +14,9 @@ namespace System.Windows.Controls
     /// <summary>
     /// Represents a control designed for entering and handling passwords.
     /// </summary>
-    public class PasswordBox : Control
+    public partial class PasswordBox : Control
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty PasswordProperty =
             DependencyProperty.Register(
                 nameof(Password),
@@ -36,6 +37,51 @@ namespace System.Windows.Controls
                 typeof(int),
                 typeof(PasswordBox),
                 new FrameworkPropertyMetadata(0));
+
+        public static readonly DependencyProperty SelectionBrushProperty =
+            DependencyProperty.Register(
+                nameof(SelectionBrush),
+                typeof(Brush),
+                typeof(PasswordBox),
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty SelectionTextBrushProperty =
+            DependencyProperty.Register(
+                nameof(SelectionTextBrush),
+                typeof(Brush),
+                typeof(PasswordBox),
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty SelectionOpacityProperty =
+            DependencyProperty.Register(
+                nameof(SelectionOpacity),
+                typeof(double),
+                typeof(PasswordBox),
+                new FrameworkPropertyMetadata(0.4, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty CaretBrushProperty =
+            DependencyProperty.Register(
+                nameof(CaretBrush),
+                typeof(Brush),
+                typeof(PasswordBox),
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty IsInactiveSelectionHighlightEnabledProperty =
+            DependencyProperty.Register(
+                nameof(IsInactiveSelectionHighlightEnabled),
+                typeof(bool),
+                typeof(PasswordBox),
+                new FrameworkPropertyMetadata(false));
+
+        private static readonly DependencyPropertyKey IsSelectionActivePropertyKey =
+            DependencyProperty.RegisterReadOnly(
+                nameof(IsSelectionActive),
+                typeof(bool),
+                typeof(PasswordBox),
+                new FrameworkPropertyMetadata(false));
+
+        public static readonly DependencyProperty IsSelectionActiveProperty =
+            IsSelectionActivePropertyKey.DependencyProperty;
 
         public static readonly RoutedEvent PasswordChangedEvent =
             EventManager.RegisterRoutedEvent(
@@ -62,6 +108,38 @@ namespace System.Windows.Controls
             set => SetValue(MaxLengthProperty, value);
         }
 
+        public Brush SelectionBrush
+        {
+            get => (Brush)GetValue(SelectionBrushProperty);
+            set => SetValue(SelectionBrushProperty, value);
+        }
+
+        public Brush SelectionTextBrush
+        {
+            get => (Brush)GetValue(SelectionTextBrushProperty);
+            set => SetValue(SelectionTextBrushProperty, value);
+        }
+
+        public double SelectionOpacity
+        {
+            get => (double)GetValue(SelectionOpacityProperty);
+            set => SetValue(SelectionOpacityProperty, value);
+        }
+
+        public Brush CaretBrush
+        {
+            get => (Brush)GetValue(CaretBrushProperty);
+            set => SetValue(CaretBrushProperty, value);
+        }
+
+        public bool IsInactiveSelectionHighlightEnabled
+        {
+            get => (bool)GetValue(IsInactiveSelectionHighlightEnabledProperty);
+            set => SetValue(IsInactiveSelectionHighlightEnabledProperty, value);
+        }
+
+        public bool IsSelectionActive => (bool)GetValue(IsSelectionActiveProperty);
+
         public event RoutedEventHandler PasswordChanged
         {
             add => AddHandler(PasswordChangedEvent, value);
@@ -72,6 +150,19 @@ namespace System.Windows.Controls
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(PasswordBox), new FrameworkPropertyMetadata(typeof(PasswordBox)));
             FocusableProperty.OverrideMetadata(typeof(PasswordBox), new FrameworkPropertyMetadata(true));
+            RegisterDefaultTheme();
+        }
+
+        private System.Windows.Controls.Primitives.TextBoxBase.TextContentHostView _contentHostView;
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            _contentHostView = System.Windows.Controls.Primitives.TextBoxBase.AttachContentHost(
+                GetTemplateChild("PART_ContentHost"),
+                _contentHostView,
+                MeasureContentView,
+                RenderContentView);
         }
 
         public PasswordBox()
@@ -141,16 +232,11 @@ namespace System.Windows.Controls
             }
         }
 
-        protected override Size MeasureOverride(Size constraint)
+        private FormattedText CreateMaskedText(int len)
         {
-            double horizontalPadding = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
-            double verticalPadding = Padding.Top + Padding.Bottom + BorderThickness.Top + BorderThickness.Bottom;
-
-            int len = Math.Max(1, Password.Length);
             string masked = new(PasswordChar, len);
-
             Typeface typeface = new(FontFamily ?? new FontFamily("Segoe UI"), FontStyle, FontWeight, FontStretch);
-            FormattedText ft = new(
+            return new(
                 masked,
                 CultureInfo.CurrentUICulture,
                 FlowDirection.LeftToRight,
@@ -160,13 +246,43 @@ namespace System.Windows.Controls
                 null,
                 TextFormattingMode.Ideal,
                 1.0);
+        }
 
+        protected override Size MeasureOverride(Size constraint)
+        {
+            if (Template != null)
+            {
+                _contentHostView?.InvalidateMeasure();
+                return base.MeasureOverride(constraint);
+            }
+            double horizontalPadding = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
+            double verticalPadding = Padding.Top + Padding.Bottom + BorderThickness.Top + BorderThickness.Bottom;
+
+            FormattedText ft = CreateMaskedText(Math.Max(1, Password.Length));
             return new Size(ft.Width + horizontalPadding, ft.Height + verticalPadding);
+        }
+
+        private Size MeasureContentView(Size constraint)
+        {
+            FormattedText ft = CreateMaskedText(Math.Max(1, Password.Length));
+            return new Size(ft.Width + Padding.Left + Padding.Right, ft.Height + Padding.Top + Padding.Bottom);
+        }
+
+        private void RenderContentView(DrawingContext dc, Size bounds)
+        {
+            if (bounds.Width <= 0 || bounds.Height <= 0 || string.IsNullOrEmpty(Password)) return;
+            FormattedText ft = CreateMaskedText(Password.Length);
+            dc.DrawText(ft, new Point(Padding.Left, Padding.Top));
         }
 
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
+            if (Template != null)
+            {
+                _contentHostView?.InvalidateVisual();
+                return;
+            }
 
             Rect bounds = new(0, 0, RenderSize.Width, RenderSize.Height);
             if (bounds.Width <= 0 || bounds.Height <= 0) return;

@@ -24,8 +24,9 @@ namespace System.Windows.Controls
     ///     HeaderedContentControl adds Header, HasHeader, HeaderTemplate, and HeaderTemplateSelector features to a ContentControl.
     /// </remarks>
     [Localizability(LocalizationCategory.Text)] // can contain localizable text
-    public class HeaderedContentControl : ContentControl
+    public partial class HeaderedContentControl : ContentControl
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static HeaderedContentControl()
@@ -34,6 +35,7 @@ namespace System.Windows.Controls
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(HeaderedContentControl));
             FrameworkElementFactory.RegisterType<HeaderedContentControl>();
             ControlFoundationHooks.HeaderedContentControlHeaderPropertyHook = HeaderProperty;
+            RegisterDefaultTheme();
         }
 
         /// <summary>

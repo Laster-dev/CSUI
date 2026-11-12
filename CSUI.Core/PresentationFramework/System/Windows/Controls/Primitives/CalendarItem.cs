@@ -20,6 +20,7 @@ namespace System.Windows.Controls.Primitives
     [TemplatePart(Name = CalendarItem.ElementDisabledVisual, Type = typeof(FrameworkElement))]
     public sealed partial class CalendarItem : Control
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
         private const string ElementRoot = "PART_Root";
         private const string ElementHeaderButton = "PART_HeaderButton";
@@ -63,6 +64,7 @@ namespace System.Windows.Controls.Primitives
             KeyboardNavigation.DirectionalNavigationProperty.OverrideMetadata(typeof(CalendarItem), new FrameworkPropertyMetadata(KeyboardNavigationMode.Contained));
 
             IsEnabledProperty.OverrideMetadata(typeof(CalendarItem), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

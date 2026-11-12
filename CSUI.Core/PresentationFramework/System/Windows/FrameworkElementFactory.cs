@@ -232,6 +232,30 @@ namespace System.Windows
         }
 
         /// <summary>
+        ///     Attaches a child element factory assigned via a CLR property on the parent (e.g. Track.Thumb, BulletDecorator.Bullet).
+        /// </summary>
+        public void AppendChildProperty(Action<DependencyObject, DependencyObject> parentPropertyAssigner, FrameworkElementFactory child)
+        {
+            ArgumentNullException.ThrowIfNull(parentPropertyAssigner);
+            ArgumentNullException.ThrowIfNull(child);
+            child._parentPropertyAssigner = parentPropertyAssigner;
+            AppendChild(child);
+        }
+
+        /// <summary>
+        ///     Registers an action invoked whenever this template node is instantiated (e.g. attaching VisualStateGroups or local resources).
+        /// </summary>
+        public void AddPostInstantiateAction(Action<DependencyObject> action)
+        {
+            if (_sealed)
+            {
+                throw new InvalidOperationException(SR.Format(SR.CannotChangeAfterSealed, "FrameworkElementFactory"));
+            }
+            ArgumentNullException.ThrowIfNull(action);
+            _postInstantiateAction += action;
+        }
+
+        /// <summary>
         ///     Simple value set on template child
         /// </summary>
         /// <param name="dp">Dependent property</param>
@@ -599,9 +623,20 @@ namespace System.Windows
 
             if (_firstChild != null && _type != null)
             {
-                // This factory has children, it must implement IAddChild so that these
+                // This factory has direct AddChild children, it must implement IAddChild so that these
                 // children can be added to the logical tree
-                if (!typeof(IAddChild).IsAssignableFrom(_type))
+                bool requiresAddChild = false;
+                FrameworkElementFactory c = _firstChild;
+                while (c != null)
+                {
+                    if (c._parentPropertyAssigner == null)
+                    {
+                        requiresAddChild = true;
+                        break;
+                    }
+                    c = c._nextSibling;
+                }
+                if (requiresAddChild && !typeof(IAddChild).IsAssignableFrom(_type))
                 {
                     throw new InvalidOperationException(SR.Format(SR.TypeMustImplementIAddChild, _type.Name));
                 }
@@ -822,6 +857,8 @@ namespace System.Windows
                     childFactory = childFactory._nextSibling;
                 }
 
+                _postInstantiateAction?.Invoke(treeNode);
+
                 // Fire "Initialized" event
                 NewNodeEndInit( treeNodeIsFE, treeNodeFO.FE, treeNodeFO.FCE );
             }
@@ -832,6 +869,12 @@ namespace System.Windows
 
         private void AddNodeToParent( DependencyObject parent, FrameworkObject childFrameworkObject )
         {
+            if (_parentPropertyAssigner != null)
+            {
+                _parentPropertyAssigner(parent, childFrameworkObject.DO);
+                return;
+            }
+
             if (CustomAddNodeToParentHook != null && CustomAddNodeToParentHook(parent, childFrameworkObject))
             {
                 return;
@@ -886,11 +929,6 @@ namespace System.Windows
             if( childFactory != null )
             {
                 iAddChild = frameworkObject.DO as IAddChild;
-                if (iAddChild == null)
-                {
-                    throw new InvalidOperationException(SR.Format(SR.TypeMustImplementIAddChild,
-                                                         frameworkObject.DO.GetType().Name));
-                }
             }
 
             // Build the children.
@@ -900,18 +938,25 @@ namespace System.Windows
 
                 if (childFactory._text != null)
                 {
+                    if (iAddChild == null)
+                    {
+                        throw new InvalidOperationException(SR.Format(SR.TypeMustImplementIAddChild,
+                                                             frameworkObject.DO.GetType().Name));
+                    }
                     iAddChild.AddText(childFactory._text);
 
                 }
                 else
                 {
-                    // Use frameworkObject's IAddChild to add this node.
+                    // Use childFactory's property assigner or frameworkObject's IAddChild to add this node.
                     FrameworkObject childFrameworkObject = childFactory.InstantiateUnoptimizedTree();
-                    AddNodeToParent(frameworkObject.DO, childFrameworkObject );
+                    childFactory.AddNodeToParent(frameworkObject.DO, childFrameworkObject );
                 }
 
                 childFactory = childFactory._nextSibling;
             }
+
+            _postInstantiateAction?.Invoke(frameworkObject.DO);
 
             // Mark the end of the initialization phase
 
@@ -1207,6 +1252,8 @@ namespace System.Windows
         private static string AutoGenChildNamePrefix = "~ChildID";
 
         private FrameworkElementFactory _parent;
+        private Action<DependencyObject, DependencyObject> _parentPropertyAssigner;
+        private Action<DependencyObject> _postInstantiateAction;
         private FrameworkElementFactory _firstChild;
         private FrameworkElementFactory _lastChild;
         private FrameworkElementFactory _nextSibling;

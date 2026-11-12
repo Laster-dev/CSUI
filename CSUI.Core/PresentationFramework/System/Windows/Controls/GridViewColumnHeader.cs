@@ -43,11 +43,12 @@ namespace System.Windows.Controls
 #endif
     [TemplatePart(Name = "PART_HeaderGripper", Type = typeof(Thumb))]
     [TemplatePart(Name = "PART_FloatingHeaderCanvas", Type = typeof(Canvas))]
-    public class GridViewColumnHeader : ButtonBase
+    public partial class GridViewColumnHeader : ButtonBase
 #if OLD_AUTOMATION
     , IInvokeProvider
 #endif
     {
+        static partial void RegisterDefaultTheme();
         //-------------------------------------------------------------------
         //
         //  Constructors
@@ -69,6 +70,7 @@ namespace System.Windows.Controls
             ContentTemplateSelectorProperty.OverrideMetadata(typeof(GridViewColumnHeader), new FrameworkPropertyMetadata(new PropertyChangedCallback(PropertyChanged)));
             ContextMenuProperty.OverrideMetadata(typeof(GridViewColumnHeader), new FrameworkPropertyMetadata(new PropertyChangedCallback(PropertyChanged)));
             ToolTipProperty.OverrideMetadata(typeof(GridViewColumnHeader), new FrameworkPropertyMetadata(new PropertyChangedCallback(PropertyChanged)));
+            RegisterDefaultTheme();
         }
 
         #endregion

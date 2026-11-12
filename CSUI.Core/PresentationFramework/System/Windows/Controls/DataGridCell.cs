@@ -14,8 +14,9 @@ namespace System.Windows.Controls
     /// <summary>
     ///     A control for displaying a cell of the DataGrid.
     /// </summary>
-    public class DataGridCell : ContentControl, IProvideDataGridColumn
+    public partial class DataGridCell : ContentControl, IProvideDataGridColumn
     {
+        static partial void RegisterDefaultTheme();
         private static readonly bool IsDataGridKeyboardSortDisabled;
         private static readonly bool OptOutOfGridColumnResizeUsingKeyboard;
 
@@ -27,6 +28,7 @@ namespace System.Windows.Controls
         static DataGridCell()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(DataGridCell), new FrameworkPropertyMetadata(typeof(DataGridCell)));
+            RegisterDefaultTheme();
             StyleProperty.OverrideMetadata(typeof(DataGridCell), new FrameworkPropertyMetadata(null, OnNotifyPropertyChanged, OnCoerceStyle));
             ClipProperty.OverrideMetadata(typeof(DataGridCell), new FrameworkPropertyMetadata(null, new CoerceValueCallback(OnCoerceClip)));
             KeyboardNavigation.TabNavigationProperty.OverrideMetadata(typeof(DataGridCell), new FrameworkPropertyMetadata(KeyboardNavigationMode.Local));

@@ -17,8 +17,9 @@ namespace System.Windows.Controls
     /// Represents a control that can be used to display or edit unformatted text.
     /// Integrated with ModernImeService and SmoothCaretTracker.
     /// </summary>
-    public class TextBox : TextBoxBase
+    public partial class TextBox : TextBoxBase
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty TextProperty =
             DependencyProperty.Register(
                 nameof(Text),
@@ -164,6 +165,19 @@ namespace System.Windows.Controls
         static TextBox()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(TextBox), new FrameworkPropertyMetadata(typeof(TextBox)));
+            RegisterDefaultTheme();
+        }
+
+        private TextContentHostView _contentHostView;
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            _contentHostView = AttachContentHost(
+                GetTemplateChild("PART_ContentHost"),
+                _contentHostView,
+                MeasureContentView,
+                RenderContentView);
         }
 
         public TextBox()
@@ -560,6 +574,11 @@ namespace System.Windows.Controls
 
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                _contentHostView?.InvalidateMeasure();
+                return base.MeasureOverride(constraint);
+            }
             double horizontalPadding = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
             double verticalPadding = Padding.Top + Padding.Bottom + BorderThickness.Top + BorderThickness.Bottom;
 
@@ -572,9 +591,59 @@ namespace System.Windows.Controls
             return new Size(desiredW, desiredH);
         }
 
+        private Size MeasureContentView(Size constraint)
+        {
+            double hPad = Padding.Left + Padding.Right;
+            double vPad = Padding.Top + Padding.Bottom;
+            double availableW = Math.Max(0.0, constraint.Width - hPad);
+            FormattedText ft = CreateFormattedText(string.IsNullOrEmpty(Text) ? " " : Text, availableW);
+            return new Size(ft.Width + hPad, ft.Height + vPad);
+        }
+
+        private void RenderContentView(DrawingContext dc, Size bounds)
+        {
+            if (bounds.Width <= 0 || bounds.Height <= 0) return;
+
+            double xStart = Padding.Left;
+            double yStart = Padding.Top;
+
+            if (_selectionLength > 0 && _selectionStart < Text.Length)
+            {
+                string before = Text.Substring(0, _selectionStart);
+                string selected = SelectedText;
+                FormattedText ftBefore = CreateFormattedText(before, double.PositiveInfinity);
+                FormattedText ftSelected = CreateFormattedText(selected, double.PositiveInfinity);
+
+                Rect selRect = new(xStart + ftBefore.Width, yStart, ftSelected.Width, ftSelected.Height);
+                Brush selBrush = SelectionBrush ?? new SolidColorBrush(Color.FromArgb(100, 0, 120, 215));
+                dc.DrawRectangle(selBrush, null, selRect);
+            }
+
+            if (!string.IsNullOrEmpty(Text))
+            {
+                FormattedText ft = CreateFormattedText(Text, Math.Max(0, bounds.Width - xStart - Padding.Right));
+                dc.DrawText(ft, new Point(xStart, yStart));
+            }
+
+            if (IsFocused && !IsReadOnly)
+            {
+                Point caretPt = _caretTracker.TargetPosition;
+                double cx = Math.Max(xStart, caretPt.X - BorderThickness.Left);
+                double cy = Math.Max(yStart, caretPt.Y - BorderThickness.Top);
+                double h = FontSize > 0 ? FontSize * 1.2 : 18.0;
+                Pen caretPen = new(CaretBrush ?? Foreground ?? Brushes.Black, 1.5);
+                dc.DrawLine(caretPen, new Point(cx, cy), new Point(cx, cy + h));
+            }
+        }
+
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
+            if (Template != null)
+            {
+                _contentHostView?.InvalidateVisual();
+                return;
+            }
 
             Rect bounds = new(0, 0, RenderSize.Width, RenderSize.Height);
             if (bounds.Width <= 0 || bounds.Height <= 0) return;

@@ -17,8 +17,9 @@ namespace System.Windows.Controls
 #if OLD_AUTOMATION
     [Automation(AccessibilityControlType = "ListItem")]
 #endif
-    public class ComboBoxItem : ListBoxItem
+    public partial class ComboBoxItem : ListBoxItem
     {
+        static partial void RegisterDefaultTheme();
         //-------------------------------------------------------------------
         //
         //  Constructors
@@ -43,6 +44,7 @@ namespace System.Windows.Controls
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ComboBoxItem), new FrameworkPropertyMetadata(typeof(ComboBoxItem)));
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(ComboBoxItem));
             MS.Internal.Controls.ControlFoundationHooks.IsComboBoxItemHook ??= static o => o is ComboBoxItem;
+            RegisterDefaultTheme();
         }
 
         #endregion

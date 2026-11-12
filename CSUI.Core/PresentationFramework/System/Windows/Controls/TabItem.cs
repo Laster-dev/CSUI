@@ -23,8 +23,9 @@ namespace System.Windows.Controls
     ///     A child item of TabControl.
     /// </summary>
     [DefaultEvent("IsSelectedChanged")]
-    public class TabItem : HeaderedContentControl
+    public partial class TabItem : HeaderedContentControl
     {
+        static partial void RegisterDefaultTheme();
         //-------------------------------------------------------------------
         //
         //  Constructors
@@ -56,6 +57,7 @@ namespace System.Windows.Controls
             IsEnabledProperty.OverrideMetadata(typeof(TabItem), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
             IsMouseOverPropertyKey.OverrideMetadata(typeof(TabItem), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
             AutomationProperties.IsOffscreenBehaviorProperty.OverrideMetadata(typeof(TabItem), new FrameworkPropertyMetadata(IsOffscreenBehavior.FromClip));
+            RegisterDefaultTheme();
         }
 
         #endregion

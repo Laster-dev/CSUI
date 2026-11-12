@@ -7,14 +7,17 @@ using System.Windows.Automation.Peers;
 
 namespace System.Windows.Controls
 {
-    public class Separator : Control
+    public partial class Separator : Control
     {
+        static partial void RegisterDefaultTheme();
+
         static Separator()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Separator), new FrameworkPropertyMetadata(typeof(Separator)));
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(Separator));
 
             IsEnabledProperty.OverrideMetadata(typeof(Separator), new FrameworkPropertyMetadata(MS.Internal.KnownBoxes.BooleanBoxes.FalseBox));
+            RegisterDefaultTheme();
         }
 
         internal static void PrepareContainer(Control container)

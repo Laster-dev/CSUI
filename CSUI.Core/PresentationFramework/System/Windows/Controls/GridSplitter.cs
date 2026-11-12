@@ -76,8 +76,9 @@ namespace System.Windows.Controls
     /// and complex user interfaces
     /// </summary>
     [StyleTypedProperty(Property = "PreviewStyle", StyleTargetType = typeof(Control))]
-    public class GridSplitter : Thumb
+    public partial class GridSplitter : Thumb
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static GridSplitter()
@@ -94,6 +95,7 @@ namespace System.Windows.Controls
             
             // Cursor depends on ResizeDirection, ActualWidth, and ActualHeight 
             CursorProperty.OverrideMetadata(typeof(GridSplitter), new FrameworkPropertyMetadata(null, new CoerceValueCallback(CoerceCursor)));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

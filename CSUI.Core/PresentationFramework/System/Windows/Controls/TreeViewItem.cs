@@ -25,8 +25,9 @@ namespace System.Windows.Controls
     [TemplatePart(Name = HeaderPartName, Type = typeof(FrameworkElement))]
     [TemplatePart(Name = ItemsHostPartName, Type = typeof(ItemsPresenter))]
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(TreeViewItem))]
-    public class TreeViewItem : HeaderedItemsControl, IHierarchicalVirtualizationAndScrollInfo, ITreeViewItemHost
+    public partial class TreeViewItem : HeaderedItemsControl, IHierarchicalVirtualizationAndScrollInfo, ITreeViewItemHost
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static TreeViewItem()
@@ -47,6 +48,7 @@ namespace System.Windows.Controls
             EventManager.RegisterClassHandler(typeof(TreeViewItem), Mouse.MouseDownEvent, new MouseButtonEventHandler(OnMouseButtonDown), true);
             AutomationProperties.IsOffscreenBehaviorProperty.OverrideMetadata(typeof(TreeViewItem), new FrameworkPropertyMetadata(IsOffscreenBehavior.FromClip));
             ControlFoundationHooks.TreeViewItemVirtualizingPropagationHelper ??= IsVirtualizingPropagationHelper;
+            RegisterDefaultTheme();
         }
 
         /// <summary>

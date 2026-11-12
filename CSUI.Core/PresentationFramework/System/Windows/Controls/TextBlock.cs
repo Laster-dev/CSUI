@@ -17,8 +17,9 @@ namespace System.Windows.Controls
     /// Provides a lightweight, high-performance element for displaying small to large amounts of text.
     /// Direct2D DirectWrite hardware-accelerated text layout with sub-pixel and 1px snap alignment.
     /// </summary>
-    public class TextBlock : FrameworkElement, MS.Internal.Controls.ITextDisplayElement
+    public partial class TextBlock : FrameworkElement, MS.Internal.Controls.ITextDisplayElement
     {
+        static partial void RegisterDefaultTheme();
         bool MS.Internal.Controls.ITextDisplayElement.IsContentPresenterContainer { get; set; }
 
         bool MS.Internal.Controls.ITextDisplayElement.TryAddInline(object inline)
@@ -254,7 +255,9 @@ namespace System.Windows.Controls
 
         static TextBlock()
         {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(TextBlock), new FrameworkPropertyMetadata(typeof(TextBlock)));
             FrameworkElementFactory.RegisterFactory(typeof(TextBlock), static () => new TextBlock());
+            RegisterDefaultTheme();
             MS.Internal.Controls.ControlFoundationHooks.RegisterTextDisplay(
                 TextProperty,
                 static () => new FrameworkElementFactory(typeof(TextBlock)),

@@ -20,8 +20,9 @@ namespace System.Windows.Controls.Primitives
     ///     SourceScrollViewerName property.
     /// </summary>
     [TemplatePart(Name = "PART_FillerColumnHeader", Type = typeof(DataGridColumnHeader))]
-    public class DataGridColumnHeadersPresenter : ItemsControl
+    public partial class DataGridColumnHeadersPresenter : ItemsControl
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
 
         private const string ElementFillerColumnHeader = "PART_FillerColumnHeader";
@@ -33,9 +34,10 @@ namespace System.Windows.Controls.Primitives
             Type ownerType = typeof(DataGridColumnHeadersPresenter);
 
             DefaultStyleKeyProperty.OverrideMetadata(ownerType, new FrameworkPropertyMetadata(ownerType));
+            RegisterDefaultTheme();
             FocusableProperty.OverrideMetadata(ownerType, new FrameworkPropertyMetadata(false));
 
-            FrameworkElementFactory factory = new FrameworkElementFactory(typeof(DataGridCellsPanel));
+            FrameworkElementFactory factory = FrameworkElementFactory.Create<DataGridCellsPanel>();
             ItemsPanelProperty.OverrideMetadata(ownerType, new FrameworkPropertyMetadata(new ItemsPanelTemplate(factory)));
 
             VirtualizingPanel.IsVirtualizingProperty.OverrideMetadata(

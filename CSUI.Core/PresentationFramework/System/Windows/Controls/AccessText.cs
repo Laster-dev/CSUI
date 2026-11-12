@@ -22,9 +22,10 @@ namespace System.Windows.Controls
     {
         static AccessText()
         {
+            FrameworkElementFactory.RegisterType<AccessText>();
             ControlFoundationHooks.RegisterAccessTextDisplay(
                 TextProperty,
-                static () => new FrameworkElementFactory(typeof(AccessText)));
+                static () => FrameworkElementFactory.Create<AccessText>());
         }
 
         public AccessText()

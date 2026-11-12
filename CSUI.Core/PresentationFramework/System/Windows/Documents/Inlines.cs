@@ -158,12 +158,55 @@ namespace System.Windows.Documents
         }
     }
 
-    public class Hyperlink : Span, ICommandSource
+    public partial class Bold : Span
     {
+        static partial void RegisterDefaultTheme();
+        static Bold()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(Bold), new FrameworkPropertyMetadata(typeof(Bold)));
+            FontWeightProperty.OverrideMetadata(typeof(Bold), new FrameworkPropertyMetadata(FontWeights.Bold));
+            RegisterDefaultTheme();
+        }
+        public Bold() { }
+        public Bold(Inline childInline) : base(childInline) { }
+    }
+
+    public partial class Italic : Span
+    {
+        static partial void RegisterDefaultTheme();
+        static Italic()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(Italic), new FrameworkPropertyMetadata(typeof(Italic)));
+            FontStyleProperty.OverrideMetadata(typeof(Italic), new FrameworkPropertyMetadata(FontStyles.Italic));
+            RegisterDefaultTheme();
+        }
+        public Italic() { }
+        public Italic(Inline childInline) : base(childInline) { }
+    }
+
+    public partial class Underline : Span
+    {
+        static partial void RegisterDefaultTheme();
+        static Underline()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(Underline), new FrameworkPropertyMetadata(typeof(Underline)));
+            TextDecorationsProperty.OverrideMetadata(typeof(Underline), new FrameworkPropertyMetadata(System.Windows.TextDecorations.Underline));
+            RegisterDefaultTheme();
+        }
+        public Underline() { }
+        public Underline(Inline childInline) : base(childInline) { }
+    }
+
+    public partial class Hyperlink : Span, ICommandSource
+    {
+        static partial void RegisterDefaultTheme();
+
         static Hyperlink()
         {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(Hyperlink), new FrameworkPropertyMetadata(typeof(Hyperlink)));
             ForegroundProperty.OverrideMetadata(typeof(Hyperlink), new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(56, 189, 248))));
             CursorProperty.OverrideMetadata(typeof(Hyperlink), new FrameworkPropertyMetadata(Cursors.Hand));
+            RegisterDefaultTheme();
         }
 
         public Hyperlink()

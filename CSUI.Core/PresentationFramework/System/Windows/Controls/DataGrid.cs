@@ -26,8 +26,9 @@ namespace System.Windows.Controls
     ///     A DataGrid control that displays data in rows and columns and allows
     ///     for the entering and editing of data.
     /// </summary>
-    public class DataGrid : MultiSelector
+    public partial class DataGrid : MultiSelector
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         /// <summary>
@@ -38,7 +39,8 @@ namespace System.Windows.Controls
             Type ownerType = typeof(DataGrid);
 
             DefaultStyleKeyProperty.OverrideMetadata(ownerType, new FrameworkPropertyMetadata(typeof(DataGrid)));
-            FrameworkElementFactory dataGridRowPresenterFactory = new FrameworkElementFactory(typeof(DataGridRowsPresenter));
+            RegisterDefaultTheme();
+            FrameworkElementFactory dataGridRowPresenterFactory = FrameworkElementFactory.Create<DataGridRowsPresenter>();
             dataGridRowPresenterFactory.SetValue(FrameworkElement.NameProperty, ItemsPanelPartName);
             ItemsPanelProperty.OverrideMetadata(ownerType, new FrameworkPropertyMetadata(new ItemsPanelTemplate(dataGridRowPresenterFactory)));
             VirtualizingPanel.IsVirtualizingProperty.OverrideMetadata(ownerType, new FrameworkPropertyMetadata(true, null, new CoerceValueCallback(OnCoerceIsVirtualizingProperty)));

@@ -10,14 +10,16 @@ namespace System.Windows.Controls.Primitives
     /// <summary>
     /// Represents a button control used in Calendar Control, which reacts to the Click event.
     /// </summary>
-    public sealed class CalendarButton : Button
+    public sealed partial class CalendarButton : Button
     {
+        static partial void RegisterDefaultTheme();
         /// <summary>
         /// Static constructor
         /// </summary>
         static CalendarButton()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(CalendarButton), new FrameworkPropertyMetadata(typeof(CalendarButton)));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

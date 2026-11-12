@@ -28,8 +28,9 @@ namespace System.Windows.Controls
     [TemplatePart(Name = "PART_EditableTextBox", Type = typeof(TextBox))]
     [TemplatePart(Name = "PART_Popup", Type = typeof(Popup))]
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(ComboBoxItem))]
-    public class ComboBox : Selector
+    public partial class ComboBox : Selector
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static ComboBox()
@@ -42,6 +43,7 @@ namespace System.Windows.Controls
             ToolTipService.IsEnabledProperty.OverrideMetadata(typeof(ComboBox), new FrameworkPropertyMetadata(null, new CoerceValueCallback(CoerceToolTipIsEnabled)));
 
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ComboBox), new FrameworkPropertyMetadata(typeof(ComboBox)));
+            RegisterDefaultTheme();
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(ComboBox));
 
             IsTextSearchEnabledProperty.OverrideMetadata(typeof(ComboBox), new FrameworkPropertyMetadata(BooleanBoxes.TrueBox));

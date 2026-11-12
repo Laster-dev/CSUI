@@ -14,8 +14,9 @@ namespace System.Windows.Navigation
 {
     [ContentProperty]
     [TemplatePart(Name = "PART_NavWinCP", Type = typeof(ContentPresenter))]
-    public class NavigationWindow : Window, INavigator, INavigationHost, IUriContext
+    public partial class NavigationWindow : Window, INavigator, INavigationHost, IUriContext
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty SourceProperty = Frame.SourceProperty.AddOwner(typeof(NavigationWindow), new FrameworkPropertyMetadata(null, OnSourceChanged));
         public static readonly DependencyProperty ShowsNavigationUIProperty = DependencyProperty.Register(nameof(ShowsNavigationUI), typeof(bool), typeof(NavigationWindow), new FrameworkPropertyMetadata(true));
         public static readonly DependencyProperty SandboxExternalContentProperty = Frame.SandboxExternalContentProperty.AddOwner(typeof(NavigationWindow));
@@ -48,6 +49,7 @@ namespace System.Windows.Navigation
             ControlFoundationHooks.IsNavigationWindowHook = static w => w is NavigationWindow;
             ControlFoundationHooks.NavigationWindowStyleKeyHook = typeof(NavigationWindow);
             DefaultStyleKeyProperty.OverrideMetadata(typeof(NavigationWindow), new FrameworkPropertyMetadata(typeof(NavigationWindow)));
+            RegisterDefaultTheme();
         }
 
         public NavigationWindow()

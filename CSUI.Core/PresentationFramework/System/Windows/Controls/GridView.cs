@@ -25,8 +25,13 @@ namespace System.Windows.Controls
 
     [StyleTypedProperty(Property = "ColumnHeaderContainerStyle", StyleTargetType = typeof(System.Windows.Controls.GridViewColumnHeader))]
     [ContentProperty("Columns")]
-    public class GridView : ViewBase, IAddChild
+    public partial class GridView : ViewBase, IAddChild
     {
+        static partial void RegisterDefaultTheme();
+        static GridView()
+        {
+            RegisterDefaultTheme();
+        }
         //-------------------------------------------------------------------
         //
         //  Constructors

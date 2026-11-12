@@ -14,8 +14,80 @@ namespace System.Windows.Controls.Primitives
     /// Represents a control that provides a scroll bar that has a sliding Thumb whose position
     /// corresponds to a value.
     /// </summary>
-    public class ScrollBar : Control
+    public partial class ScrollBar : Control
     {
+        static partial void RegisterDefaultTheme();
+
+        static ScrollBar()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(ScrollBar), new FrameworkPropertyMetadata(typeof(ScrollBar)));
+            EventManager.RegisterClassHandler(typeof(ScrollBar), Thumb.DragDeltaEvent, new DragDeltaEventHandler(OnThumbDragDeltaThunk));
+            EventManager.RegisterClassHandler(typeof(ScrollBar), Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnThumbDragCompletedThunk));
+            RegisterScrollCommand(LineUpCommand, static sb => sb.LineBy(-sb.SmallChange, ScrollEventType.SmallDecrement));
+            RegisterScrollCommand(LineDownCommand, static sb => sb.LineBy(sb.SmallChange, ScrollEventType.SmallIncrement));
+            RegisterScrollCommand(LineLeftCommand, static sb => sb.LineBy(-sb.SmallChange, ScrollEventType.SmallDecrement));
+            RegisterScrollCommand(LineRightCommand, static sb => sb.LineBy(sb.SmallChange, ScrollEventType.SmallIncrement));
+            RegisterScrollCommand(PageUpCommand, static sb => sb.LineBy(-sb.LargeChange, ScrollEventType.LargeDecrement));
+            RegisterScrollCommand(PageDownCommand, static sb => sb.LineBy(sb.LargeChange, ScrollEventType.LargeIncrement));
+            RegisterScrollCommand(PageLeftCommand, static sb => sb.LineBy(-sb.LargeChange, ScrollEventType.LargeDecrement));
+            RegisterScrollCommand(PageRightCommand, static sb => sb.LineBy(sb.LargeChange, ScrollEventType.LargeIncrement));
+            RegisterScrollCommand(ScrollToTopCommand, static sb => sb.ScrollToValue(sb.Minimum, ScrollEventType.First));
+            RegisterScrollCommand(ScrollToLeftEndCommand, static sb => sb.ScrollToValue(sb.Minimum, ScrollEventType.First));
+            RegisterScrollCommand(ScrollToBottomCommand, static sb => sb.ScrollToValue(sb.Maximum, ScrollEventType.Last));
+            RegisterScrollCommand(ScrollToRightEndCommand, static sb => sb.ScrollToValue(sb.Maximum, ScrollEventType.Last));
+            RegisterDefaultTheme();
+        }
+
+        private static void RegisterScrollCommand(RoutedCommand command, Action<ScrollBar> action)
+        {
+            CommandManager.RegisterClassCommandBinding(typeof(ScrollBar), new CommandBinding(command, (s, _) =>
+            {
+                if (s is ScrollBar sb)
+                {
+                    action(sb);
+                }
+            }));
+        }
+
+        private static void OnThumbDragDeltaThunk(object sender, DragDeltaEventArgs e)
+        {
+            if (sender is ScrollBar sb && sb._track != null)
+            {
+                double delta = sb._track.ValueFromDistance(e.HorizontalChange, e.VerticalChange);
+                if (!double.IsNaN(delta) && !double.IsInfinity(delta) && delta != 0.0)
+                {
+                    double newVal = Math.Clamp(sb.Value + delta, sb.Minimum, sb.Maximum);
+                    if (newVal != sb.Value)
+                    {
+                        sb.Value = newVal;
+                        sb.RaiseEvent(new ScrollEventArgs(ScrollEventType.ThumbTrack, newVal));
+                    }
+                }
+                e.Handled = true;
+            }
+        }
+
+        private static void OnThumbDragCompletedThunk(object sender, DragCompletedEventArgs e)
+        {
+            if (sender is ScrollBar sb && sb._track != null)
+            {
+                sb.RaiseEvent(new ScrollEventArgs(ScrollEventType.EndScroll, sb.Value));
+                e.Handled = true;
+            }
+        }
+
+        private void LineBy(double delta, ScrollEventType eventType) =>
+            ScrollToValue(Math.Clamp(Value + delta, Minimum, Maximum), eventType);
+
+        private void ScrollToValue(double newVal, ScrollEventType eventType)
+        {
+            newVal = Math.Clamp(newVal, Minimum, Maximum);
+            if (newVal != Value)
+            {
+                Value = newVal;
+                RaiseEvent(new ScrollEventArgs(eventType, newVal));
+            }
+        }
         public static readonly DependencyProperty OrientationProperty =
             DependencyProperty.Register(
                 nameof(Orientation),
@@ -117,7 +189,10 @@ namespace System.Windows.Controls.Primitives
         }
 
         private readonly Thumb _thumb;
+        private Track _track;
         private Rect _thumbRect;
+
+        public Track Track => _track;
 
         public ScrollBar()
         {
@@ -128,10 +203,21 @@ namespace System.Windows.Controls.Primitives
             _thumb.DragCompleted += OnThumbDragCompleted;
         }
 
-        protected override int VisualChildrenCount => 1;
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            _track = GetTemplateChild("PART_Track") as Track;
+            if (_track != null && _thumb != null)
+            {
+                RemoveVisualChild(_thumb);
+            }
+        }
+
+        protected override int VisualChildrenCount => Template != null ? base.VisualChildrenCount : 1;
 
         protected override Visual GetVisualChild(int index)
         {
+            if (Template != null) return base.GetVisualChild(index);
             if (index == 0) return _thumb;
             throw new ArgumentOutOfRangeException(nameof(index));
         }
@@ -172,6 +258,10 @@ namespace System.Windows.Controls.Primitives
 
         protected override Size MeasureOverride(Size availableSize)
         {
+            if (Template != null)
+            {
+                return base.MeasureOverride(availableSize);
+            }
             const double DefaultThickness = 10.0;
             if (Orientation == Orientation.Vertical)
             {
@@ -189,6 +279,10 @@ namespace System.Windows.Controls.Primitives
 
         protected override Size ArrangeOverride(Size finalSize)
         {
+            if (Template != null)
+            {
+                return base.ArrangeOverride(finalSize);
+            }
             bool isVert = Orientation == Orientation.Vertical;
             double trackLength = isVert ? finalSize.Height : finalSize.Width;
             double crossLength = isVert ? finalSize.Width : finalSize.Height;
@@ -262,7 +356,7 @@ namespace System.Windows.Controls.Primitives
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonDown(e);
-            if (e.Handled) return;
+            if (_track != null || Template != null || e.Handled) return;
 
             Point pt = e.GetPosition(this);
             bool isVert = Orientation == Orientation.Vertical;
@@ -347,6 +441,11 @@ namespace System.Windows.Controls.Primitives
 
         protected override void OnRender(DrawingContext dc)
         {
+            if (Template != null)
+            {
+                base.OnRender(dc);
+                return;
+            }
             // Subtle track background on mouse hover
             if (IsMouseOver)
             {

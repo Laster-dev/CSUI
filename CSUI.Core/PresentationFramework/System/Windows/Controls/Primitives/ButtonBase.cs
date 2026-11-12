@@ -308,6 +308,10 @@ namespace System.Windows.Controls.Primitives
 
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                return base.MeasureOverride(constraint);
+            }
             Size baseSize = base.MeasureOverride(constraint);
             Thickness pad = Padding;
             double w = baseSize.Width + pad.Left + pad.Right;
@@ -317,6 +321,10 @@ namespace System.Windows.Controls.Primitives
 
         protected override Size ArrangeOverride(Size arrangeBounds)
         {
+            if (Template != null)
+            {
+                return base.ArrangeOverride(arrangeBounds);
+            }
             Thickness pad = Padding;
             if (VisualChildrenCount > 0)
             {
@@ -335,6 +343,7 @@ namespace System.Windows.Controls.Primitives
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
+            if (Template != null) return;
 
             Rect bounds = new Rect(0, 0, RenderSize.Width, RenderSize.Height);
             if (bounds.Width <= 0 || bounds.Height <= 0) return;

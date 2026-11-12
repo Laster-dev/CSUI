@@ -29,8 +29,9 @@ using SR = MS.Internal.PresentationFramework.SR;
 namespace System.Windows
 {
     [Localizability(LocalizationCategory.Ignore)]
-    public class Window : ContentControl, IWindowService
+    public partial class Window : ContentControl, IWindowService
     {
+        static partial void RegisterDefaultTheme();
         //---------------------------------------------------
         //
         // Constructors
@@ -67,6 +68,7 @@ namespace System.Windows
             DefaultStyleKeyProperty.OverrideMetadata(typeof(Window), new FrameworkPropertyMetadata(typeof(Window)));
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(Window));
             TemplateProperty.OverrideMetadata(typeof(Window), new FrameworkPropertyMetadata(CreateDefaultWindowTemplate()));
+            RegisterDefaultTheme();
 
             FlowDirectionProperty.OverrideMetadata(typeof(Window), new FrameworkPropertyMetadata(new PropertyChangedCallback(_OnFlowDirectionChanged)));
             // ideally this would just use a ValidateValueCallback

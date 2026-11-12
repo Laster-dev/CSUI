@@ -15,8 +15,14 @@ using System.Windows.Media;
 
 namespace System.Windows.Controls
 {
-    public class DocumentViewer : DocumentViewerBase
+    public partial class DocumentViewer : DocumentViewerBase
     {
+        static partial void RegisterDefaultTheme();
+        static DocumentViewer()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(DocumentViewer), new FrameworkPropertyMetadata(typeof(DocumentViewer)));
+            RegisterDefaultTheme();
+        }
         public static readonly DependencyProperty ShowPageBordersProperty =
             DependencyProperty.Register(nameof(ShowPageBorders), typeof(bool), typeof(DocumentViewer),
                 new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));

@@ -16,8 +16,9 @@ namespace System.Windows.Controls
     ///     Control that defines a menu of choices for users to invoke.
     /// </summary>
     [DefaultEvent("Opened")]
-    public class ContextMenu : MenuBase
+    public partial class ContextMenu : MenuBase
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         //-------------------------------------------------------------------
@@ -40,6 +41,7 @@ namespace System.Windows.Controls
 
             // Disable the default focus visual for ContextMenu
             FocusVisualStyleProperty.OverrideMetadata(typeof(ContextMenu), new FrameworkPropertyMetadata((object)null /* default value */));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

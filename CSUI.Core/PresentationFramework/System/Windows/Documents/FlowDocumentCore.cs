@@ -238,8 +238,9 @@ namespace System.Windows.Documents
     }
 
     [ContentProperty(nameof(Inlines))]
-    public class Paragraph : Block
+    public partial class Paragraph : Block
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty KeepWithNextProperty =
             DependencyProperty.Register(nameof(KeepWithNext), typeof(bool), typeof(Paragraph), new FrameworkPropertyMetadata(false));
 
@@ -259,6 +260,8 @@ namespace System.Windows.Documents
 
         static Paragraph()
         {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(Paragraph), new FrameworkPropertyMetadata(typeof(Paragraph)));
+            RegisterDefaultTheme();
             ControlFoundationHooks.GetParagraphKeepTogetherHook = static d => d is Paragraph p && p.KeepTogether;
             ControlFoundationHooks.GetParagraphKeepWithNextHook = static d => d is Paragraph p && p.KeepWithNext;
             ControlFoundationHooks.GetParagraphMinWidowLinesHook = static d => d is Paragraph p ? p.MinWidowLines : 0;
@@ -382,8 +385,14 @@ namespace System.Windows.Documents
     }
 
     [ContentProperty(nameof(ListItems))]
-    public class List : Block
+    public partial class List : Block
     {
+        static partial void RegisterDefaultTheme();
+        static List()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(List), new FrameworkPropertyMetadata(typeof(List)));
+            RegisterDefaultTheme();
+        }
         public static readonly DependencyProperty MarkerStyleProperty =
             DependencyProperty.Register(nameof(MarkerStyle), typeof(TextMarkerStyle), typeof(List), new FrameworkPropertyMetadata(TextMarkerStyle.Disc));
 
@@ -719,11 +728,52 @@ namespace System.Windows.Documents
         }
     }
 
-    [ContentProperty(nameof(Blocks))]
-    public class FlowDocument : FrameworkContentElement, IDocumentPaginatorSource, IAddChild
+    public partial class Floater : TextElement
     {
+        static partial void RegisterDefaultTheme();
+        static Floater()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(Floater), new FrameworkPropertyMetadata(typeof(Floater)));
+            RegisterDefaultTheme();
+        }
+        public static readonly DependencyProperty HorizontalAlignmentProperty =
+            FrameworkElement.HorizontalAlignmentProperty.AddOwner(typeof(Floater));
+
+        public HorizontalAlignment HorizontalAlignment
+        {
+            get => (HorizontalAlignment)GetValue(HorizontalAlignmentProperty);
+            set => SetValue(HorizontalAlignmentProperty, value);
+        }
+
+        public static readonly DependencyProperty PaddingProperty =
+            Block.PaddingProperty.AddOwner(typeof(Floater));
+
+        public Thickness Padding
+        {
+            get => (Thickness)GetValue(PaddingProperty);
+            set => SetValue(PaddingProperty, value);
+        }
+
+        private BlockCollection _blocks;
+        public BlockCollection Blocks => _blocks ??= new BlockCollection(this);
+    }
+
+    internal static class PresentationUIStyleResources
+    {
+    }
+
+    [ContentProperty(nameof(Blocks))]
+    public partial class FlowDocument : FrameworkContentElement, IDocumentPaginatorSource, IAddChild
+    {
+        static partial void RegisterDefaultTheme();
+        static FlowDocument()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(FlowDocument), new FrameworkPropertyMetadata(typeof(FlowDocument)));
+            RegisterDefaultTheme();
+        }
         public static readonly DependencyProperty FontFamilyProperty = TextElement.FontFamilyProperty.AddOwner(typeof(FlowDocument));
         public static readonly DependencyProperty FontSizeProperty = TextElement.FontSizeProperty.AddOwner(typeof(FlowDocument));
+        public static readonly DependencyProperty TextAlignmentProperty = Block.TextAlignmentProperty.AddOwner(typeof(FlowDocument));
         public static readonly DependencyProperty ForegroundProperty = TextElement.ForegroundProperty.AddOwner(typeof(FlowDocument));
         public static readonly DependencyProperty BackgroundProperty = TextElement.BackgroundProperty.AddOwner(typeof(FlowDocument));
         public static readonly DependencyProperty PageWidthProperty = DependencyProperty.Register(nameof(PageWidth), typeof(double), typeof(FlowDocument), new FrameworkPropertyMetadata(double.NaN));

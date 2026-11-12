@@ -439,17 +439,15 @@ namespace System.Windows.Controls
     }
 
     [DefaultEvent(nameof(Opened))]
-    public class ToolTip : ContentControl
+    public partial class ToolTip : ContentControl
     {
+        static partial void RegisterDefaultTheme();
         private Popup _parentPopup;
 
         static ToolTip()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ToolTip), new FrameworkPropertyMetadata(typeof(ToolTip)));
-            BackgroundProperty.OverrideMetadata(typeof(ToolTip), new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(30, 41, 59))));
-            ForegroundProperty.OverrideMetadata(typeof(ToolTip), new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(241, 245, 249))));
-            PaddingProperty.OverrideMetadata(typeof(ToolTip), new FrameworkPropertyMetadata(new Thickness(8.0, 4.0, 8.0, 4.0)));
-            TemplateProperty.OverrideMetadata(typeof(ToolTip), new FrameworkPropertyMetadata(CreateDefaultToolTipTemplate()));
+            RegisterDefaultTheme();
         }
 
         private static ControlTemplate CreateDefaultToolTipTemplate()

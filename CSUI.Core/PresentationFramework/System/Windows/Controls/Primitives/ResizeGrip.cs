@@ -7,8 +7,9 @@ using System.Diagnostics;
 
 namespace System.Windows.Controls.Primitives
 {
-    public class ResizeGrip : Control
+    public partial class ResizeGrip : Control
     {
+        static partial void RegisterDefaultTheme();
         static ResizeGrip()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ResizeGrip), new FrameworkPropertyMetadata(typeof(ResizeGrip)));
@@ -17,6 +18,7 @@ namespace System.Windows.Controls.Primitives
             Window.IWindowServiceProperty.OverrideMetadata(
                 typeof(ResizeGrip),
                 new FrameworkPropertyMetadata(new PropertyChangedCallback(_OnWindowServiceChanged)));
+            RegisterDefaultTheme();
         }
 
         public ResizeGrip() : base()

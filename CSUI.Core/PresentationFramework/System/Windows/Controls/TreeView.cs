@@ -22,8 +22,9 @@ namespace System.Windows.Controls
     ///     A control that presents items in a tree structure.
     /// </summary>
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(TreeViewItem))]
-    public class TreeView : ItemsControl
+    public partial class TreeView : ItemsControl
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static TreeView()
@@ -35,6 +36,7 @@ namespace System.Windows.Controls
             KeyboardNavigation.DirectionalNavigationProperty.OverrideMetadata(typeof(TreeView), new FrameworkPropertyMetadata(KeyboardNavigationMode.Contained));
             KeyboardNavigation.TabNavigationProperty.OverrideMetadata(typeof(TreeView), new FrameworkPropertyMetadata(KeyboardNavigationMode.None));
             VirtualizingStackPanel.ScrollUnitProperty.OverrideMetadata(typeof(TreeView), new FrameworkPropertyMetadata(ScrollUnit.Pixel));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

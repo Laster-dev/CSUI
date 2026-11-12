@@ -46,6 +46,25 @@ namespace System.Windows.Controls
                 typeof(Grid),
                 new FrameworkPropertyMetadata(1, FrameworkPropertyMetadataOptions.AffectsParentMeasure));
 
+        public static readonly DependencyProperty IsSharedSizeScopeProperty =
+            DependencyProperty.RegisterAttached(
+                "IsSharedSizeScope",
+                typeof(bool),
+                typeof(Grid),
+                new FrameworkPropertyMetadata(false));
+
+        public static bool GetIsSharedSizeScope(DependencyObject element)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            return (bool)element.GetValue(IsSharedSizeScopeProperty);
+        }
+
+        public static void SetIsSharedSizeScope(DependencyObject element, bool value)
+        {
+            ArgumentNullException.ThrowIfNull(element);
+            element.SetValue(IsSharedSizeScopeProperty, value);
+        }
+
         public static int GetRow(UIElement element)
         {
             ArgumentNullException.ThrowIfNull(element);

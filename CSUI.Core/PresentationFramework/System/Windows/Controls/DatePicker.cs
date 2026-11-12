@@ -23,8 +23,9 @@ namespace System.Windows.Controls
     [TemplatePart(Name = DatePicker.ElementTextBox, Type = typeof(DatePickerTextBox))]
     [TemplatePart(Name = DatePicker.ElementButton, Type = typeof(Button))]
     [TemplatePart(Name = DatePicker.ElementPopup, Type = typeof(Popup))]
-    public class DatePicker : Control
+    public partial class DatePicker : Control
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
 
         private const string ElementRoot = "PART_Root";
@@ -88,6 +89,7 @@ namespace System.Windows.Controls
             KeyboardNavigation.IsTabStopProperty.OverrideMetadata(typeof(DatePicker), new FrameworkPropertyMetadata(false));
             IsEnabledProperty.OverrideMetadata(typeof(DatePicker), new UIPropertyMetadata(new PropertyChangedCallback(OnIsEnabledChanged)));
             LanguageProperty.OverrideMetadata(typeof(DatePicker), new FrameworkPropertyMetadata(new PropertyChangedCallback(OnLanguageChanged)));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

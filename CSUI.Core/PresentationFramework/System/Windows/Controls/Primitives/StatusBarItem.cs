@@ -14,8 +14,9 @@ namespace System.Windows.Controls.Primitives
     ///     Control that implements a item inside a StatusBar.
     /// </summary>
     [Localizability(LocalizationCategory.Inherit)]
-    public class StatusBarItem : ContentControl
+    public partial class StatusBarItem : ContentControl
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static StatusBarItem()
@@ -25,6 +26,7 @@ namespace System.Windows.Controls.Primitives
 
             IsTabStopProperty.OverrideMetadata(typeof(StatusBarItem), new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
             AutomationProperties.IsOffscreenBehaviorProperty.OverrideMetadata(typeof(StatusBarItem), new FrameworkPropertyMetadata(IsOffscreenBehavior.FromClip));
+            RegisterDefaultTheme();
         }
 
         #endregion

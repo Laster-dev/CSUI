@@ -23,8 +23,9 @@ namespace System.Windows.Controls
     /// </summary>
     [Localizability(LocalizationCategory.ListBox)]
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(ListBoxItem))]
-    public class ListBox : Selector
+    public partial class ListBox : Selector
     {
+        static partial void RegisterDefaultTheme();
         internal const string ListBoxSelectAllKey = "Ctrl+A";
         private static readonly bool OptOutOfGridColumnResizeUsingKeyboard;
 
@@ -58,6 +59,7 @@ namespace System.Windows.Controls
         static ListBox()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ListBox), new FrameworkPropertyMetadata(typeof(ListBox)));
+            RegisterDefaultTheme();
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(ListBox));
 
             IsTabStopProperty.OverrideMetadata(typeof(ListBox), new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
@@ -66,7 +68,7 @@ namespace System.Windows.Controls
 
             IsTextSearchEnabledProperty.OverrideMetadata(typeof(ListBox), new FrameworkPropertyMetadata(BooleanBoxes.TrueBox));
 
-            ItemsPanelTemplate template = new ItemsPanelTemplate(new FrameworkElementFactory(typeof(VirtualizingStackPanel)));
+            ItemsPanelTemplate template = new ItemsPanelTemplate(FrameworkElementFactory.Create<VirtualizingStackPanel>());
             template.Seal();
             ItemsPanelProperty.OverrideMetadata(typeof(ListBox), new FrameworkPropertyMetadata(template));
 

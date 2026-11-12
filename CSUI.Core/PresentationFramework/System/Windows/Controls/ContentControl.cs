@@ -25,8 +25,9 @@ namespace System.Windows.Controls
     [DefaultProperty("Content")]
     [ContentProperty("Content")]
     [Localizability(LocalizationCategory.None, Readability = Readability.Unreadable)]
-    public class ContentControl : Control, IAddChild
+    public partial class ContentControl : Control, IAddChild
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
         /// <summary>
         ///     Default DependencyObject constructor
@@ -45,14 +46,9 @@ namespace System.Windows.Controls
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(ContentControl));
 
             FrameworkElementFactory.RegisterFactory(typeof(ContentPresenter), static () => new ContentPresenter());
-            var defaultTemplate = new ControlTemplate(typeof(ContentControl))
-            {
-                VisualTree = new FrameworkElementFactory(typeof(ContentPresenter))
-            };
-            defaultTemplate.Seal();
-            TemplateProperty.OverrideMetadata(typeof(ContentControl), new FrameworkPropertyMetadata(defaultTemplate));
 
             ControlsTraceLogger.AddControl(TelemetryControls.ContentControl);
+            RegisterDefaultTheme();
         }
 
         #endregion

@@ -11,8 +11,9 @@ namespace System.Windows.Controls.Primitives
     /// <summary>
     /// Base class for controls that can switch states, such as CheckBox.
     /// </summary>
-    public class ToggleButton : ButtonBase
+    public partial class ToggleButton : ButtonBase
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty IsCheckedProperty =
             DependencyProperty.Register(
                 nameof(IsChecked),
@@ -84,6 +85,7 @@ namespace System.Windows.Controls.Primitives
         static ToggleButton()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(ToggleButton), new FrameworkPropertyMetadata(typeof(ToggleButton)));
+            RegisterDefaultTheme();
         }
 
         public ToggleButton()
@@ -141,6 +143,11 @@ namespace System.Windows.Controls.Primitives
 
         protected override void OnRender(DrawingContext dc)
         {
+            if (Template != null)
+            {
+                base.OnRender(dc);
+                return;
+            }
             if (Background == null && IsChecked == true)
             {
                 Rect bounds = new Rect(0, 0, RenderSize.Width, RenderSize.Height);

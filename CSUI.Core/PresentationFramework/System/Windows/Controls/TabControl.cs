@@ -26,8 +26,9 @@ namespace System.Windows.Controls
     /// </summary>
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(TabItem))]
     [TemplatePart(Name = "PART_SelectedContentHost", Type = typeof(ContentPresenter))]
-    public class TabControl : Selector
+    public partial class TabControl : Selector
     {
+        static partial void RegisterDefaultTheme();
         #region Constructors
 
         static TabControl()
@@ -38,6 +39,7 @@ namespace System.Windows.Controls
             KeyboardNavigation.DirectionalNavigationProperty.OverrideMetadata(typeof(TabControl), new FrameworkPropertyMetadata(KeyboardNavigationMode.Contained));
 
             IsEnabledProperty.OverrideMetadata(typeof(TabControl), new UIPropertyMetadata(new PropertyChangedCallback(OnVisualStatePropertyChanged)));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

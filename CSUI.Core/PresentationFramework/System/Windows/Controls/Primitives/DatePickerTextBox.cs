@@ -16,6 +16,7 @@ namespace System.Windows.Controls.Primitives
     [TemplatePart(Name = DatePickerTextBox.ElementContentName, Type = typeof(ContentControl))]
     public sealed partial class DatePickerTextBox : TextBox
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
         private const string ElementContentName = "PART_Watermark";
 
@@ -36,6 +37,7 @@ namespace System.Windows.Controls.Primitives
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(DatePickerTextBox), new FrameworkPropertyMetadata(typeof(DatePickerTextBox)));
             TextProperty.OverrideMetadata(typeof(DatePickerTextBox), new FrameworkPropertyMetadata(OnVisualStatePropertyChanged));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

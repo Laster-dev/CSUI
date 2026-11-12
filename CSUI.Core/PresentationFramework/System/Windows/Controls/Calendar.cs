@@ -15,8 +15,9 @@ namespace System.Windows.Controls
     /// </summary>
     [TemplatePart(Name = Calendar.ElementRoot, Type = typeof(Panel))]
     [TemplatePart(Name = Calendar.ElementMonth, Type = typeof(CalendarItem))]
-    public class Calendar : Control
+    public partial class Calendar : Control
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
 
         private const string ElementRoot = "PART_Root";
@@ -82,6 +83,7 @@ namespace System.Windows.Controls
             LanguageProperty.OverrideMetadata(typeof(Calendar), new FrameworkPropertyMetadata(new PropertyChangedCallback(OnLanguageChanged)));
 
             EventManager.RegisterClassHandler(typeof(Calendar), UIElement.GotFocusEvent, new RoutedEventHandler(OnGotFocus));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

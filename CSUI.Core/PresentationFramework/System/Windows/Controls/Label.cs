@@ -12,8 +12,10 @@ using MS.Internal.KnownBoxes;
 namespace System.Windows.Controls
 {
     [Localizability(LocalizationCategory.Label)]
-    public class Label : ContentControl
+    public partial class Label : ContentControl
     {
+        static partial void RegisterDefaultTheme();
+
         static Label()
         {
             EventManager.RegisterClassHandler(typeof(Label), AccessKeyManager.AccessKeyPressedEvent, new AccessKeyPressedEventHandler(OnAccessKeyPressed));
@@ -25,6 +27,7 @@ namespace System.Windows.Controls
             FocusableProperty.OverrideMetadata(typeof(Label), new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
 
             ControlFoundationHooks.GetLabeledByHook = static d => GetLabeledBy(d);
+            RegisterDefaultTheme();
         }
 
         public Label() : base()

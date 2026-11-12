@@ -26,8 +26,9 @@ namespace System.Windows.Controls
     /// but it is expected that (like a Menu) it will often be docked to the top or side of the application window.     
     /// </summary>
     [ContentProperty("ToolBars")]
-    public class ToolBarTray : FrameworkElement, IAddChild
+    public partial class ToolBarTray : FrameworkElement, IAddChild
     {
+        static partial void RegisterDefaultTheme();
         //-------------------------------------------------------------------
         //
         //  Constructors
@@ -44,6 +45,7 @@ namespace System.Windows.Controls
 
             EventManager.RegisterClassHandler(typeof(ToolBarTray), Thumb.DragDeltaEvent, new DragDeltaEventHandler(OnThumbDragDelta));
             KeyboardNavigation.ControlTabNavigationProperty.OverrideMetadata(typeof(ToolBarTray), new FrameworkPropertyMetadata(KeyboardNavigationMode.Cycle));
+            RegisterDefaultTheme();
         }
 
         /// <summary>

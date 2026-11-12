@@ -51,6 +51,17 @@ namespace System.Windows
         /// <param name="key">The resource id to search for.</param>
         /// <returns>The resource if it exists, null otherwise.</returns>
         //[CodeAnalysis("AptcaMethodsShouldOnlyCallAptcaMethods")] //Tracking Bug: 29647
+        private static readonly ConcurrentDictionary<object, Func<object>> _perKeyThemeFactories = new ConcurrentDictionary<object, Func<object>>();
+
+        internal static void RegisterDefaultThemeFactory(object key, Func<object> factory)
+        {
+            if (key == null || factory == null)
+            {
+                return;
+            }
+            _perKeyThemeFactories[key] = factory;
+        }
+
         internal static object FindThemeStyle(DependencyObjectType key)
         {
             // Find a cached theme style
@@ -166,8 +177,20 @@ namespace System.Windows
                     }
                     else
                     {
-                        // Do a dictionary lookup
-                        resource = FindDictionaryResource(key, typeKey, resourceKey, isTraceEnabled, allowDeferredResourceReference, mustReturnDeferredResourceReference, out canCache);
+                        if (_perKeyThemeFactories.TryGetValue(key, out Func<object> perKeyFactory))
+                        {
+                            resource = perKeyFactory();
+                            if (mustReturnDeferredResourceReference && resource != null)
+                            {
+                                resource = new DeferredResourceReferenceHolder(key, resource);
+                            }
+                        }
+
+                        if (resource == null)
+                        {
+                            // Do a dictionary lookup
+                            resource = FindDictionaryResource(key, typeKey, resourceKey, isTraceEnabled, allowDeferredResourceReference, mustReturnDeferredResourceReference, out canCache);
+                        }
                     }
 
                     if ((canCache && !allowDeferredResourceReference) || resource == null)

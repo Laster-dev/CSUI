@@ -13,11 +13,14 @@ namespace System.Windows.Controls
     /// <summary>
     /// Represents a control that a user can select and clear.
     /// </summary>
-    public class CheckBox : ToggleButton
+    public partial class CheckBox : ToggleButton
     {
+        static partial void RegisterDefaultTheme();
+
         static CheckBox()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(CheckBox), new FrameworkPropertyMetadata(typeof(CheckBox)));
+            RegisterDefaultTheme();
         }
 
         public CheckBox()
@@ -26,6 +29,10 @@ namespace System.Windows.Controls
 
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                return base.MeasureOverride(constraint);
+            }
             Size contentSize = new Size(0, 0);
             if (VisualChildrenCount > 0 && GetVisualChild(0) is UIElement child)
             {
@@ -40,6 +47,10 @@ namespace System.Windows.Controls
 
         protected override Size ArrangeOverride(Size arrangeBounds)
         {
+            if (Template != null)
+            {
+                return base.ArrangeOverride(arrangeBounds);
+            }
             if (VisualChildrenCount > 0 && GetVisualChild(0) is UIElement child)
             {
                 double y = Math.Max(0, (arrangeBounds.Height - child.DesiredSize.Height) * 0.5);
@@ -53,6 +64,11 @@ namespace System.Windows.Controls
 
         protected override void OnRender(DrawingContext dc)
         {
+            if (Template != null)
+            {
+                base.OnRender(dc);
+                return;
+            }
             double w = RenderSize.Width;
             double h = RenderSize.Height;
             if (w <= 0 || h <= 0) return;

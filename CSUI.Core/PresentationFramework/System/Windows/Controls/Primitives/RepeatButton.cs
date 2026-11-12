@@ -11,13 +11,16 @@ using MS.Internal.PresentationFramework;
 
 namespace System.Windows.Controls.Primitives
 {
-    public class RepeatButton : ButtonBase
+    public partial class RepeatButton : ButtonBase
     {
+        static partial void RegisterDefaultTheme();
+
         static RepeatButton()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(RepeatButton), new FrameworkPropertyMetadata(typeof(RepeatButton)));
             _dType = DependencyObjectType.FromSystemTypeInternal(typeof(RepeatButton));
             ClickModeProperty.OverrideMetadata(typeof(RepeatButton), new FrameworkPropertyMetadata(ClickMode.Press));
+            RegisterDefaultTheme();
         }
 
         public RepeatButton() : base()

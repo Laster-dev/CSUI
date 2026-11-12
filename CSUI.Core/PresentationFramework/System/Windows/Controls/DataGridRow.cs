@@ -24,8 +24,9 @@ namespace System.Windows.Controls
     ///     The data item for the row is added n times to the row's Items collection,
     ///     where n is the number of columns in the DataGrid.
     /// </summary>
-    public class DataGridRow : Control
+    public partial class DataGridRow : Control
     {
+        static partial void RegisterDefaultTheme();
         #region Constants
 
         private const byte DATAGRIDROW_stateMouseOverCode = 0;
@@ -97,7 +98,8 @@ namespace System.Windows.Controls
         {
             VisibilityProperty.OverrideMetadata(typeof(DataGridRow), new FrameworkPropertyMetadata(null, OnCoerceVisibility));
             DefaultStyleKeyProperty.OverrideMetadata(typeof(DataGridRow), new FrameworkPropertyMetadata(typeof(DataGridRow)));
-            ItemsPanelProperty.OverrideMetadata(typeof(DataGridRow), new FrameworkPropertyMetadata(new ItemsPanelTemplate(new FrameworkElementFactory(typeof(DataGridCellsPanel)))));
+            RegisterDefaultTheme();
+            ItemsPanelProperty.OverrideMetadata(typeof(DataGridRow), new FrameworkPropertyMetadata(new ItemsPanelTemplate(FrameworkElementFactory.Create<DataGridCellsPanel>())));
             FocusableProperty.OverrideMetadata(typeof(DataGridRow), new FrameworkPropertyMetadata(false));
             BackgroundProperty.OverrideMetadata(typeof(DataGridRow), new FrameworkPropertyMetadata(null, OnNotifyRowPropertyChanged, OnCoerceBackground));
             BindingGroupProperty.OverrideMetadata(typeof(DataGridRow), new FrameworkPropertyMetadata(OnNotifyRowPropertyChanged));

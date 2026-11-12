@@ -18,8 +18,9 @@ namespace System.Windows.Controls.Primitives
     /// can be chosen even within the same application.
     /// </summary>
     [StyleTypedProperty(Property = "ItemContainerStyle", StyleTargetType = typeof(StatusBarItem))]
-    public class StatusBar : ItemsControl
+    public partial class StatusBar : ItemsControl
     {
+        static partial void RegisterDefaultTheme();
         //-------------------------------------------------------------------
         //
         //  Constructors
@@ -35,9 +36,10 @@ namespace System.Windows.Controls.Primitives
 
             IsTabStopProperty.OverrideMetadata(typeof(StatusBar), new FrameworkPropertyMetadata(BooleanBoxes.FalseBox));
 
-            ItemsPanelTemplate template = new ItemsPanelTemplate(new FrameworkElementFactory(typeof(DockPanel)));
+            ItemsPanelTemplate template = new ItemsPanelTemplate(FrameworkElementFactory.Create<DockPanel>());
             template.Seal();
             ItemsPanelProperty.OverrideMetadata(typeof(StatusBar), new FrameworkPropertyMetadata(template));
+            RegisterDefaultTheme();
         }
 
         #endregion

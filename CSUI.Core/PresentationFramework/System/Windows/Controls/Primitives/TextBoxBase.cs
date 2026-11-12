@@ -6,14 +6,16 @@
 using System;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace System.Windows.Controls.Primitives
 {
     /// <summary>
     /// An abstract base class for text box controls.
     /// </summary>
-    public abstract class TextBoxBase : Control
+    public abstract partial class TextBoxBase : Control
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty IsReadOnlyProperty =
             DependencyProperty.Register(
                 nameof(IsReadOnly),
@@ -115,11 +117,17 @@ namespace System.Windows.Controls.Primitives
         {
             MS.Internal.Controls.ControlFoundationHooks.IsTextBoxBaseHook = static d => d is TextBoxBase;
             FocusableProperty.OverrideMetadata(typeof(TextBoxBase), new FrameworkPropertyMetadata(true));
+            RegisterDefaultTheme();
         }
 
         private static DependencyProperty s_selectionBrushProperty;
         public static DependencyProperty SelectionBrushProperty =>
             s_selectionBrushProperty ??= DependencyProperty.Register(nameof(SelectionBrush), typeof(System.Windows.Media.Brush), typeof(TextBoxBase),
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        private static DependencyProperty s_selectionTextBrushProperty;
+        public static DependencyProperty SelectionTextBrushProperty =>
+            s_selectionTextBrushProperty ??= DependencyProperty.Register(nameof(SelectionTextBrush), typeof(System.Windows.Media.Brush), typeof(TextBoxBase),
                 new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
         private static DependencyProperty s_selectionOpacityProperty;
@@ -131,6 +139,16 @@ namespace System.Windows.Controls.Primitives
         public static DependencyProperty CaretBrushProperty =>
             s_caretBrushProperty ??= DependencyProperty.Register(nameof(CaretBrush), typeof(System.Windows.Media.Brush), typeof(TextBoxBase),
                 new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        private static DependencyProperty s_isInactiveSelectionHighlightEnabledProperty;
+        public static DependencyProperty IsInactiveSelectionHighlightEnabledProperty =>
+            s_isInactiveSelectionHighlightEnabledProperty ??= DependencyProperty.Register(nameof(IsInactiveSelectionHighlightEnabled), typeof(bool), typeof(TextBoxBase),
+                new FrameworkPropertyMetadata(false));
+
+        private static DependencyPropertyKey s_isSelectionActivePropertyKey;
+        public static DependencyProperty IsSelectionActiveProperty =>
+            (s_isSelectionActivePropertyKey ??= DependencyProperty.RegisterReadOnly(nameof(IsSelectionActive), typeof(bool), typeof(TextBoxBase),
+                new FrameworkPropertyMetadata(false))).DependencyProperty;
 
         private static DependencyProperty s_autoWordSelectionProperty;
         public static DependencyProperty AutoWordSelectionProperty =>
@@ -147,6 +165,20 @@ namespace System.Windows.Controls.Primitives
             get => (System.Windows.Media.Brush)GetValue(SelectionBrushProperty);
             set => SetValue(SelectionBrushProperty, value);
         }
+
+        public System.Windows.Media.Brush SelectionTextBrush
+        {
+            get => (System.Windows.Media.Brush)GetValue(SelectionTextBrushProperty);
+            set => SetValue(SelectionTextBrushProperty, value);
+        }
+
+        public bool IsInactiveSelectionHighlightEnabled
+        {
+            get => (bool)GetValue(IsInactiveSelectionHighlightEnabledProperty);
+            set => SetValue(IsInactiveSelectionHighlightEnabledProperty, value);
+        }
+
+        public bool IsSelectionActive => (bool)GetValue(IsSelectionActiveProperty);
 
         public double SelectionOpacity
         {
@@ -191,6 +223,42 @@ namespace System.Windows.Controls.Primitives
         protected virtual void OnSelectionChanged(RoutedEventArgs e)
         {
             RaiseEvent(e);
+        }
+
+        internal static TextContentHostView AttachContentHost(
+            object host,
+            TextContentHostView existing,
+            Func<Size, Size> measure,
+            Action<DrawingContext, Size> render)
+        {
+            if (host == null) return existing;
+            var view = existing ?? new TextContentHostView(measure, render);
+            if (host is ContentControl cc)
+            {
+                if (!ReferenceEquals(cc.Content, view)) cc.Content = view;
+            }
+            else if (host is Decorator dec)
+            {
+                if (!ReferenceEquals(dec.Child, view)) dec.Child = view;
+            }
+            return view;
+        }
+
+        internal sealed class TextContentHostView : FrameworkElement
+        {
+            private readonly Func<Size, Size> _measure;
+            private readonly Action<DrawingContext, Size> _render;
+
+            internal TextContentHostView(Func<Size, Size> measure, Action<DrawingContext, Size> render)
+            {
+                _measure = measure;
+                _render = render;
+                IsHitTestVisible = false;
+            }
+
+            protected override Size MeasureOverride(Size availableSize) => _measure(availableSize);
+
+            protected override void OnRender(DrawingContext drawingContext) => _render(drawingContext, RenderSize);
         }
     }
 }

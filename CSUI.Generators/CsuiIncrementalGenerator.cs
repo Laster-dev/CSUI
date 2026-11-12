@@ -122,6 +122,8 @@ namespace CSUI.Generators
                     return;
                 }
 
+                EmitAero2ThemeOutputs(spc, allXamls, compilation);
+
                 string? bootstrap = TryGenerateProjectXamlBootstrap(allXamls, compilation);
                 if (!string.IsNullOrEmpty(bootstrap))
                 {
@@ -850,7 +852,19 @@ namespace CSUI.Generators
             public bool RootIsFrameworkElement { get; }
             public int VarCounter;
             public bool NeedsFindResourceHelper;
+            public bool HasInstanceClass { get; set; } = true;
             public List<(string Expr, bool IsDict)> ResourceScopes { get; } = new List<(string Expr, bool IsDict)>();
+            public Dictionary<string, (string TypeName, string MethodName)>? ThemeResourceIndex { get; set; }
+            public string? CurrentThemeTypeName { get; set; }
+            public Dictionary<string, INamedTypeSymbol> TemplateNamedElementTypes { get; } = new Dictionary<string, INamedTypeSymbol>(StringComparer.Ordinal);
+            public Stack<HashSet<string>> LocalResourceKeyScopes { get; } = new Stack<HashSet<string>>();
+            public string? FailureReason { get; set; }
+
+            public bool Fail(string reason)
+            {
+                FailureReason ??= reason;
+                return false;
+            }
 
             public string NextVar(string prefix = "__csui")
             {
@@ -957,11 +971,11 @@ namespace CSUI.Generators
                     }
                     if (attrLocal == "Name")
                     {
-                        if (!isRoot)
+                        if (!isRoot && ctx.HasInstanceClass)
                         {
                             sb.Append("this.").Append(attr.Value).Append(" = ").Append(targetExpr).AppendLine(";");
                         }
-                        if (ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
+                        if (ctx.HasInstanceClass && ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
                         {
                             sb.Append("this.RegisterName(").Append(ToCSharpStringLiteral(attr.Value)).Append(", ").Append(targetExpr).AppendLine(");");
                         }
@@ -975,7 +989,8 @@ namespace CSUI.Generators
                 }
 
                 if (attrNs == "http://schemas.openxmlformats.org/markup-compatibility/2006" ||
-                    attrNs == "http://schemas.microsoft.com/expression/blend/2008")
+                    attrNs == "http://schemas.microsoft.com/expression/blend/2008" ||
+                    attrNs == "http://www.w3.org/XML/1998/namespace")
                 {
                     continue;
                 }
@@ -1000,11 +1015,11 @@ namespace CSUI.Generators
 
                 if (attrLocal == "Name")
                 {
-                    if (!isRoot)
+                    if (!isRoot && ctx.HasInstanceClass)
                     {
                         sb.Append("this.").Append(attr.Value).Append(" = ").Append(targetExpr).AppendLine(";");
                     }
-                    if (ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
+                    if (ctx.HasInstanceClass && ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
                     {
                         sb.Append("this.RegisterName(").Append(ToCSharpStringLiteral(attr.Value)).Append(", ").Append(targetExpr).AppendLine(");");
                     }
@@ -1067,7 +1082,7 @@ namespace CSUI.Generators
                     continue;
                 }
 
-                return false;
+                return ctx.Fail($"Unknown attr '{attrLocal}' on '{targetType.Name}'");
             }
 
             // 2. Emit <*.Resources> first so StaticResources inside sibling children resolve regardless of element order
@@ -1131,6 +1146,21 @@ namespace CSUI.Generators
                         bool isCollection = IsCollectionLike(prop.Type);
                         foreach (XElement itemEl in childEl.Elements())
                         {
+                            INamedTypeSymbol? itemResolved = ResolveElementType(itemEl.Name.LocalName, itemEl.Name.NamespaceName, ctx.ClassNamespace, ctx.Compilation);
+                            if (isCollection && itemResolved is not null && SymbolEqualityComparer.Default.Equals(itemResolved, prop.Type))
+                            {
+                                foreach (XElement subItem in itemEl.Elements())
+                                {
+                                    if (!TryEmitAnyValueElement(sb, bindingSb, subItem, ctx, out string subVar))
+                                    {
+                                        if (pushedScope) ctx.ResourceScopes.RemoveAt(scopeInsertIndex);
+                                        return false;
+                                    }
+                                    sb.Append(targetExpr).Append('.').Append(prop.Name).Append(".Add(").Append(subVar).AppendLine(");");
+                                }
+                                continue;
+                            }
+
                             if (!TryEmitAnyValueElement(sb, bindingSb, itemEl, ctx, out string childVar))
                             {
                                 if (pushedScope) ctx.ResourceScopes.RemoveAt(scopeInsertIndex);
@@ -1162,7 +1192,7 @@ namespace CSUI.Generators
                     if (!TryAddContentChild(sb, targetExpr, targetType, childVarName, ctx.Compilation))
                     {
                         if (pushedScope) ctx.ResourceScopes.RemoveAt(scopeInsertIndex);
-                        return false;
+                        return ctx.Fail($"TryAddContentChild '{childEl.Name.LocalName}' into '{targetType.Name}' failed");
                     }
                 }
             }
@@ -1236,6 +1266,39 @@ namespace CSUI.Generators
             if (local == "DataTemplate")
             {
                 return TryEmitDataTemplateElement(sb, valEl, ctx, out varName);
+            }
+            if (local == "ItemsPanelTemplate")
+            {
+                return TryEmitItemsPanelTemplateElement(sb, valEl, ctx, out varName);
+            }
+            if (local == "Thickness")
+            {
+                if (!TryConvertLiteralToCSharp(valEl.Value, ctx.Compilation.GetTypeByMetadataName("System.Windows.Thickness")!, valEl, ctx.ClassNamespace, ctx.Compilation, out string thExpr))
+                {
+                    varName = string.Empty;
+                    return false;
+                }
+                varName = ctx.NextVar("__th");
+                sb.Append("var ").Append(varName).Append(" = ").Append(thExpr).AppendLine(";");
+                return true;
+            }
+            if (local == "Visibility")
+            {
+                if (!TryConvertLiteralToCSharp(valEl.Value, ctx.Compilation.GetTypeByMetadataName("System.Windows.Visibility")!, valEl, ctx.ClassNamespace, ctx.Compilation, out string visExpr))
+                {
+                    varName = string.Empty;
+                    return false;
+                }
+                varName = ctx.NextVar("__vis");
+                sb.Append("var ").Append(varName).Append(" = ").Append(visExpr).AppendLine(";");
+                return true;
+            }
+            if (local == "Geometry")
+            {
+                varName = ctx.NextVar("__geo");
+                sb.Append("var ").Append(varName).Append(" = global::System.Windows.Media.Geometry.Parse(")
+                  .Append(ToCSharpStringLiteral(valEl.Value.Trim())).AppendLine(");");
+                return true;
             }
             if (local == "ResourceDictionary")
             {
@@ -1315,6 +1378,17 @@ namespace CSUI.Generators
             XElement containerEl,
             XamlCompileContext ctx)
         {
+            var localKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (XElement kEl in containerEl.Elements())
+            {
+                string? rawK = kEl.Attribute(XName.Get("Key", ctx.XamlNs))?.Value;
+                if (!string.IsNullOrWhiteSpace(rawK))
+                {
+                    localKeys.Add(rawK!);
+                    localKeys.Add(NormalizeThemeResourceKey(rawK!));
+                }
+            }
+            ctx.LocalResourceKeyScopes.Push(localKeys);
             ctx.ResourceScopes.Insert(0, (dictExpr, true));
             try
             {
@@ -1361,6 +1435,7 @@ namespace CSUI.Generators
             finally
             {
                 ctx.ResourceScopes.RemoveAt(0);
+                ctx.LocalResourceKeyScopes.Pop();
             }
         }
 
@@ -1493,44 +1568,85 @@ namespace CSUI.Generators
                 sb.Append(styleVar).Append(".BasedOn = ").Append(basedOnExpr).AppendLine(";");
             }
 
-            foreach (XElement child in styleEl.Elements())
+            bool pushedStyleScope = false;
+            try
             {
-                string local = child.Name.LocalName;
-                if (local == "Setter")
+                foreach (XElement child in styleEl.Elements())
                 {
-                    if (!TryEmitSetterToCollection(sb, styleVar + ".Setters", child, styleTargetType, allowTargetName: false, ctx))
+                    if (child.Name.LocalName == "Style.Resources")
+                    {
+                        var dummy = new StringBuilder();
+                        if (!TryEmitResourcesCollection(sb, dummy, styleVar + ".Resources", child, ctx) || dummy.Length > 0)
+                        {
+                            return false;
+                        }
+                        var styleResKeys = new HashSet<string>(StringComparer.Ordinal);
+                        foreach (XElement kEl in child.Elements())
+                        {
+                            string? rawK = kEl.Attribute(XName.Get("Key", ctx.XamlNs))?.Value;
+                            if (!string.IsNullOrWhiteSpace(rawK))
+                            {
+                                styleResKeys.Add(rawK!);
+                                styleResKeys.Add(NormalizeThemeResourceKey(rawK!));
+                            }
+                        }
+                        ctx.LocalResourceKeyScopes.Push(styleResKeys);
+                        ctx.ResourceScopes.Insert(0, (styleVar + ".Resources", true));
+                        pushedStyleScope = true;
+                    }
+                }
+
+                foreach (XElement child in styleEl.Elements())
+                {
+                    string local = child.Name.LocalName;
+                    if (local == "Style.Resources")
+                    {
+                        continue;
+                    }
+                    if (local == "Setter")
+                    {
+                        if (!TryEmitSetterToCollection(sb, styleVar + ".Setters", child, styleTargetType, allowTargetName: false, ctx))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (local == "Style.Setters")
+                    {
+                        foreach (XElement sEl in child.Elements())
+                        {
+                            if (sEl.Name.LocalName != "Setter" ||
+                                !TryEmitSetterToCollection(sb, styleVar + ".Setters", sEl, styleTargetType, allowTargetName: false, ctx))
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    else if (local == "Style.Triggers")
+                    {
+                        foreach (XElement trigEl in child.Elements())
+                        {
+                            if (!TryEmitTriggerToCollection(sb, styleVar + ".Triggers", trigEl, styleTargetType, ctx))
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    else
                     {
                         return false;
                     }
                 }
-                else if (local == "Style.Setters")
+
+                return true;
+            }
+            finally
+            {
+                if (pushedStyleScope)
                 {
-                    foreach (XElement sEl in child.Elements())
-                    {
-                        if (sEl.Name.LocalName != "Setter" ||
-                            !TryEmitSetterToCollection(sb, styleVar + ".Setters", sEl, styleTargetType, allowTargetName: false, ctx))
-                        {
-                            return false;
-                        }
-                    }
-                }
-                else if (local == "Style.Triggers")
-                {
-                    foreach (XElement trigEl in child.Elements())
-                    {
-                        if (!TryEmitTriggerToCollection(sb, styleVar + ".Triggers", trigEl, styleTargetType, ctx))
-                        {
-                            return false;
-                        }
-                    }
-                }
-                else
-                {
-                    return false;
+                    ctx.ResourceScopes.RemoveAt(0);
+                    ctx.LocalResourceKeyScopes.Pop();
                 }
             }
-
-            return true;
         }
 
         private static bool TryEmitTriggerToCollection(
@@ -1540,48 +1656,198 @@ namespace CSUI.Generators
             INamedTypeSymbol? defaultTargetType,
             XamlCompileContext ctx)
         {
-            if (trigEl.Name.LocalName != "Trigger")
+            string local = trigEl.Name.LocalName;
+            if (local == "Trigger")
             {
-                return false;
-            }
-
-            string? propAttr = trigEl.Attribute("Property")?.Value;
-            string? valAttr = trigEl.Attribute("Value")?.Value;
-            if (string.IsNullOrWhiteSpace(propAttr) || valAttr is null)
-            {
-                return false;
-            }
-
-            if (!TryResolveDependencyPropertyRef(propAttr!, defaultTargetType, trigEl, ctx, out string dpExpr, out ITypeSymbol? propClrType))
-            {
-                return false;
-            }
-
-            ITypeSymbol valueType = propClrType ?? ctx.Compilation.GetSpecialType(SpecialType.System_Object);
-            if (!TryResolveAttributeValueExpr(valAttr, valueType, trigEl, ctx, out string valExpr))
-            {
-                return false;
-            }
-
-            string trigVar = ctx.NextVar("__trig");
-            sb.Append("var ").Append(trigVar).Append(" = new global::System.Windows.Trigger { Property = ")
-              .Append(dpExpr).Append(", Value = ").Append(valExpr).AppendLine(" };");
-
-            foreach (XElement child in trigEl.Elements())
-            {
-                if (child.Name.LocalName == "Setter")
+                string? propAttr = trigEl.Attribute("Property")?.Value;
+                string? valAttr = trigEl.Attribute("Value")?.Value;
+                string? sourceName = trigEl.Attribute("SourceName")?.Value;
+                if (string.IsNullOrWhiteSpace(propAttr) || valAttr is null)
                 {
-                    if (!TryEmitSetterToCollection(sb, trigVar + ".Setters", child, defaultTargetType, allowTargetName: true, ctx))
+                    return false;
+                }
+
+                INamedTypeSymbol? effectiveOwner = (!string.IsNullOrEmpty(sourceName) && ctx.TemplateNamedElementTypes.TryGetValue(sourceName!, out var snType))
+                    ? snType
+                    : defaultTargetType;
+
+                if (!TryResolveDependencyPropertyRef(propAttr!, effectiveOwner, trigEl, ctx, out string dpExpr, out ITypeSymbol? propClrType))
+                {
+                    return false;
+                }
+
+                ITypeSymbol valueType = propClrType ?? ctx.Compilation.GetSpecialType(SpecialType.System_Object);
+                if (!TryResolveAttributeValueExpr(valAttr, valueType, trigEl, ctx, out string valExpr))
+                {
+                    return false;
+                }
+
+                string trigVar = ctx.NextVar("__trig");
+                sb.Append("var ").Append(trigVar).Append(" = new global::System.Windows.Trigger { Property = ")
+                  .Append(dpExpr).Append(", Value = ").Append(valExpr);
+                if (!string.IsNullOrEmpty(sourceName))
+                {
+                    sb.Append(", SourceName = ").Append(ToCSharpStringLiteral(sourceName!));
+                }
+                sb.AppendLine(" };");
+
+                if (!TryEmitTriggerBodyChildren(sb, trigVar, trigEl, defaultTargetType, allowTargetName: true, ctx))
+                {
+                    return false;
+                }
+
+                sb.Append(triggersExpr).Append(".Add(").Append(trigVar).AppendLine(");");
+                return true;
+            }
+
+            if (local == "MultiTrigger")
+            {
+                string trigVar = ctx.NextVar("__mtrig");
+                sb.Append("var ").Append(trigVar).AppendLine(" = new global::System.Windows.MultiTrigger();");
+                foreach (XElement child in trigEl.Elements())
+                {
+                    string cl = child.Name.LocalName;
+                    if (cl == "MultiTrigger.Conditions")
+                    {
+                        foreach (XElement condEl in child.Elements())
+                        {
+                            if (!TryEmitPropertyCondition(sb, trigVar + ".Conditions", condEl, defaultTargetType, ctx))
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    else if (cl == "Setter")
+                    {
+                        if (!TryEmitSetterToCollection(sb, trigVar + ".Setters", child, defaultTargetType, allowTargetName: true, ctx))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (cl == "MultiTrigger.Setters")
+                    {
+                        foreach (XElement s in child.Elements())
+                        {
+                            if (s.Name.LocalName != "Setter" ||
+                                !TryEmitSetterToCollection(sb, trigVar + ".Setters", s, defaultTargetType, allowTargetName: true, ctx))
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    else
                     {
                         return false;
                     }
                 }
-                else if (child.Name.LocalName == "Trigger.Setters")
+                sb.Append(triggersExpr).Append(".Add(").Append(trigVar).AppendLine(");");
+                return true;
+            }
+
+            if (local == "DataTrigger")
+            {
+                if (!TryEmitBindingFromAttrOrChild(sb, trigEl, "Binding", "DataTrigger.Binding", ctx, out string bindingExpr))
+                {
+                    return false;
+                }
+                string? valAttr = trigEl.Attribute("Value")?.Value;
+                if (valAttr is null)
+                {
+                    return false;
+                }
+                if (!TryResolveAttributeValueExpr(valAttr, ctx.Compilation.GetSpecialType(SpecialType.System_Object), trigEl, ctx, out string valExpr))
+                {
+                    return false;
+                }
+
+                string trigVar = ctx.NextVar("__dtrig");
+                sb.Append("var ").Append(trigVar).Append(" = new global::System.Windows.DataTrigger { Binding = ")
+                  .Append(bindingExpr).Append(", Value = ").Append(valExpr).AppendLine(" };");
+
+                if (!TryEmitTriggerBodyChildren(sb, trigVar, trigEl, defaultTargetType, allowTargetName: true, ctx, ignoreChildElement: "DataTrigger.Binding"))
+                {
+                    return false;
+                }
+                sb.Append(triggersExpr).Append(".Add(").Append(trigVar).AppendLine(");");
+                return true;
+            }
+
+            if (local == "MultiDataTrigger")
+            {
+                string trigVar = ctx.NextVar("__mdtrig");
+                sb.Append("var ").Append(trigVar).AppendLine(" = new global::System.Windows.MultiDataTrigger();");
+                foreach (XElement child in trigEl.Elements())
+                {
+                    string cl = child.Name.LocalName;
+                    if (cl == "MultiDataTrigger.Conditions")
+                    {
+                        foreach (XElement condEl in child.Elements())
+                        {
+                            if (!TryEmitBindingCondition(sb, trigVar + ".Conditions", condEl, ctx))
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    else if (cl == "Setter")
+                    {
+                        if (!TryEmitSetterToCollection(sb, trigVar + ".Setters", child, defaultTargetType, allowTargetName: true, ctx))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (cl == "MultiDataTrigger.Setters")
+                    {
+                        foreach (XElement s in child.Elements())
+                        {
+                            if (s.Name.LocalName != "Setter" ||
+                                !TryEmitSetterToCollection(sb, trigVar + ".Setters", s, defaultTargetType, allowTargetName: true, ctx))
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+                sb.Append(triggersExpr).Append(".Add(").Append(trigVar).AppendLine(");");
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryEmitTriggerBodyChildren(
+            StringBuilder sb,
+            string trigVar,
+            XElement trigEl,
+            INamedTypeSymbol? defaultTargetType,
+            bool allowTargetName,
+            XamlCompileContext ctx,
+            string? ignoreChildElement = null)
+        {
+            foreach (XElement child in trigEl.Elements())
+            {
+                string cl = child.Name.LocalName;
+                if (ignoreChildElement is not null && cl == ignoreChildElement)
+                {
+                    continue;
+                }
+                if (cl == "Setter")
+                {
+                    if (!TryEmitSetterToCollection(sb, trigVar + ".Setters", child, defaultTargetType, allowTargetName, ctx))
+                    {
+                        return ctx.Fail($"Trigger setter on '{child.Attribute("Property")?.Value}' failed");
+                    }
+                }
+                else if (cl.EndsWith(".Setters", StringComparison.Ordinal))
                 {
                     foreach (XElement s in child.Elements())
                     {
                         if (s.Name.LocalName != "Setter" ||
-                            !TryEmitSetterToCollection(sb, trigVar + ".Setters", s, defaultTargetType, allowTargetName: true, ctx))
+                            !TryEmitSetterToCollection(sb, trigVar + ".Setters", s, defaultTargetType, allowTargetName, ctx))
                         {
                             return false;
                         }
@@ -1592,9 +1858,90 @@ namespace CSUI.Generators
                     return false;
                 }
             }
-
-            sb.Append(triggersExpr).Append(".Add(").Append(trigVar).AppendLine(");");
             return true;
+        }
+
+        private static bool TryEmitPropertyCondition(
+            StringBuilder sb,
+            string condsExpr,
+            XElement condEl,
+            INamedTypeSymbol? defaultTargetType,
+            XamlCompileContext ctx)
+        {
+            if (condEl.Name.LocalName != "Condition") return false;
+            string? propAttr = condEl.Attribute("Property")?.Value;
+            string? valAttr = condEl.Attribute("Value")?.Value;
+            string? sourceName = condEl.Attribute("SourceName")?.Value;
+            if (string.IsNullOrWhiteSpace(propAttr) || valAttr is null) return false;
+
+            INamedTypeSymbol? effectiveOwner = (!string.IsNullOrEmpty(sourceName) && ctx.TemplateNamedElementTypes.TryGetValue(sourceName!, out var snType))
+                ? snType
+                : defaultTargetType;
+            if (!TryResolveDependencyPropertyRef(propAttr!, effectiveOwner, condEl, ctx, out string dpExpr, out ITypeSymbol? propClrType))
+            {
+                return false;
+            }
+
+            ITypeSymbol valueType = propClrType ?? ctx.Compilation.GetSpecialType(SpecialType.System_Object);
+            if (!TryResolveAttributeValueExpr(valAttr, valueType, condEl, ctx, out string valExpr))
+            {
+                return false;
+            }
+
+            sb.Append(condsExpr).Append(".Add(new global::System.Windows.Condition(").Append(dpExpr).Append(", ").Append(valExpr);
+            if (!string.IsNullOrEmpty(sourceName))
+            {
+                sb.Append(", ").Append(ToCSharpStringLiteral(sourceName!));
+            }
+            sb.AppendLine("));");
+            return true;
+        }
+
+        private static bool TryEmitBindingCondition(StringBuilder sb, string condsExpr, XElement condEl, XamlCompileContext ctx)
+        {
+            if (condEl.Name.LocalName != "Condition") return false;
+            if (!TryEmitBindingFromAttrOrChild(sb, condEl, "Binding", "Condition.Binding", ctx, out string bindingExpr))
+            {
+                return false;
+            }
+            string? valAttr = condEl.Attribute("Value")?.Value;
+            if (valAttr is null) return false;
+            if (!TryResolveAttributeValueExpr(valAttr, ctx.Compilation.GetSpecialType(SpecialType.System_Object), condEl, ctx, out string valExpr))
+            {
+                return false;
+            }
+            sb.Append(condsExpr).Append(".Add(new global::System.Windows.Condition(").Append(bindingExpr).Append(", ").Append(valExpr).AppendLine("));");
+            return true;
+        }
+
+        private static bool TryEmitBindingFromAttrOrChild(
+            StringBuilder sb,
+            XElement ownerEl,
+            string attrName,
+            string childPropName,
+            XamlCompileContext ctx,
+            out string bindingExpr)
+        {
+            bindingExpr = string.Empty;
+            string? bAttr = ownerEl.Attribute(attrName)?.Value;
+            if (!string.IsNullOrWhiteSpace(bAttr))
+            {
+                string trimmed = bAttr!.Trim();
+                if (trimmed.StartsWith("{", StringComparison.Ordinal) && trimmed.EndsWith("}", StringComparison.Ordinal))
+                {
+                    string inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
+                    if (inner.Equals("Binding", StringComparison.Ordinal) || inner.StartsWith("Binding ", StringComparison.Ordinal))
+                    {
+                        return TryBuildBindingExpression(inner, ownerEl, ctx, out bindingExpr);
+                    }
+                }
+                return false;
+            }
+            XElement? childWrap = ownerEl.Elements().FirstOrDefault(e => e.Name.LocalName == childPropName);
+            XElement? bEl = childWrap?.Elements().FirstOrDefault();
+            if (bEl is null) return false;
+            var dummyBind = new StringBuilder();
+            return TryEmitAnyValueElement(sb, dummyBind, bEl, ctx, out bindingExpr) && dummyBind.Length == 0;
         }
 
         private static bool TryEmitSetterToCollection(
@@ -1611,12 +1958,16 @@ namespace CSUI.Generators
                 return false;
             }
 
-            if (!TryResolveDependencyPropertyRef(propAttr!, defaultTargetType, setterEl, ctx, out string dpExpr, out ITypeSymbol? propClrType))
+            string? targetName = allowTargetName ? setterEl.Attribute("TargetName")?.Value : null;
+            INamedTypeSymbol? effectiveOwner = (!string.IsNullOrEmpty(targetName) && ctx.TemplateNamedElementTypes.TryGetValue(targetName!, out var tnType))
+                ? tnType
+                : defaultTargetType;
+
+            if (!TryResolveDependencyPropertyRef(propAttr!, effectiveOwner, setterEl, ctx, out string dpExpr, out ITypeSymbol? propClrType))
             {
                 return false;
             }
 
-            string? targetName = allowTargetName ? setterEl.Attribute("TargetName")?.Value : null;
             XAttribute? valAttr = setterEl.Attribute("Value");
             string? valExpr = null;
 
@@ -1657,6 +2008,13 @@ namespace CSUI.Generators
                         return false;
                     }
                 }
+                else if (contentEl.Name.LocalName == "ItemsPanelTemplate")
+                {
+                    if (!TryEmitItemsPanelTemplateElement(sb, contentEl, ctx, out valExpr))
+                    {
+                        return false;
+                    }
+                }
                 else
                 {
                     var dummyBindingSb = new StringBuilder();
@@ -1688,6 +2046,10 @@ namespace CSUI.Generators
             clrType = null;
 
             string trimmed = propNameExpr.Trim();
+            if (trimmed.StartsWith("(", StringComparison.Ordinal) && trimmed.EndsWith(")", StringComparison.Ordinal))
+            {
+                trimmed = trimmed.Substring(1, trimmed.Length - 2).Trim();
+            }
             int dot = trimmed.IndexOf('.');
             INamedTypeSymbol? ownerType = defaultTargetType;
             string dpShortName = trimmed;
@@ -1704,10 +2066,10 @@ namespace CSUI.Generators
                 return false;
             }
 
-            IFieldSymbol? dpField = FindDependencyPropertyField(ownerType, dpShortName + "Property");
+            ISymbol? dpField = FindDependencyPropertyField(ownerType, dpShortName + "Property");
             if (dpField is null)
             {
-                return false;
+                return ctx.Fail($"DP '{ownerType.Name}.{dpShortName}Property' not found");
             }
 
             dpExpr = dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dpField.Name;
@@ -1739,6 +2101,31 @@ namespace CSUI.Generators
             return null;
         }
 
+        private static void CollectTemplateNamedElements(XElement el, string classNamespace, Compilation compilation, string xamlNs, Dictionary<string, INamedTypeSymbol> map)
+        {
+            string local = el.Name.LocalName;
+            if (!local.Contains('.'))
+            {
+                string? name = el.Attribute(XName.Get("Name", xamlNs))?.Value ?? el.Attribute("Name")?.Value;
+                if (!string.IsNullOrEmpty(name))
+                {
+                    INamedTypeSymbol? elemType = ResolveElementType(local, el.Name.NamespaceName, classNamespace, compilation);
+                    if (elemType is not null)
+                    {
+                        map[name!] = elemType;
+                    }
+                }
+            }
+            foreach (XElement child in el.Elements())
+            {
+                if (child.Name.LocalName == "ControlTemplate" || child.Name.LocalName == "DataTemplate")
+                {
+                    continue; // Inner templates have their own namescope
+                }
+                CollectTemplateNamedElements(child, classNamespace, compilation, xamlNs, map);
+            }
+        }
+
         private static bool TryEmitControlTemplateElement(
             StringBuilder sb,
             XElement tplEl,
@@ -1767,27 +2154,19 @@ namespace CSUI.Generators
                 sb.Append("var ").Append(tplVar).AppendLine(" = new global::System.Windows.Controls.ControlTemplate();");
             }
 
+            XElement? resourcesEl = null;
+            XElement? triggersEl = null;
             XElement? visualRoot = null;
             foreach (XElement child in tplEl.Elements())
             {
                 string local = child.Name.LocalName;
                 if (local == "ControlTemplate.Resources")
                 {
-                    var dummy = new StringBuilder();
-                    if (!TryEmitResourcesCollection(sb, dummy, tplVar + ".Resources", child, ctx) || dummy.Length > 0)
-                    {
-                        return false;
-                    }
+                    resourcesEl = child;
                 }
                 else if (local == "ControlTemplate.Triggers")
                 {
-                    foreach (XElement trigEl in child.Elements())
-                    {
-                        if (!TryEmitTriggerToCollection(sb, tplVar + ".Triggers", trigEl, targetType, ctx))
-                        {
-                            return false;
-                        }
-                    }
+                    triggersEl = child;
                 }
                 else if (local == "ControlTemplate.VisualTree")
                 {
@@ -1803,15 +2182,100 @@ namespace CSUI.Generators
                 }
             }
 
+            var savedNamed = new Dictionary<string, INamedTypeSymbol>(ctx.TemplateNamedElementTypes, StringComparer.Ordinal);
+            ctx.TemplateNamedElementTypes.Clear();
             if (visualRoot is not null)
             {
-                if (!TryEmitFrameworkElementFactoryTree(sb, visualRoot, targetType, ctx, out string rootFefVar))
+                CollectTemplateNamedElements(visualRoot, ctx.ClassNamespace, ctx.Compilation, ctx.XamlNs, ctx.TemplateNamedElementTypes);
+            }
+
+            bool pushedTplRes = false;
+            try
+            {
+                if (resourcesEl is not null)
+                {
+                    var dummy = new StringBuilder();
+                    if (!TryEmitResourcesCollection(sb, dummy, tplVar + ".Resources", resourcesEl, ctx) || dummy.Length > 0)
+                    {
+                        return false;
+                    }
+                    var tplResKeys = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (XElement kEl in resourcesEl.Elements())
+                    {
+                        string? rawK = kEl.Attribute(XName.Get("Key", ctx.XamlNs))?.Value;
+                        if (!string.IsNullOrWhiteSpace(rawK))
+                        {
+                            tplResKeys.Add(rawK!);
+                            tplResKeys.Add(NormalizeThemeResourceKey(rawK!));
+                        }
+                    }
+                    ctx.LocalResourceKeyScopes.Push(tplResKeys);
+                    ctx.ResourceScopes.Insert(0, (tplVar + ".Resources", true));
+                    pushedTplRes = true;
+                }
+
+                if (visualRoot is not null)
+                {
+                    if (!TryEmitFrameworkElementFactoryTree(sb, visualRoot, targetType, ctx, out string rootFefVar))
+                    {
+                        return false;
+                    }
+                    sb.Append(tplVar).Append(".VisualTree = ").Append(rootFefVar).AppendLine(";");
+                }
+
+                if (triggersEl is not null)
+                {
+                    foreach (XElement trigEl in triggersEl.Elements())
+                    {
+                        if (!TryEmitTriggerToCollection(sb, tplVar + ".Triggers", trigEl, targetType, ctx))
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+            finally
+            {
+                if (pushedTplRes)
+                {
+                    ctx.ResourceScopes.RemoveAt(0);
+                    ctx.LocalResourceKeyScopes.Pop();
+                }
+                ctx.TemplateNamedElementTypes.Clear();
+                foreach (var kv in savedNamed)
+                {
+                    ctx.TemplateNamedElementTypes[kv.Key] = kv.Value;
+                }
+            }
+        }
+
+        private static bool TryEmitItemsPanelTemplateElement(
+            StringBuilder sb,
+            XElement iptEl,
+            XamlCompileContext ctx,
+            out string iptVar)
+        {
+            iptVar = ctx.NextVar("__ipt");
+            XElement? visualRoot = iptEl.Elements().FirstOrDefault(static e => !e.Name.LocalName.Contains('.'));
+            if (visualRoot is null)
+            {
+                XElement? vt = iptEl.Elements().FirstOrDefault(static e => e.Name.LocalName == "ItemsPanelTemplate.VisualTree");
+                visualRoot = vt?.Elements().FirstOrDefault();
+            }
+            if (visualRoot is not null)
+            {
+                if (!TryEmitFrameworkElementFactoryTree(sb, visualRoot, templateTargetType: null, ctx, out string rootFefVar))
                 {
                     return false;
                 }
-                sb.Append(tplVar).Append(".VisualTree = ").Append(rootFefVar).AppendLine(";");
+                sb.Append("var ").Append(iptVar).Append(" = new global::System.Windows.Controls.ItemsPanelTemplate(").Append(rootFefVar).AppendLine(");");
             }
-
+            else
+            {
+                sb.Append("var ").Append(iptVar).AppendLine(" = new global::System.Windows.Controls.ItemsPanelTemplate();");
+            }
             return true;
         }
 
@@ -1885,7 +2349,7 @@ namespace CSUI.Generators
             INamedTypeSymbol? elemType = ResolveElementType(el.Name.LocalName, el.Name.NamespaceName, ctx.ClassNamespace, ctx.Compilation);
             if (elemType is null || elemType.IsAbstract || !HasPublicParameterlessCtor(elemType))
             {
-                return false;
+                return ctx.Fail($"FEF element '{el.Name.LocalName}' not instantiable");
             }
 
             string? name = el.Attribute(XName.Get("Name", ctx.XamlNs))?.Value ?? el.Attribute("Name")?.Value;
@@ -1897,12 +2361,62 @@ namespace CSUI.Generators
                 sb.Append(ToCSharpStringLiteral(name!));
             }
             sb.AppendLine(");");
+            if (!string.IsNullOrEmpty(name))
+            {
+                ISymbol? nameDp = FindDependencyPropertyField(elemType, "NameProperty");
+                if (nameDp != null)
+                {
+                    sb.Append(fefVar).Append(".SetValue(")
+                      .Append(nameDp.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                      .Append('.').Append(nameDp.Name)
+                      .Append(", ").Append(ToCSharpStringLiteral(name!)).AppendLine(");");
+                }
+            }
 
+            int pushedFefResScopes = 0;
+            foreach (XElement resEl in el.Elements())
+            {
+                string rl = resEl.Name.LocalName;
+                int dotIdx = rl.IndexOf('.');
+                if (dotIdx > 0 && rl.Substring(dotIdx + 1) == "Resources")
+                {
+                    string fefResVar = ctx.NextVar("__fefRes");
+                    sb.Append("var ").Append(fefResVar).AppendLine(" = new global::System.Windows.ResourceDictionary();");
+                    var dummyBind = new StringBuilder();
+                    if (!TryEmitResourcesCollection(sb, dummyBind, fefResVar, resEl, ctx) || dummyBind.Length > 0)
+                    {
+                        while (pushedFefResScopes-- > 0)
+                        {
+                            ctx.ResourceScopes.RemoveAt(0);
+                            ctx.LocalResourceKeyScopes.Pop();
+                        }
+                        return false;
+                    }
+                    var localKeys = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (XElement kEl in resEl.Elements())
+                    {
+                        string? rawK = kEl.Attribute(XName.Get("Key", ctx.XamlNs))?.Value;
+                        if (!string.IsNullOrWhiteSpace(rawK))
+                        {
+                            localKeys.Add(rawK!);
+                            localKeys.Add(NormalizeThemeResourceKey(rawK!));
+                        }
+                    }
+                    ctx.LocalResourceKeyScopes.Push(localKeys);
+                    ctx.ResourceScopes.Insert(0, (fefResVar, true));
+                    pushedFefResScopes++;
+                    sb.Append(fefVar).Append(".AddPostInstantiateAction(__feObj => ((global::System.Windows.FrameworkElement)__feObj).Resources.MergedDictionaries.Add(").Append(fefResVar).AppendLine("));");
+                }
+            }
+
+            try
+            {
             foreach (XAttribute attr in el.Attributes())
             {
                 if (attr.IsNamespaceDeclaration) continue;
                 string attrNs = attr.Name.NamespaceName;
                 string attrLocal = attr.Name.LocalName;
+                if (attrNs == "http://www.w3.org/XML/1998/namespace") continue;
                 if (attrNs == ctx.XamlNs)
                 {
                     if (attrLocal == "Name") continue;
@@ -1910,7 +2424,8 @@ namespace CSUI.Generators
                 }
                 if (attrLocal == "Name") continue;
                 if (attrNs == "http://schemas.openxmlformats.org/markup-compatibility/2006" ||
-                    attrNs == "http://schemas.microsoft.com/expression/blend/2008")
+                    attrNs == "http://schemas.microsoft.com/expression/blend/2008" ||
+                    attrNs == "http://www.w3.org/XML/1998/namespace")
                 {
                     continue;
                 }
@@ -1925,15 +2440,15 @@ namespace CSUI.Generators
                     string propName = attrLocal.Substring(dotIdx + 1);
                     INamedTypeSymbol? ownerType = ResolveElementType(ownerName, string.IsNullOrEmpty(attrNs) ? el.Name.NamespaceName : attrNs, ctx.ClassNamespace, ctx.Compilation);
                     if (ownerType is null) return false;
-                    IFieldSymbol? attachedDp = FindDependencyPropertyField(ownerType, propName + "Property");
-                    if (attachedDp is null) return false;
+                    ISymbol? attachedDp = FindDependencyPropertyField(ownerType, propName + "Property");
+                    if (attachedDp is null) return ctx.Fail($"Attached DP '{ownerType.Name}.{propName}Property' not found");
                     dpExpr = attachedDp.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + attachedDp.Name;
                     valType = FindStaticGetMethod(ownerType, "Get" + propName)?.ReturnType;
                 }
                 else
                 {
-                    IFieldSymbol? dpField = FindDependencyPropertyField(elemType, attrLocal + "Property");
-                    if (dpField is null) return false;
+                    ISymbol? dpField = FindDependencyPropertyField(elemType, attrLocal + "Property");
+                    if (dpField is null) return ctx.Fail($"FEF attr DP '{elemType.Name}.{attrLocal}Property' not found");
                     dpExpr = dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dpField.Name;
                     valType = FindProperty(elemType, attrLocal)?.Type;
                 }
@@ -1974,7 +2489,7 @@ namespace CSUI.Generators
 
                 if (!TryResolveAttributeValueExpr(attr.Value, valType ?? ctx.Compilation.GetSpecialType(SpecialType.System_Object), el, ctx, out string valExpr))
                 {
-                    return false;
+                    return ctx.Fail($"FEF attr '{attrLocal}' value '{attr.Value}' on '{elemType.Name}' failed");
                 }
                 sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", ").Append(valExpr).AppendLine(");");
             }
@@ -1984,7 +2499,132 @@ namespace CSUI.Generators
                 string childLocal = child.Name.LocalName;
                 if (childLocal.Contains('.'))
                 {
-                    // Allow simple wrapper property elements inside templates
+                    int dotIdx = childLocal.IndexOf('.');
+                    string ownerName = childLocal.Substring(0, dotIdx);
+                    string propName = childLocal.Substring(dotIdx + 1);
+
+                    if (propName == "ColumnDefinitions")
+                    {
+                        foreach (XElement colEl in child.Elements())
+                        {
+                            if (!TryEmitFrameworkElementFactoryTree(sb, colEl, templateTargetType, ctx, out string colFefVar))
+                            {
+                                return false;
+                            }
+                            sb.Append(fefVar).Append(".AppendChildProperty(static (p, c) => ((global::System.Windows.Controls.Grid)p).ColumnDefinitions.Add((global::System.Windows.Controls.ColumnDefinition)c), ").Append(colFefVar).AppendLine(");");
+                        }
+                        continue;
+                    }
+
+                    if (propName == "RowDefinitions")
+                    {
+                        foreach (XElement rowEl in child.Elements())
+                        {
+                            if (!TryEmitFrameworkElementFactoryTree(sb, rowEl, templateTargetType, ctx, out string rowFefVar))
+                            {
+                                return false;
+                            }
+                            sb.Append(fefVar).Append(".AppendChildProperty(static (p, c) => ((global::System.Windows.Controls.Grid)p).RowDefinitions.Add((global::System.Windows.Controls.RowDefinition)c), ").Append(rowFefVar).AppendLine(");");
+                        }
+                        continue;
+                    }
+
+                    if (propName == "Resources")
+                    {
+                        continue; // Already emitted and pushed before attributes/children
+                    }
+
+                    if (childLocal == "VisualStateManager.VisualStateGroups")
+                    {
+                        var vsgSb = new StringBuilder();
+                        var dummyBind = new StringBuilder();
+                        vsgSb.AppendLine("var __vsgList = global::System.Windows.VisualStateManager.GetVisualStateGroups((global::System.Windows.FrameworkElement)__feObj);");
+                        foreach (XElement vsgEl in child.Elements())
+                        {
+                            if (!TryEmitAnyValueElement(vsgSb, dummyBind, vsgEl, ctx, out string vsgVar) || dummyBind.Length > 0)
+                            {
+                                return ctx.Fail($"VisualStateGroups child '{vsgEl.Name.LocalName}' failed");
+                            }
+                            vsgSb.Append("__vsgList.Add(").Append(vsgVar).AppendLine(");");
+                        }
+                        sb.Append(fefVar).AppendLine(".AddPostInstantiateAction(__feObj =>");
+                        sb.AppendLine("{");
+                        using (var r = new StringReader(vsgSb.ToString()))
+                        {
+                            string? l;
+                            while ((l = r.ReadLine()) is not null)
+                            {
+                                sb.Append("    ").AppendLine(l);
+                            }
+                        }
+                        sb.AppendLine("});");
+                        continue;
+                    }
+
+                    // Check if property is a DependencyProperty on elemType or attached owner
+                    INamedTypeSymbol? propOwner = elemType;
+                    ISymbol? dpField = FindDependencyPropertyField(elemType, propName + "Property");
+                    if (dpField is null)
+                    {
+                        INamedTypeSymbol? explicitOwner = ResolveElementType(ownerName, child.Name.NamespaceName, ctx.ClassNamespace, ctx.Compilation);
+                        if (explicitOwner is not null)
+                        {
+                            dpField = FindDependencyPropertyField(explicitOwner, propName + "Property");
+                            propOwner = explicitOwner;
+                        }
+                    }
+
+                    if (dpField is not null && !GetMemberType(dpField).ToDisplayString().EndsWith("DependencyPropertyKey", StringComparison.Ordinal))
+                    {
+                        string dpExpr = dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dpField.Name;
+                        XElement? valEl = child.Elements().FirstOrDefault();
+                        if (valEl is null) return false;
+                        if (valEl.Name.LocalName == "ControlTemplate")
+                        {
+                            if (!TryEmitControlTemplateElement(sb, valEl, elemType, ctx, out string ctVar))
+                            {
+                                return false;
+                            }
+                            sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", ").Append(ctVar).AppendLine(");");
+                            continue;
+                        }
+                        var dummyBind = new StringBuilder();
+                        if (!TryEmitAnyValueElement(sb, dummyBind, valEl, ctx, out string valVar) || dummyBind.Length > 0)
+                        {
+                            return ctx.Fail($"FEF prop element '{childLocal}' val '{valEl.Name.LocalName}' failed");
+                        }
+                        INamedTypeSymbol? valElemType = ResolveElementType(valEl.Name.LocalName, valEl.Name.NamespaceName, ctx.ClassNamespace, ctx.Compilation);
+                        if (valElemType is not null && InheritsFrom(valElemType, "System.Windows.Data.BindingBase"))
+                        {
+                            sb.Append(fefVar).Append(".SetBinding(").Append(dpExpr).Append(", ").Append(valVar).AppendLine(");");
+                        }
+                        else
+                        {
+                            sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", ").Append(valVar).AppendLine(");");
+                        }
+                        continue;
+                    }
+
+                    // CLR child element property (e.g. Track.DecreaseRepeatButton, Track.Thumb, BulletDecorator.Bullet)
+                    IPropertySymbol? clrProp = FindProperty(elemType, propName);
+                    if (clrProp is not null && clrProp.SetMethod is not null && clrProp.SetMethod.DeclaredAccessibility == Accessibility.Public)
+                    {
+                        XElement? innerChild = child.Elements().FirstOrDefault();
+                        if (innerChild is not null)
+                        {
+                            if (!TryEmitFrameworkElementFactoryTree(sb, innerChild, templateTargetType, ctx, out string innerFefVar))
+                            {
+                                return false;
+                            }
+                            string pType = elemType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            string cType = clrProp.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            sb.Append(fefVar).Append(".AppendChildProperty(static (p, c) => ((").Append(pType).Append(")p).").Append(clrProp.Name)
+                              .Append(" = (").Append(cType).Append(")c, ").Append(innerFefVar).AppendLine(");");
+                            continue;
+                        }
+                    }
+
+                    // Fallback: generic wrapper (e.g. Border.Child)
                     foreach (XElement innerChild in child.Elements())
                     {
                         if (!TryEmitFrameworkElementFactoryTree(sb, innerChild, templateTargetType, ctx, out string innerFefVar))
@@ -2004,6 +2644,15 @@ namespace CSUI.Generators
             }
 
             return true;
+            }
+            finally
+            {
+                while (pushedFefResScopes-- > 0)
+                {
+                    ctx.ResourceScopes.RemoveAt(0);
+                    ctx.LocalResourceKeyScopes.Pop();
+                }
+            }
         }
 
         private static bool TryCreateAndEmitChildElement(
@@ -2019,7 +2668,7 @@ namespace CSUI.Generators
             if (resolved is null || resolved.IsAbstract || !HasPublicParameterlessCtor(resolved))
             {
                 childType = null!;
-                return false;
+                return ctx.Fail($"Child element '{childEl.Name.LocalName}' not instantiable (resolved={resolved?.Name})");
             }
 
             childType = resolved;
@@ -2146,7 +2795,7 @@ namespace CSUI.Generators
 
             if (setMethod is null)
             {
-                return false;
+                return ctx.Fail($"Attached setter '{ownerType.Name}.{setterName}' not found");
             }
 
             ITypeSymbol paramType = setMethod.Parameters[1].Type;
@@ -2167,8 +2816,8 @@ namespace CSUI.Generators
                 string inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
                 if (inner.Equals("Binding", StringComparison.Ordinal) || inner.StartsWith("Binding ", StringComparison.Ordinal))
                 {
-                    IFieldSymbol? dpField = FindDependencyPropertyField(ownerType, propName + "Property");
-                    if (dpField is null) return false;
+                    ISymbol? dpField = FindDependencyPropertyField(ownerType, propName + "Property");
+                    if (dpField is null) return ctx.Fail($"Attached Binding DP '{ownerType.Name}.{propName}Property' not found");
                     if (!TryBuildBindingExpression(inner, el, ctx, out string bindingExpr)) return false;
                     bindingSb.Append("global::System.Windows.Data.BindingOperations.SetBinding(")
                              .Append(targetExpr).Append(", ")
@@ -2179,7 +2828,7 @@ namespace CSUI.Generators
 
                 if (inner.StartsWith("DynamicResource ", StringComparison.Ordinal))
                 {
-                    IFieldSymbol? dpField = FindDependencyPropertyField(ownerType, propName + "Property");
+                    ISymbol? dpField = FindDependencyPropertyField(ownerType, propName + "Property");
                     if (dpField is not null)
                     {
                         string keyRaw = inner.Substring("DynamicResource ".Length).Trim();
@@ -2203,7 +2852,7 @@ namespace CSUI.Generators
 
             if (!TryConvertLiteralToCSharp(rawValue, paramType, el, ctx.ClassNamespace, ctx.Compilation, out string valExpr))
             {
-                return false;
+                return ctx.Fail($"Attached literal '{ownerType.Name}.{propName}'='{rawValue}' ({paramType.ToDisplayString()}) failed");
             }
 
             sb.Append(ownerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
@@ -2280,8 +2929,13 @@ namespace CSUI.Generators
                 {
                     return false;
                 }
-                resolvedExpr = EmitStaticResourceLookupExpr(keyExpr, targetType, ctx);
+                resolvedExpr = EmitStaticResourceLookupExpr(keyRaw, keyExpr, targetType, ctx);
                 return true;
+            }
+
+            if (inner.StartsWith("ComponentResourceKey ", StringComparison.Ordinal))
+            {
+                return TryBuildComponentResourceKeyExpr(inner, el, ctx, out resolvedExpr);
             }
 
             if (inner.Equals("RelativeSource", StringComparison.Ordinal) || inner.StartsWith("RelativeSource ", StringComparison.Ordinal))
@@ -2297,18 +2951,80 @@ namespace CSUI.Generators
             return false;
         }
 
-        private static string EmitStaticResourceLookupExpr(string keyExpr, ITypeSymbol? expectedType, XamlCompileContext ctx)
+        private static string EmitStaticResourceLookupExpr(string rawKey, string keyExpr, ITypeSymbol? expectedType, XamlCompileContext ctx)
         {
-            ctx.NeedsFindResourceHelper = true;
             string typeArg = expectedType is not null
                 ? expectedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 : "object";
+
+            bool isLocalOverride = false;
+            foreach (HashSet<string> localKeys in ctx.LocalResourceKeyScopes)
+            {
+                if (localKeys.Contains(rawKey) || localKeys.Contains(NormalizeThemeResourceKey(rawKey)))
+                {
+                    isLocalOverride = true;
+                    break;
+                }
+            }
+
+            if (!isLocalOverride && ctx.ThemeResourceIndex is not null &&
+                ctx.ThemeResourceIndex.TryGetValue(NormalizeThemeResourceKey(rawKey), out var themeEntry))
+            {
+                string call = themeEntry.TypeName == ctx.CurrentThemeTypeName
+                    ? themeEntry.MethodName + "()"
+                    : themeEntry.TypeName + "." + themeEntry.MethodName + "()";
+                if (typeArg == "object" || typeArg == "object?")
+                {
+                    return call;
+                }
+                return $"(({typeArg})(object){call})";
+            }
+
+            ctx.NeedsFindResourceHelper = true;
             if (ctx.ResourceScopes.Count == 0)
             {
                 return $"__CsuiFindRes<{typeArg}>({keyExpr})";
             }
             string scopes = string.Join(", ", ctx.ResourceScopes.Select(static s => s.Expr));
             return $"__CsuiFindRes<{typeArg}>({keyExpr}, {scopes})";
+        }
+
+        private static string NormalizeThemeResourceKey(string rawKey)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(rawKey.Trim(), @"\s+", " ");
+        }
+
+        private static bool TryBuildComponentResourceKeyExpr(string inner, XElement el, XamlCompileContext ctx, out string expr)
+        {
+            expr = string.Empty;
+            string args = inner.Substring("ComponentResourceKey ".Length).Trim();
+            string? targetAsmTypeRaw = null;
+            string? resourceIdRaw = null;
+            foreach (string rawPart in SplitMarkupArgs(args))
+            {
+                string part = rawPart.Trim();
+                if (string.IsNullOrEmpty(part)) continue;
+                int eq = part.IndexOf('=');
+                if (eq < 0) continue;
+                string k = part.Substring(0, eq).Trim();
+                string v = UnquoteMarkupArg(part.Substring(eq + 1).Trim());
+                if (k == "TypeInTargetAssembly") targetAsmTypeRaw = v;
+                else if (k == "ResourceId") resourceIdRaw = v;
+            }
+            if (string.IsNullOrWhiteSpace(targetAsmTypeRaw) || string.IsNullOrWhiteSpace(resourceIdRaw))
+            {
+                return false;
+            }
+            if (!TryResolveTypeAttributeExpr(targetAsmTypeRaw!, el, ctx, out _, out string typeofExpr))
+            {
+                return false;
+            }
+            if (!TryResolveMarkupOrLiteralKeyExpr(resourceIdRaw!, el, ctx, out string idExpr))
+            {
+                return false;
+            }
+            expr = $"new global::System.Windows.ComponentResourceKey({typeofExpr}, {idExpr})";
+            return true;
         }
 
         private static INamedTypeSymbol? ResolveMarkupType(string typePart, XElement el, XamlCompileContext ctx)
@@ -2410,10 +3126,10 @@ namespace CSUI.Generators
             string inner = expr.Substring(1, expr.Length - 2).Trim();
             if (inner.StartsWith("DynamicResource ", StringComparison.Ordinal))
             {
-                IFieldSymbol? dpField = FindDependencyPropertyField(targetType, prop.Name + "Property");
+                ISymbol? dpField = FindDependencyPropertyField(targetType, prop.Name + "Property");
                 if (dpField is null)
                 {
-                    return false;
+                    return ctx.Fail($"DynamicResource DP '{targetType.Name}.{prop.Name}Property' not found");
                 }
                 string keyRaw = inner.Substring("DynamicResource ".Length).Trim();
                 if (!TryResolveMarkupOrLiteralKeyExpr(keyRaw, el, ctx, out string keyExpr))
@@ -2428,7 +3144,7 @@ namespace CSUI.Generators
 
             if (inner.Equals("Binding", StringComparison.Ordinal) || inner.StartsWith("Binding ", StringComparison.Ordinal))
             {
-                IFieldSymbol? dpField = FindDependencyPropertyField(targetType, prop.Name + "Property");
+                ISymbol? dpField = FindDependencyPropertyField(targetType, prop.Name + "Property");
                 if (dpField is null)
                 {
                     // Non-DP Binding properties like DataGridBoundColumn.Binding (type BindingBase) get assigned directly
@@ -2670,7 +3386,7 @@ namespace CSUI.Generators
             return null;
         }
 
-        private static IFieldSymbol? FindDependencyPropertyField(INamedTypeSymbol type, string fieldName)
+        private static ISymbol? FindDependencyPropertyField(INamedTypeSymbol type, string fieldName)
         {
             for (INamedTypeSymbol? cur = type; cur is not null; cur = cur.BaseType)
             {
@@ -2680,10 +3396,21 @@ namespace CSUI.Generators
                     {
                         return fld;
                     }
+                    if (member is IPropertySymbol prop && prop.IsStatic && prop.DeclaredAccessibility == Accessibility.Public)
+                    {
+                        return prop;
+                    }
                 }
             }
             return null;
         }
+
+        private static ITypeSymbol GetMemberType(ISymbol member) => member switch
+        {
+            IFieldSymbol f => f.Type,
+            IPropertySymbol p => p.Type,
+            _ => throw new InvalidOperationException()
+        };
 
         private static string? FindContentPropertyName(INamedTypeSymbol type)
         {
@@ -2730,6 +3457,12 @@ namespace CSUI.Generators
         private static bool IsCollectionLike(ITypeSymbol type)
         {
             if (type.SpecialType == SpecialType.System_String) return false;
+            string selfName = type.ToDisplayString();
+            if (selfName == "System.Collections.IList" ||
+                (type is INamedTypeSymbol nsSelf && nsSelf.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.ICollection<T>"))
+            {
+                return true;
+            }
             foreach (INamedTypeSymbol iface in type.AllInterfaces)
             {
                 string name = iface.ToDisplayString();
@@ -2873,6 +3606,11 @@ namespace CSUI.Generators
                     }
                     return false;
                 case "System.Windows.Thickness":
+                    if (string.Equals(trimmed, "Auto", StringComparison.OrdinalIgnoreCase))
+                    {
+                        expr = "new global::System.Windows.Thickness(double.NaN)";
+                        return true;
+                    }
                     return TryParseDoublesExpr(trimmed, static nums =>
                     {
                         if (nums.Length == 1) return $"new global::System.Windows.Thickness({nums[0]}d)";
@@ -2975,6 +3713,55 @@ namespace CSUI.Generators
                         }
                     }
                     return false;
+                case "System.Windows.TextDecorationCollection":
+                    if (string.Equals(trimmed, "None", StringComparison.OrdinalIgnoreCase))
+                    {
+                        expr = "new global::System.Windows.TextDecorationCollection()";
+                        return true;
+                    }
+                    if (compilation.GetTypeByMetadataName("System.Windows.TextDecorations") is INamedTypeSymbol tdType)
+                    {
+                        foreach (ISymbol m in tdType.GetMembers())
+                        {
+                            if (m is IPropertySymbol tp && tp.IsStatic && string.Equals(tp.Name, trimmed, StringComparison.OrdinalIgnoreCase))
+                            {
+                                expr = "global::System.Windows.TextDecorations." + tp.Name;
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                case "System.Windows.Input.ICommand":
+                {
+                    int cmdDot = trimmed.LastIndexOf('.');
+                    string[] cmdClasses = cmdDot > 0
+                        ? new[] { "System.Windows.Input." + trimmed.Substring(0, cmdDot).Trim() }
+                        : new[]
+                        {
+                            "System.Windows.Input.ApplicationCommands",
+                            "System.Windows.Input.NavigationCommands",
+                            "System.Windows.Input.EditingCommands",
+                            "System.Windows.Input.MediaCommands",
+                            "System.Windows.Input.ComponentCommands"
+                        };
+                    string cmdMember = cmdDot > 0 ? trimmed.Substring(cmdDot + 1).Trim() : trimmed;
+                    foreach (string clsName in cmdClasses)
+                    {
+                        if (compilation.GetTypeByMetadataName(clsName) is INamedTypeSymbol cmdOwner)
+                        {
+                            foreach (ISymbol m in cmdOwner.GetMembers())
+                            {
+                                if ((m is IPropertySymbol p && p.IsStatic || m is IFieldSymbol f && f.IsStatic) &&
+                                    string.Equals(m.Name, cmdMember, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    expr = cmdOwner.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + m.Name;
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                }
                 case "System.Windows.Media.ImageSource":
                     expr = $"new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri({ToCSharpStringLiteral(trimmed)}, global::System.UriKind.RelativeOrAbsolute))";
                     return true;
@@ -2989,6 +3776,52 @@ namespace CSUI.Generators
                 case "System.Windows.Media.Geometry":
                     expr = $"global::System.Windows.Media.Geometry.Parse({ToCSharpStringLiteral(trimmed)})";
                     return true;
+                case "System.Windows.Media.Transform":
+                    expr = $"global::System.Windows.Media.Transform.Parse({ToCSharpStringLiteral(trimmed)})";
+                    return true;
+                case "System.Windows.Media.DoubleCollection":
+                    return TryParseDoublesExpr(trimmed, static nums =>
+                        "new global::System.Windows.Media.DoubleCollection { " + string.Join(", ", nums.Select(static n => n + "d")) + " }", out expr);
+                case "System.Windows.Media.PointCollection":
+                    return TryParseDoublesExpr(trimmed, static nums =>
+                    {
+                        if (nums.Length % 2 != 0) return null;
+                        var pts = new List<string>(nums.Length / 2);
+                        for (int i = 0; i < nums.Length; i += 2)
+                        {
+                            pts.Add($"new global::System.Windows.Point({nums[i]}d, {nums[i + 1]}d)");
+                        }
+                        return "new global::System.Windows.Media.PointCollection { " + string.Join(", ", pts) + " }";
+                    }, out expr);
+                case "System.Windows.PropertyPath":
+                {
+                    var ppCtx = new XamlCompileContext(compilation, classNamespace, "http://schemas.microsoft.com/winfx/2006/xaml", false);
+                    expr = BuildPropertyPathExpr(trimmed, el, ppCtx);
+                    return true;
+                }
+                case "System.Windows.Media.Animation.KeyTime":
+                    if (string.Equals(trimmed, "Uniform", StringComparison.OrdinalIgnoreCase))
+                    {
+                        expr = "global::System.Windows.Media.Animation.KeyTime.Uniform";
+                        return true;
+                    }
+                    if (string.Equals(trimmed, "Paced", StringComparison.OrdinalIgnoreCase))
+                    {
+                        expr = "global::System.Windows.Media.Animation.KeyTime.Paced";
+                        return true;
+                    }
+                    if (trimmed.EndsWith("%", StringComparison.Ordinal) &&
+                        double.TryParse(trimmed.Substring(0, trimmed.Length - 1), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double pct))
+                    {
+                        expr = $"global::System.Windows.Media.Animation.KeyTime.FromPercent({(pct / 100.0).ToString("R", System.Globalization.CultureInfo.InvariantCulture)}d)";
+                        return true;
+                    }
+                    if (TimeSpan.TryParse(trimmed, System.Globalization.CultureInfo.InvariantCulture, out TimeSpan kts))
+                    {
+                        expr = $"global::System.Windows.Media.Animation.KeyTime.FromTimeSpan(new global::System.TimeSpan({kts.Ticks}L))";
+                        return true;
+                    }
+                    return false;
                 case "System.Type":
                 {
                     var dummyCtx = new XamlCompileContext(compilation, classNamespace, "http://schemas.microsoft.com/winfx/2006/xaml", false);
@@ -3036,10 +3869,75 @@ namespace CSUI.Generators
                         expr = $"new global::System.Windows.Media.Animation.RepeatBehavior({rCount.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}d)";
                         return true;
                     }
+                    if (TimeSpan.TryParse(trimmed, System.Globalization.CultureInfo.InvariantCulture, out TimeSpan rts))
+                    {
+                        expr = $"new global::System.Windows.Media.Animation.RepeatBehavior(new global::System.TimeSpan({rts.Ticks}L))";
+                        return true;
+                    }
                     return false;
             }
 
             return false;
+        }
+
+        private static string BuildPropertyPathExpr(string rawPath, XElement el, XamlCompileContext ctx)
+        {
+            var sbPath = new StringBuilder(rawPath.Length);
+            var parameters = new List<string>();
+            int pos = 0;
+            while (pos < rawPath.Length)
+            {
+                int open = rawPath.IndexOf('(', pos);
+                if (open < 0)
+                {
+                    sbPath.Append(rawPath, pos, rawPath.Length - pos);
+                    break;
+                }
+                int close = rawPath.IndexOf(')', open + 1);
+                if (close < 0)
+                {
+                    sbPath.Append(rawPath, pos, rawPath.Length - pos);
+                    break;
+                }
+
+                sbPath.Append(rawPath, pos, open - pos);
+                string inner = rawPath.Substring(open + 1, close - open - 1).Trim();
+                int dot = inner.LastIndexOf('.');
+                string? paramExpr = null;
+                if (dot > 0)
+                {
+                    string ownerPart = inner.Substring(0, dot).Trim();
+                    string propName = inner.Substring(dot + 1).Trim();
+                    INamedTypeSymbol? ownerSym = ResolveMarkupType(ownerPart, el, ctx);
+                    if (ownerSym is not null)
+                    {
+                        ISymbol? dp = FindDependencyPropertyField(ownerSym, propName + "Property");
+                        if (dp is not null)
+                        {
+                            paramExpr = dp.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dp.Name;
+                        }
+                    }
+                }
+
+                if (paramExpr is not null)
+                {
+                    sbPath.Append('(').Append(parameters.Count).Append(')');
+                    parameters.Add(paramExpr);
+                }
+                else
+                {
+                    sbPath.Append(rawPath, open, close - open + 1);
+                }
+
+                pos = close + 1;
+            }
+
+            if (parameters.Count == 0)
+            {
+                return $"new global::System.Windows.PropertyPath({ToCSharpStringLiteral(rawPath)})";
+            }
+
+            return $"new global::System.Windows.PropertyPath({ToCSharpStringLiteral(sbPath.ToString())}, {string.Join(", ", parameters)})";
         }
 
         private static bool TryParseColorExpr(string trimmed, Compilation compilation, out string colorExpr)
@@ -3180,10 +4078,379 @@ namespace CSUI.Generators
             _ => $"'{c}'"
         };
 
+        private static bool IsAero2ThemePath(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string norm = path!.Replace('\\', '/');
+            return norm.IndexOf("/Themes/Aero2/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static readonly DiagnosticDescriptor Aero2CompileDiagnostic = new DiagnosticDescriptor(
+            id: "CSUI9001",
+            title: "Aero2 theme entry failed AOT compilation",
+            messageFormat: "Aero2 theme entry '{0}' in '{1}' could not be compiled to pure C#: {2}",
+            category: "CSUI.Generators",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        private sealed class Aero2ThemeEntryInfo
+        {
+            public XElement Element = null!;
+            public int Index;
+            public string FileStem = string.Empty;
+            public string FullThemeClass = string.Empty;
+            public string MethodName = string.Empty;
+            public string ReturnTypeName = "object";
+            public bool IsValueType;
+            public string RawKey = string.Empty;
+            public INamedTypeSymbol? OwnerType;
+            public string? RegKeyExpr;
+        }
+
+        private static void EmitAero2ThemeOutputs(
+            SourceProductionContext spc,
+            ImmutableArray<AdditionalText> allXamls,
+            Compilation compilation)
+        {
+            const string XamlNs = "http://schemas.microsoft.com/winfx/2006/xaml";
+            var themeFiles = allXamls
+                .Where(static f => IsAero2ThemePath(f.Path))
+                .OrderBy(static f => Path.GetFileNameWithoutExtension(f.Path), StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (themeFiles.Count == 0) return;
+
+            var themeIndex = new Dictionary<string, (string TypeName, string MethodName)>(StringComparer.Ordinal);
+            var parsedFiles = new List<(string FileName, string FileStem, string FullThemeClass, XElement Root, List<Aero2ThemeEntryInfo> Entries)>();
+
+            // Pass 1: parse all Aero2 theme files and index every top-level resource key
+            foreach (AdditionalText tf in themeFiles)
+            {
+                SourceText? st = tf.GetText();
+                if (st is null) continue;
+                string raw = st.ToString();
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+
+                XDocument doc;
+                try { doc = XDocument.Parse(raw); }
+                catch { continue; }
+                XElement? root = doc.Root;
+                if (root is null || root.Name.LocalName != "ResourceDictionary") continue;
+
+                string fileName = Path.GetFileName(tf.Path);
+                string stem = SanitizeIdentifier(Path.GetFileNameWithoutExtension(tf.Path));
+                string fullThemeClass = "global::__CsuiAero2Themes.__CsuiTheme_" + stem;
+                var dummyCtx = new XamlCompileContext(compilation, string.Empty, XamlNs, rootIsFrameworkElement: false)
+                {
+                    HasInstanceClass = false
+                };
+
+                var entries = new List<Aero2ThemeEntryInfo>();
+                int idx = 0;
+                foreach (XElement entryEl in root.Elements())
+                {
+                    string? rawKeyAttr = entryEl.Attribute(XName.Get("Key", XamlNs))?.Value;
+                    string? targetTypeAttr = entryEl.Attribute("TargetType")?.Value;
+                    string? keyToken = !string.IsNullOrWhiteSpace(rawKeyAttr) ? rawKeyAttr : targetTypeAttr;
+                    if (string.IsNullOrWhiteSpace(keyToken)) continue;
+
+                    string normKey = NormalizeThemeResourceKey(keyToken!);
+                    string methodName = "Get_Res_" + idx.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                    INamedTypeSymbol? entrySym = ResolveElementType(entryEl.Name.LocalName, entryEl.Name.NamespaceName, string.Empty, compilation);
+                    string retType = "object";
+                    bool isValType = false;
+                    if (entryEl.Name.LocalName == "Thickness")
+                    {
+                        retType = "global::System.Windows.Thickness";
+                        isValType = true;
+                    }
+                    else if (entryEl.Name.LocalName == "Visibility")
+                    {
+                        retType = "global::System.Windows.Visibility";
+                        isValType = true;
+                    }
+                    else if (entryEl.Name.LocalName == "Boolean" || entryEl.Name.LocalName == "Double" || entryEl.Name.LocalName == "Int32" || entryEl.Name.LocalName == "String")
+                    {
+                        retType = entryEl.Name.LocalName == "String" ? "string" :
+                                  entryEl.Name.LocalName == "Boolean" ? "bool" :
+                                  entryEl.Name.LocalName == "Double" ? "double" : "int";
+                        isValType = retType != "string";
+                    }
+                    else if (entrySym is not null)
+                    {
+                        retType = entrySym.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        isValType = entrySym.IsValueType;
+                    }
+
+                    // Determine owner & registration key for SystemResources.RegisterDefaultThemeFactory
+                    INamedTypeSymbol? ownerType = null;
+                    string? regKeyExpr = null;
+                    if (string.IsNullOrWhiteSpace(rawKeyAttr) && entryEl.Name.LocalName == "Style" && !string.IsNullOrWhiteSpace(targetTypeAttr))
+                    {
+                        if (TryResolveTypeAttributeExpr(targetTypeAttr!, entryEl, dummyCtx, out ownerType, out string typeofExpr))
+                        {
+                            regKeyExpr = typeofExpr;
+                        }
+                    }
+                    else if (!string.IsNullOrWhiteSpace(rawKeyAttr))
+                    {
+                        string rk = rawKeyAttr!.Trim();
+                        if (rk.StartsWith("{x:Type ", StringComparison.Ordinal) && rk.EndsWith("}", StringComparison.Ordinal))
+                        {
+                            if (TryResolveTypeAttributeExpr(rk, entryEl, dummyCtx, out ownerType, out string typeofExpr))
+                            {
+                                regKeyExpr = typeofExpr;
+                            }
+                        }
+                        else if (rk.StartsWith("{x:Static ", StringComparison.Ordinal) && rk.EndsWith("}", StringComparison.Ordinal))
+                        {
+                            string memberRef = rk.Substring("{x:Static ".Length, rk.Length - "{x:Static ".Length - 1).Trim();
+                            int dot = memberRef.LastIndexOf('.');
+                            if (dot > 0)
+                            {
+                                string typePart = memberRef.Substring(0, dot).Trim();
+                                string memberName = memberRef.Substring(dot + 1).Trim();
+                                ownerType = ResolveMarkupType(typePart, entryEl, dummyCtx);
+                                if (ownerType is not null)
+                                {
+                                    regKeyExpr = ownerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + memberName;
+                                }
+                            }
+                        }
+                        else if (rk.StartsWith("{ComponentResourceKey ", StringComparison.Ordinal) && rk.EndsWith("}", StringComparison.Ordinal))
+                        {
+                            string args = rk.Substring("{ComponentResourceKey ".Length, rk.Length - "{ComponentResourceKey ".Length - 1).Trim();
+                            string? targetAsm = null;
+                            foreach (string p in SplitMarkupArgs(args))
+                            {
+                                int eq = p.IndexOf('=');
+                                if (eq > 0 && p.Substring(0, eq).Trim() == "TypeInTargetAssembly")
+                                {
+                                    targetAsm = UnquoteMarkupArg(p.Substring(eq + 1).Trim());
+                                }
+                            }
+                            if (!string.IsNullOrWhiteSpace(targetAsm) &&
+                                TryResolveTypeAttributeExpr(targetAsm!, entryEl, dummyCtx, out ownerType, out _) &&
+                                TryBuildComponentResourceKeyExpr(rk.Substring(1, rk.Length - 2).Trim(), entryEl, dummyCtx, out string crkExpr))
+                            {
+                                regKeyExpr = crkExpr;
+                                // Map PresentationFramework shared FrameworkElement CRKs (e.g. MenuScrollViewer, SubmenuContent)
+                                // to the control owning the theme dictionary so arbitrary FrameworkElements don't root menu templates.
+                                if (ownerType is not null && ownerType.ToDisplayString() == "System.Windows.FrameworkElement")
+                                {
+                                    ownerType = compilation.GetTypeByMetadataName("System.Windows.Controls." + stem) ?? ownerType;
+                                }
+                            }
+                        }
+                    }
+
+                    themeIndex[normKey] = (fullThemeClass, methodName);
+                    entries.Add(new Aero2ThemeEntryInfo
+                    {
+                        Element = entryEl,
+                        Index = idx,
+                        FileStem = stem,
+                        FullThemeClass = fullThemeClass,
+                        MethodName = methodName,
+                        ReturnTypeName = retType,
+                        IsValueType = isValType,
+                        RawKey = keyToken!,
+                        OwnerType = ownerType,
+                        RegKeyExpr = regKeyExpr
+                    });
+                    idx++;
+                }
+
+                parsedFiles.Add((fileName, stem, fullThemeClass, root, entries));
+            }
+
+            // Pass 2: compile each theme file independently and gather registrations per control owner
+            var ownerRegistrations = new Dictionary<INamedTypeSymbol, List<(string KeyExpr, string CallExpr)>>(SymbolEqualityComparer.Default);
+
+            foreach (var pf in parsedFiles)
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("// <auto-generated />");
+                sb.AppendLine("#nullable enable");
+                sb.AppendLine();
+                sb.AppendLine("namespace __CsuiAero2Themes");
+                sb.AppendLine("{");
+                sb.Append("    internal static class __CsuiTheme_").AppendLine(pf.FileStem);
+                sb.AppendLine("    {");
+
+                foreach (Aero2ThemeEntryInfo entry in pf.Entries)
+                {
+                    var ctx = new XamlCompileContext(compilation, string.Empty, XamlNs, rootIsFrameworkElement: false)
+                    {
+                        HasInstanceClass = false,
+                        ThemeResourceIndex = themeIndex,
+                        CurrentThemeTypeName = pf.FullThemeClass
+                    };
+
+                    var methodBody = new StringBuilder();
+                    var dummyBind = new StringBuilder();
+                    if (!TryEmitAnyValueElement(methodBody, dummyBind, entry.Element, ctx, out string valVar) || dummyBind.Length > 0)
+                    {
+                        spc.ReportDiagnostic(Diagnostic.Create(Aero2CompileDiagnostic, Location.None, entry.RawKey, pf.FileName, ctx.FailureReason ?? (dummyBind.Length > 0 ? "top-level binding" : "unknown")));
+                        continue;
+                    }
+
+                    string sField = "s_res_" + entry.Index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    string bMethod = "Build_Res_" + entry.Index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    sb.Append("        private static ").Append(entry.ReturnTypeName).Append("? ").Append(sField).AppendLine(";");
+                    sb.Append("        internal static ").Append(entry.ReturnTypeName).Append(' ').Append(entry.MethodName)
+                      .Append("() => ").Append(sField).Append(" ??= ").Append(bMethod).AppendLine("();");
+                    sb.Append("        private static ").Append(entry.ReturnTypeName).Append(' ').Append(bMethod).AppendLine("()");
+                    sb.AppendLine("        {");
+                    using (var r = new StringReader(methodBody.ToString()))
+                    {
+                        string? line;
+                        while ((line = r.ReadLine()) is not null)
+                        {
+                            sb.Append("            ").AppendLine(line);
+                        }
+                    }
+                    if (!entry.IsValueType)
+                    {
+                        sb.Append("            if ((object?)").Append(valVar).AppendLine(" is global::System.Windows.Freezable __frz && __frz.CanFreeze) __frz.Freeze();");
+                    }
+                    if (ctx.NeedsFindResourceHelper)
+                    {
+                        sb.AppendLine("            static T __CsuiFindRes<T>(object key, params object?[] scopes)");
+                        sb.AppendLine("            {");
+                        sb.AppendLine("                foreach (object? s in scopes)");
+                        sb.AppendLine("                {");
+                        sb.AppendLine("                    object? found = s switch");
+                        sb.AppendLine("                    {");
+                        sb.AppendLine("                        global::System.Windows.FrameworkElement fe => fe.TryFindResource(key),");
+                        sb.AppendLine("                        global::System.Windows.ResourceDictionary rd => rd[key],");
+                        sb.AppendLine("                        _ => null");
+                        sb.AppendLine("                    };");
+                        sb.AppendLine("                    if (found is T typed) return typed;");
+                        sb.AppendLine("                }");
+                        sb.AppendLine("                object? sysRes = global::System.Windows.SystemResources.FindResourceInternal(key);");
+                        sb.AppendLine("                if (sysRes is T sysTyped) return sysTyped;");
+                        sb.AppendLine("                throw new global::System.InvalidOperationException($\"StaticResource '{key}' was not found.\");");
+                        sb.AppendLine("            }");
+                    }
+                    sb.Append("            return ").Append(valVar).AppendLine(";");
+                    sb.AppendLine("        }");
+                    sb.AppendLine();
+
+                    if (entry.OwnerType is not null && !string.IsNullOrEmpty(entry.RegKeyExpr))
+                    {
+                        if (!ownerRegistrations.TryGetValue(entry.OwnerType, out var regList))
+                        {
+                            regList = new List<(string KeyExpr, string CallExpr)>();
+                            ownerRegistrations[entry.OwnerType] = regList;
+                        }
+                        string callExpr = pf.FullThemeClass + "." + entry.MethodName + "()";
+                        regList.Add((entry.RegKeyExpr!, callExpr));
+                        if (entry.RegKeyExpr!.Contains("MenuScrollViewer", StringComparison.Ordinal))
+                        {
+                            foreach (string menuHostName in new[] { "System.Windows.Controls.ContextMenu", "System.Windows.Controls.ToolBar" })
+                            {
+                                var menuHostSym = compilation.GetTypeByMetadataName(menuHostName);
+                                if (menuHostSym is not null && !SymbolEqualityComparer.Default.Equals(menuHostSym, entry.OwnerType))
+                                {
+                                    if (!ownerRegistrations.TryGetValue(menuHostSym, out var hostList))
+                                    {
+                                        hostList = new List<(string KeyExpr, string CallExpr)>();
+                                        ownerRegistrations[menuHostSym] = hostList;
+                                    }
+                                    hostList.Add((entry.RegKeyExpr!, callExpr));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                sb.AppendLine("    }");
+                sb.AppendLine("}");
+                spc.AddSource($"Aero2.{pf.FileStem}.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+            }
+
+            // Pass 3: emit partial class RegisterDefaultTheme() hooks directly onto each control in CSUI.Core
+            if (ownerRegistrations.Count > 0)
+            {
+                var regSb = new StringBuilder();
+                regSb.AppendLine("// <auto-generated />");
+                regSb.AppendLine("#nullable enable");
+                regSb.AppendLine();
+
+                bool anyRegEmitted = false;
+                foreach (var kv in ownerRegistrations)
+                {
+                    INamedTypeSymbol owner = kv.Key;
+                    if (!SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, compilation.Assembly))
+                    {
+                        continue;
+                    }
+                    bool hasPartialHook = owner.GetMembers("RegisterDefaultTheme")
+                        .OfType<IMethodSymbol>()
+                        .Any(static m => m.IsStatic && m.Parameters.Length == 0 && m.IsPartialDefinition);
+                    if (!hasPartialHook)
+                    {
+                        continue;
+                    }
+
+                    anyRegEmitted = true;
+                    string ns = owner.ContainingNamespace is { IsGlobalNamespace: false }
+                        ? owner.ContainingNamespace.ToDisplayString()
+                        : string.Empty;
+                    string indent = string.IsNullOrEmpty(ns) ? string.Empty : "    ";
+                    if (!string.IsNullOrEmpty(ns))
+                    {
+                        regSb.Append("namespace ").AppendLine(ns);
+                        regSb.AppendLine("{");
+                    }
+
+                    string acc = owner.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
+                    string mod = owner.IsStatic ? "static " : string.Empty;
+                    regSb.Append(indent).Append(acc).Append(' ').Append(mod).Append("partial class ").AppendLine(owner.Name);
+                    regSb.Append(indent).AppendLine("{");
+                    regSb.Append(indent).AppendLine("    static partial void RegisterDefaultTheme()");
+                    regSb.Append(indent).AppendLine("    {");
+                    foreach (var reg in kv.Value)
+                    {
+                        regSb.Append(indent).Append("        global::System.Windows.SystemResources.RegisterDefaultThemeFactory(")
+                             .Append(reg.KeyExpr).Append(", static () => ").Append(reg.CallExpr).AppendLine(");");
+                    }
+                    regSb.Append(indent).AppendLine("    }");
+                    regSb.Append(indent).AppendLine("}");
+                    if (!string.IsNullOrEmpty(ns))
+                    {
+                        regSb.AppendLine("}");
+                    }
+                    regSb.AppendLine();
+                }
+
+                if (anyRegEmitted)
+                {
+                    spc.AddSource("Aero2.Registrations.g.cs", SourceText.From(regSb.ToString(), Encoding.UTF8));
+                }
+            }
+        }
+
+        private static string SanitizeIdentifier(string raw)
+        {
+            var sb = new StringBuilder(raw.Length);
+            foreach (char c in raw)
+            {
+                sb.Append(char.IsLetterOrDigit(c) || c == '_' ? c : '_');
+            }
+            if (sb.Length == 0 || char.IsDigit(sb[0])) sb.Insert(0, '_');
+            return sb.ToString();
+        }
+
         private static string? TryGenerateProjectXamlBootstrap(ImmutableArray<AdditionalText> allXamls, Compilation compilation)
         {
             const string XamlNs = "http://schemas.microsoft.com/winfx/2006/xaml";
             string asmName = compilation.AssemblyName ?? "App";
+            if (string.Equals(asmName, "CSUI.Core", StringComparison.Ordinal))
+            {
+                return null;
+            }
 
             var pathPool = new List<string>();
             foreach (AdditionalText f in allXamls)

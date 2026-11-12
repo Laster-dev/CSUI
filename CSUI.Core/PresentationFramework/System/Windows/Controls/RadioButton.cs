@@ -16,8 +16,9 @@ namespace System.Windows.Controls
     /// Represents a button that can be selected, but not cleared, by a user.
     /// The IsChecked property of a RadioButton can be set by clicking it, but can only be cleared programmatically.
     /// </summary>
-    public class RadioButton : ToggleButton
+    public partial class RadioButton : ToggleButton
     {
+        static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty GroupNameProperty =
             DependencyProperty.Register(
                 nameof(GroupName),
@@ -34,6 +35,7 @@ namespace System.Windows.Controls
         static RadioButton()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(RadioButton), new FrameworkPropertyMetadata(typeof(RadioButton)));
+            RegisterDefaultTheme();
         }
 
         public RadioButton()
@@ -42,6 +44,10 @@ namespace System.Windows.Controls
 
         protected override Size MeasureOverride(Size constraint)
         {
+            if (Template != null)
+            {
+                return base.MeasureOverride(constraint);
+            }
             Size contentSize = new Size(0, 0);
             if (VisualChildrenCount > 0 && GetVisualChild(0) is UIElement child)
             {
@@ -56,6 +62,10 @@ namespace System.Windows.Controls
 
         protected override Size ArrangeOverride(Size arrangeBounds)
         {
+            if (Template != null)
+            {
+                return base.ArrangeOverride(arrangeBounds);
+            }
             if (VisualChildrenCount > 0 && GetVisualChild(0) is UIElement child)
             {
                 double y = Math.Max(0, (arrangeBounds.Height - child.DesiredSize.Height) * 0.5);
@@ -66,6 +76,11 @@ namespace System.Windows.Controls
 
         protected override void OnRender(DrawingContext dc)
         {
+            if (Template != null)
+            {
+                base.OnRender(dc);
+                return;
+            }
             double w = RenderSize.Width;
             double h = RenderSize.Height;
             if (w <= 0 || h <= 0) return;

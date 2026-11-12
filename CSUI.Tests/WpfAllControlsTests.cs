@@ -63,6 +63,7 @@ internal static class WpfAllControlsTests
         TestBatch5DataGridSuite();
         TestBatch6NavigationInkDocumentsAndHosting();
         TestBatch7MessageBoxFileDialogsGlyphsAndRibbon();
+        TestAero2AuthenticDefaultThemes();
     }
 
     private static void TestShapesAndGpuRendering()
@@ -608,6 +609,100 @@ internal static class WpfAllControlsTests
         AssertEqual(KeyTipService.GetKeyTip(ribbonBtn), "PT", "KeyTipService GetKeyTip");
 
         Pass("CTRL-8. MessageBox, FileDialogs, Glyphs & Complete Ribbon Suite + Peers");
+    }
+
+    private static T? FindVisualPart<T>(DependencyObject root, string name) where T : FrameworkElement
+    {
+        if (root is T fe && fe.Name == name)
+        {
+            return fe;
+        }
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            T? found = FindVisualPart<T>(child, name);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private static void TestAero2AuthenticDefaultThemes()
+    {
+        var host = new StackPanel();
+        T LayoutControl<T>(T c, double w, double h) where T : FrameworkElement
+        {
+            host.Children.Add(c);
+            c.Measure(new Size(w, h));
+            c.Arrange(new Rect(0, 0, w, h));
+            return c;
+        }
+
+        var btn = LayoutControl(new Button { Content = "Aero2" }, 120, 40);
+        Assert(btn.Template != null, "Aero2 Button applies default ControlTemplate");
+        Assert(FindVisualPart<Border>(btn, "border") != null, "Aero2 Button resolves named 'border'");
+
+        var chk = LayoutControl(new CheckBox { Content = "Check" }, 120, 30);
+        Assert(FindVisualPart<System.Windows.Shapes.Path>(chk, "optionMark") != null, "Aero2 CheckBox resolves 'optionMark'");
+        Assert(FindVisualPart<System.Windows.Shapes.Rectangle>(chk, "indeterminateMark") != null, "Aero2 CheckBox resolves 'indeterminateMark'");
+
+        var rb = LayoutControl(new RadioButton { Content = "Radio" }, 120, 30);
+        Assert(FindVisualPart<Ellipse>(rb, "optionMark") != null, "Aero2 RadioButton resolves 'optionMark'");
+
+        var tb = LayoutControl(new TextBox { Text = "Hello" }, 160, 30);
+        Assert(tb.Template != null, "Aero2 TextBox has Template");
+        Assert(FindVisualPart<ScrollViewer>(tb, "PART_ContentHost") != null, "Aero2 TextBox resolves 'PART_ContentHost'");
+
+        var pb = LayoutControl(new PasswordBox { Password = "Secret" }, 160, 30);
+        Assert(FindVisualPart<ScrollViewer>(pb, "PART_ContentHost") != null, "Aero2 PasswordBox resolves 'PART_ContentHost'");
+
+        var prog = LayoutControl(new ProgressBar { Value = 50, Maximum = 100 }, 160, 20);
+        Assert(FindVisualPart<FrameworkElement>(prog, "PART_Track") != null, "Aero2 ProgressBar resolves 'PART_Track'");
+        Assert(FindVisualPart<FrameworkElement>(prog, "PART_Indicator") != null, "Aero2 ProgressBar resolves 'PART_Indicator'");
+        Assert(FindVisualPart<FrameworkElement>(prog, "Indicator") != null, "Aero2 ProgressBar resolves 'Indicator'");
+        Assert(FindVisualPart<FrameworkElement>(prog, "Animation") != null, "Aero2 ProgressBar resolves 'Animation'");
+
+        var sbar = LayoutControl(new ScrollBar { Orientation = Orientation.Vertical, Maximum = 100 }, 20, 140);
+        Assert(FindVisualPart<Track>(sbar, "PART_Track") != null, "Aero2 ScrollBar resolves 'PART_Track'");
+
+        var slider = LayoutControl(new Slider { Minimum = 0, Maximum = 100, Value = 40 }, 160, 30);
+        Assert(FindVisualPart<Track>(slider, "PART_Track") != null, "Aero2 Slider resolves 'PART_Track'");
+
+        var combo = new ComboBox();
+        combo.Items.Add("A");
+        LayoutControl(combo, 160, 30);
+        Assert(FindVisualPart<ToggleButton>(combo, "toggleButton") != null, "Aero2 ComboBox resolves 'toggleButton'");
+        Assert(FindVisualPart<Popup>(combo, "PART_Popup") != null, "Aero2 ComboBox resolves 'PART_Popup'");
+
+        var tab = new TabControl();
+        tab.Items.Add(new TabItem { Header = "Tab1", Content = "Page1" });
+        LayoutControl(tab, 240, 140);
+        Assert(FindVisualPart<ContentPresenter>(tab, "PART_SelectedContentHost") != null, "Aero2 TabControl resolves 'PART_SelectedContentHost'");
+        Assert(FindVisualPart<TabPanel>(tab, "HeaderPanel") != null, "Aero2 TabControl resolves 'HeaderPanel'");
+
+        var listBox = new ListBox();
+        listBox.Items.Add("Item1");
+        LayoutControl(listBox, 160, 120);
+        Assert(FindVisualPart<Border>(listBox, "Bd") != null, "Aero2 ListBox resolves 'Bd'");
+
+        var dg = LayoutControl(new DataGrid(), 300, 180);
+        Assert(FindVisualPart<ScrollViewer>(dg, "DG_ScrollViewer") != null, "Aero2 DataGrid resolves 'DG_ScrollViewer'");
+
+        var dp = LayoutControl(new DatePicker(), 180, 32);
+        Assert(FindVisualPart<DatePickerTextBox>(dp, "PART_TextBox") != null, "Aero2 DatePicker resolves 'PART_TextBox'");
+        Assert(FindVisualPart<Button>(dp, "PART_Button") != null, "Aero2 DatePicker resolves 'PART_Button'");
+
+        var cal = LayoutControl(new System.Windows.Controls.Calendar(), 220, 220);
+        Assert(FindVisualPart<CalendarItem>(cal, "PART_CalendarItem") != null, "Aero2 Calendar resolves 'PART_CalendarItem'");
+
+        var exp = LayoutControl(new Expander { Header = "More", Content = "Details" }, 180, 100);
+        Assert(FindVisualPart<ToggleButton>(exp, "HeaderSite") != null, "Aero2 Expander resolves 'HeaderSite'");
+        Assert(FindVisualPart<ContentPresenter>(exp, "ExpandSite") != null, "Aero2 Expander resolves 'ExpandSite'");
+
+        Pass("CTRL-9. Authentic Aero2 Default Themes & ControlTemplate PART_* Wiring");
     }
 
     private static bool HasNonBackgroundPixels(byte[] pixels, int width, int height, int stride)

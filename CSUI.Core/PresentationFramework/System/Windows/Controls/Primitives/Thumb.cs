@@ -94,8 +94,15 @@ namespace System.Windows.Controls.Primitives
     /// <summary>
     /// Represents a control that can be dragged by the user, such as the slider in a ScrollBar.
     /// </summary>
-    public class Thumb : Control
+    public partial class Thumb : Control
     {
+        static partial void RegisterDefaultTheme();
+
+        static Thumb()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(Thumb), new FrameworkPropertyMetadata(typeof(Thumb)));
+            RegisterDefaultTheme();
+        }
         private static readonly DependencyPropertyKey IsDraggingPropertyKey =
             DependencyProperty.RegisterReadOnly(
                 nameof(IsDragging),
@@ -247,6 +254,11 @@ namespace System.Windows.Controls.Primitives
 
         protected override void OnRender(DrawingContext drawingContext)
         {
+            if (Template != null)
+            {
+                base.OnRender(drawingContext);
+                return;
+            }
             // Fluent modern pill thumb rendering
             double w = RenderSize.Width;
             double h = RenderSize.Height;
