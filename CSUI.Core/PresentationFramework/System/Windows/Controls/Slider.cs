@@ -385,6 +385,15 @@ namespace System.Windows.Controls
             InvalidateVisual();
         }
 
+        protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseLeftButtonDown(e);
+            if (IsEnabled && Focusable && !IsKeyboardFocusWithin)
+            {
+                Focus();
+            }
+        }
+
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonDown(e);

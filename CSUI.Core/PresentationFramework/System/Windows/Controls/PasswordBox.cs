@@ -6,6 +6,7 @@
 using System;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -270,10 +271,21 @@ namespace System.Windows.Controls
             System.Windows.Controls.Primitives.TextBoxBase.ScrollCaretIntoView(_contentHostScrollViewer, caretX, 0.0, lineH);
         }
 
+        private Primitives.CaretBlinkHelper _caretBlink;
+        internal Primitives.CaretBlinkHelper CaretBlink => _caretBlink ??= new Primitives.CaretBlinkHelper(this, () =>
+        {
+            _contentHostView?.InvalidateVisual();
+            InvalidateVisual();
+        });
+
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonDown(e);
             Focus();
+            if (TextBoxBase.ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Reset();
+            }
             CaptureMouse();
             _isSelecting = true;
             int idx = GetCharacterIndexFromPoint(e.GetPosition(this));
@@ -317,6 +329,10 @@ namespace System.Windows.Controls
         {
             base.OnGotFocus(e);
             SetValue(IsSelectionActivePropertyKey, true);
+            if (TextBoxBase.ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Start();
+            }
             _contentHostView?.InvalidateVisual();
             InvalidateVisual();
         }
@@ -325,6 +341,10 @@ namespace System.Windows.Controls
         {
             base.OnLostFocus(e);
             if (!IsKeyboardFocused) SetValue(IsSelectionActivePropertyKey, false);
+            if (!TextBoxBase.ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Stop();
+            }
             _contentHostView?.InvalidateVisual();
             InvalidateVisual();
         }
@@ -333,6 +353,7 @@ namespace System.Windows.Controls
         {
             base.OnGotKeyboardFocus(e);
             SetValue(IsSelectionActivePropertyKey, true);
+            CaretBlink.Start();
             _contentHostView?.InvalidateVisual();
             InvalidateVisual();
         }
@@ -341,6 +362,10 @@ namespace System.Windows.Controls
         {
             base.OnLostKeyboardFocus(e);
             if (!IsFocused) SetValue(IsSelectionActivePropertyKey, false);
+            if (!TextBoxBase.ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Stop();
+            }
             _contentHostView?.InvalidateVisual();
             InvalidateVisual();
         }
@@ -348,6 +373,10 @@ namespace System.Windows.Controls
         protected override void OnTextInput(TextCompositionEventArgs e)
         {
             base.OnTextInput(e);
+            if (TextBoxBase.ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Reset();
+            }
 
             if (!e.Handled && !string.IsNullOrEmpty(e.Text))
             {
@@ -380,6 +409,10 @@ namespace System.Windows.Controls
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
+            if (TextBoxBase.ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Reset();
+            }
 
             if (e.Handled) return;
 
@@ -587,7 +620,7 @@ namespace System.Windows.Controls
                 dc.DrawText(ft, new Point(xStart, yStart));
             }
 
-            if (IsFocused || IsKeyboardFocused)
+            if (TextBoxBase.ShouldRenderCaretForControl(this) && CaretBlink.IsCaretVisible)
             {
                 int caretIdx = Math.Clamp(_caretIndex, 0, pwd.Length);
                 double caretX = xStart + (caretIdx > 0 ? CreateMaskedText(caretIdx).Width : 0.0);

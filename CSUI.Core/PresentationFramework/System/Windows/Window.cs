@@ -6398,6 +6398,64 @@ namespace System.Windows
 
         #region Manipulation Boundary Feedback
 
+        protected override void OnMouseDown(MouseButtonEventArgs e)
+        {
+            base.OnMouseDown(e);
+
+            if (!e.Handled)
+            {
+                IInputElement focused = Keyboard.FocusedElement;
+                DependencyObject focusedDo = focused as DependencyObject;
+                DependencyObject logicalFocusedDo = FocusManager.GetFocusedElement(this) as DependencyObject;
+                DependencyObject targetDo = focusedDo ?? logicalFocusedDo;
+
+                if (targetDo != null && targetDo != this)
+                {
+                    DependencyObject sourceDo = e.OriginalSource as DependencyObject ?? e.Source as DependencyObject;
+                    if (!IsSameOrVisualDescendant(targetDo, sourceDo))
+                    {
+                        if (focused != null)
+                        {
+                            Keyboard.ClearFocus();
+                        }
+
+                        DependencyObject scope = FocusManager.GetFocusScope(targetDo);
+                        if (scope != null && ReferenceEquals(FocusManager.GetFocusedElement(scope), targetDo))
+                        {
+                            FocusManager.SetFocusedElement(scope, null);
+                        }
+
+                        if (ReferenceEquals(FocusManager.GetFocusedElement(this), targetDo))
+                        {
+                            FocusManager.SetFocusedElement(this, null);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static bool IsSameOrVisualDescendant(DependencyObject ancestor, DependencyObject node)
+        {
+            DependencyObject current = node;
+            while (current != null)
+            {
+                if (ReferenceEquals(current, ancestor))
+                {
+                    return true;
+                }
+
+                DependencyObject parent = current is Visual
+                    ? VisualTreeHelper.GetParent(current)
+                    : LogicalTreeHelper.GetParent(current);
+                if (parent == null && current is Visual)
+                {
+                    parent = LogicalTreeHelper.GetParent(current);
+                }
+                current = parent;
+            }
+            return false;
+        }
+
         /// <summary>
         ///     Provides feedback when a manipulation has encountered a boundary by nudging the window.
         /// </summary>

@@ -68,6 +68,7 @@ internal static class WpfAllControlsTests
         TestAero2AuthenticDefaultThemes();
         TestAero2BehaviorAndTriggers();
         TestAero2LayoutTextAndInheritance();
+        TestTextBoxCaretBlinkAndOutsideFocusClear();
     }
 
     private static void TestShapesAndGpuRendering()
@@ -1090,6 +1091,118 @@ internal static class WpfAllControlsTests
             $"ProgressBar inside Grid PART_Indicator.ActualWidth expected > 50, got {progIndicator?.ActualWidth}");
 
         Pass("CTRL-11. Aero2 Foreground Inheritance, TextBlock Wrapping/Trimming, Horizontal StackPanel CheckBox/RadioButton & Grid ProgressBar");
+    }
+
+    private static void TestTextBoxCaretBlinkAndOutsideFocusClear()
+    {
+        // 1. Caret blinking lifecycle across TextBox, PasswordBox, and RichTextBox
+        var tb = new TextBox { Text = "Blink", Width = 140, Height = 28 };
+        var pb = new PasswordBox { Password = "Secret", Width = 140, Height = 28 };
+        var rtb = new RichTextBox { Width = 140, Height = 50 };
+
+        var rootPanel = new StackPanel();
+        var outsideLabel = new TextBlock { Text = "Outside non-focusable label" };
+        var slider = new Slider { Minimum = 0, Maximum = 100, Value = 25, Width = 140 };
+        rootPanel.Children.Add(tb);
+        rootPanel.Children.Add(pb);
+        rootPanel.Children.Add(rtb);
+        rootPanel.Children.Add(outsideLabel);
+        rootPanel.Children.Add(slider);
+
+        var win = new Window
+        {
+            Width = 320,
+            Height = 260,
+            Left = -10000,
+            Top = -10000,
+            ShowInTaskbar = false,
+            WindowStyle = WindowStyle.None,
+            Content = rootPanel
+        };
+
+        try
+        {
+            win.Show();
+            PumpDispatcher();
+            var hwndSource = PresentationSource.FromVisual(win) as HwndSource;
+            Assert(hwndSource != null, "Shown Window must have HwndSource");
+
+            // TextBox caret blink + reset + stop
+            tb.Focus();
+            Assert(tb.IsKeyboardFocused, "TextBox must gain keyboard focus");
+            Assert(tb.ShouldRenderCaret(false), "TextBox caret must initially be visible on focus");
+            tb.CaretBlink.ToggleForTest();
+            Assert(!tb.ShouldRenderCaret(false), "TextBox caret must toggle off on blink tick");
+            tb.CaretBlink.ToggleForTest();
+            Assert(tb.ShouldRenderCaret(false), "TextBox caret must toggle back on");
+            tb.CaretBlink.ToggleForTest();
+            Assert(!tb.ShouldRenderCaret(false), "TextBox caret off before input reset");
+            tb.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, hwndSource!, 0, Key.Right) { RoutedEvent = UIElement.KeyDownEvent });
+            Assert(tb.ShouldRenderCaret(false), "KeyDown must reset TextBox caret to visible immediately");
+
+            // PasswordBox caret blink
+            pb.Focus();
+            Assert(pb.IsKeyboardFocused, "PasswordBox must gain keyboard focus");
+            Assert(pb.CaretBlink.IsCaretVisible, "PasswordBox caret must initially be visible on focus");
+            pb.CaretBlink.ToggleForTest();
+            Assert(!pb.CaretBlink.IsCaretVisible, "PasswordBox caret must toggle off on blink tick");
+
+            // RichTextBox caret blink
+            rtb.Focus();
+            Assert(rtb.IsKeyboardFocused, "RichTextBox must gain keyboard focus");
+            Assert(rtb.ShouldRenderCaret(false), "RichTextBox caret must initially be visible on focus");
+            rtb.CaretBlink.ToggleForTest();
+            Assert(!rtb.ShouldRenderCaret(false), "RichTextBox caret must toggle off on blink tick");
+
+            // 2. Clicking outside focused TextBox onto non-focusable background clears focus & border
+            tb.Focus();
+            var tbBorder = FindVisualPart<Border>(tb, "border");
+            Assert(tbBorder != null, "TextBox must have 'border'");
+            var focusedBrush = tbBorder!.BorderBrush as SolidColorBrush;
+            Assert(focusedBrush != null && focusedBrush.Color == Color.FromArgb(0xFF, 0x56, 0x9D, 0xE5),
+                $"Focused TextBox BorderBrush expected #FF569DE5, got {focusedBrush?.Color}");
+
+            // Clicking inside TextBox (e.g. right click / unhandled MouseDown with OriginalSource inside tb) keeps focus
+            var insideClick = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Right)
+            {
+                RoutedEvent = UIElement.MouseDownEvent,
+                Source = tb
+            };
+            tb.RaiseEvent(insideClick);
+            Assert(tb.IsKeyboardFocused, "Clicking inside focused TextBox must NOT clear focus");
+
+            // Clicking outside TextBox on non-focusable TextBlock bubbles to Window and clears focus
+            var outsideClick = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseDownEvent,
+                Source = outsideLabel
+            };
+            outsideLabel.RaiseEvent(outsideClick);
+            Assert(!tb.IsKeyboardFocused, "Clicking outside TextBox must clear IsKeyboardFocused");
+            Assert(!tb.IsFocused, "Clicking outside TextBox must clear IsFocused");
+            Assert(!tb.ShouldRenderCaret(false), "TextBox caret must hide after losing focus");
+            var unfocusedBrush = tbBorder.BorderBrush as SolidColorBrush;
+            Assert(unfocusedBrush == null || unfocusedBrush.Color != Color.FromArgb(0xFF, 0x56, 0x9D, 0xE5),
+                $"Unfocused TextBox BorderBrush must revert from #FF569DE5, got {unfocusedBrush?.Color}");
+
+            // 3. Clicking a templated Slider moves focus off TextBox onto Slider
+            tb.Focus();
+            Assert(tb.IsKeyboardFocused, "TextBox re-focused before Slider click");
+            var sliderClick = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent,
+                Source = slider
+            };
+            slider.RaiseEvent(sliderClick);
+            Assert(slider.IsKeyboardFocused, "Clicking Slider must focus Slider");
+            Assert(!tb.IsKeyboardFocused, "Clicking Slider must blur TextBox");
+        }
+        finally
+        {
+            win.Close();
+        }
+
+        Pass("CTRL-12. TextBox/PasswordBox/RichTextBox Caret Blink & Outside Click Focus Clear");
     }
 
     private static bool HasNonBackgroundPixels(byte[] pixels, int width, int height, int stride)

@@ -7,6 +7,7 @@ using System;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace System.Windows.Controls.Primitives
 {
@@ -226,6 +227,24 @@ namespace System.Windows.Controls.Primitives
             RaiseEvent(e);
         }
 
+        private CaretBlinkHelper _caretBlink;
+        internal CaretBlinkHelper CaretBlink => _caretBlink ??= new CaretBlinkHelper(this, InvalidateCaretVisual);
+
+        internal virtual void InvalidateCaretVisual()
+        {
+            InvalidateVisual();
+        }
+
+        internal static bool ShouldRenderCaretForControl(Control control)
+        {
+            return control.IsKeyboardFocused || (control.IsFocused && PresentationSource.CriticalFromVisual(control) == null);
+        }
+
+        internal bool ShouldRenderCaret(bool isReadOnly)
+        {
+            return ShouldRenderCaretForControl(this) && (!isReadOnly || IsReadOnlyCaretVisible) && CaretBlink.IsCaretVisible;
+        }
+
         protected override void OnGotFocus(RoutedEventArgs e)
         {
             base.OnGotFocus(e);
@@ -233,7 +252,11 @@ namespace System.Windows.Controls.Primitives
             {
                 SetValue(s_isSelectionActivePropertyKey, true);
             }
-            InvalidateVisual();
+            if (ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Start();
+            }
+            InvalidateCaretVisual();
         }
 
         protected override void OnLostFocus(RoutedEventArgs e)
@@ -243,7 +266,11 @@ namespace System.Windows.Controls.Primitives
             {
                 SetValue(s_isSelectionActivePropertyKey, false);
             }
-            InvalidateVisual();
+            if (!ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Stop();
+            }
+            InvalidateCaretVisual();
         }
 
         protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
@@ -253,7 +280,8 @@ namespace System.Windows.Controls.Primitives
             {
                 SetValue(s_isSelectionActivePropertyKey, true);
             }
-            InvalidateVisual();
+            CaretBlink.Start();
+            InvalidateCaretVisual();
         }
 
         protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
@@ -263,7 +291,38 @@ namespace System.Windows.Controls.Primitives
             {
                 SetValue(s_isSelectionActivePropertyKey, false);
             }
-            InvalidateVisual();
+            if (!ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Stop();
+            }
+            InvalidateCaretVisual();
+        }
+
+        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnMouseLeftButtonDown(e);
+            if (ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Reset();
+            }
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Reset();
+            }
+        }
+
+        protected override void OnTextInput(TextCompositionEventArgs e)
+        {
+            base.OnTextInput(e);
+            if (ShouldRenderCaretForControl(this))
+            {
+                CaretBlink.Reset();
+            }
         }
 
         protected override HitTestResult HitTestCore(PointHitTestParameters hitTestParameters)
@@ -373,6 +432,72 @@ namespace System.Windows.Controls.Primitives
             protected override Size MeasureOverride(Size availableSize) => _measure(availableSize);
 
             protected override void OnRender(DrawingContext drawingContext) => _render(drawingContext, RenderSize);
+        }
+    }
+
+    internal sealed class CaretBlinkHelper
+    {
+        private static readonly TimeSpan DefaultBlinkInterval = TimeSpan.FromMilliseconds(530);
+
+        private readonly Control _owner;
+        private readonly Action _invalidateVisual;
+        private readonly DispatcherTimer _timer;
+        private bool _isVisible = true;
+
+        internal CaretBlinkHelper(Control owner, Action invalidateVisual)
+        {
+            _owner = owner;
+            _invalidateVisual = invalidateVisual;
+            _timer = new DispatcherTimer(DispatcherPriority.Normal, owner.Dispatcher)
+            {
+                Interval = DefaultBlinkInterval
+            };
+            _timer.Tick += OnTick;
+        }
+
+        internal bool IsCaretVisible => _isVisible;
+
+        internal void Start()
+        {
+            _isVisible = true;
+            _timer.Stop();
+            _timer.Start();
+            _invalidateVisual();
+        }
+
+        internal void Stop()
+        {
+            _timer.Stop();
+            if (_isVisible)
+            {
+                _isVisible = false;
+                _invalidateVisual();
+            }
+        }
+
+        internal void Reset()
+        {
+            _isVisible = true;
+            _timer.Stop();
+            _timer.Start();
+            _invalidateVisual();
+        }
+
+        internal void ToggleForTest()
+        {
+            OnTick(this, EventArgs.Empty);
+        }
+
+        private void OnTick(object sender, EventArgs e)
+        {
+            if (!TextBoxBase.ShouldRenderCaretForControl(_owner))
+            {
+                Stop();
+                return;
+            }
+
+            _isVisible = !_isVisible;
+            _invalidateVisual();
         }
     }
 }

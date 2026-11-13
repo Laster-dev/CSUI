@@ -822,12 +822,18 @@ namespace System.Windows.Controls
                 dc.DrawText(ft, new Point(xStart, yStart));
             }
 
-            if ((IsFocused || IsKeyboardFocused) && (!IsReadOnly || IsReadOnlyCaretVisible))
+            if (ShouldRenderCaret(IsReadOnly))
             {
                 Rect caretRect = GetCaretRect(text, constraintW, xStart, yStart, CaretIndex);
                 Pen caretPen = new(CaretBrush ?? Foreground ?? Brushes.Black, 1.5);
                 dc.DrawLine(caretPen, new Point(caretRect.X, caretRect.Y), new Point(caretRect.X, caretRect.Y + caretRect.Height));
             }
+        }
+
+        internal override void InvalidateCaretVisual()
+        {
+            _contentHostView?.InvalidateVisual();
+            InvalidateVisual();
         }
 
         private void RenderContentView(DrawingContext dc, Size bounds)
