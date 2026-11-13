@@ -865,6 +865,7 @@ namespace CSUI.Generators
             public string? FailureReason { get; set; }
             public INamedTypeSymbol? RootClassType { get; set; }
             public bool HasExternalStaticResource { get; set; }
+            public string? CurrentNameScopeExpr { get; set; }
 
             public bool Fail(string reason)
             {
@@ -1160,13 +1161,25 @@ namespace CSUI.Generators
                         }
                         if (propName == "Triggers")
                         {
-                            foreach (XElement trigEl in childEl.Elements())
+                            string? prevNameScope = ctx.CurrentNameScopeExpr;
+                            if (InheritsFrom(targetType, "System.Windows.FrameworkElement") || InheritsFrom(targetType, "System.Windows.FrameworkContentElement"))
                             {
-                                if (!TryEmitTriggerToCollection(sb, targetExpr + ".Triggers", trigEl, targetType, ctx))
+                                ctx.CurrentNameScopeExpr = targetExpr;
+                            }
+                            try
+                            {
+                                foreach (XElement trigEl in childEl.Elements())
                                 {
-                                    if (pushedScope) ctx.ResourceScopes.RemoveAt(scopeInsertIndex);
-                                    return false;
+                                    if (!TryEmitTriggerToCollection(sb, targetExpr + ".Triggers", trigEl, targetType, ctx))
+                                    {
+                                        if (pushedScope) ctx.ResourceScopes.RemoveAt(scopeInsertIndex);
+                                        return false;
+                                    }
                                 }
+                            }
+                            finally
+                            {
+                                ctx.CurrentNameScopeExpr = prevNameScope;
                             }
                             continue;
                         }
@@ -1807,12 +1820,21 @@ namespace CSUI.Generators
                     }
                     else if (local == "Style.Triggers")
                     {
-                        foreach (XElement trigEl in child.Elements())
+                        string? prevNameScope = ctx.CurrentNameScopeExpr;
+                        ctx.CurrentNameScopeExpr = styleVar;
+                        try
                         {
-                            if (!TryEmitTriggerToCollection(sb, styleVar + ".Triggers", trigEl, styleTargetType, ctx))
+                            foreach (XElement trigEl in child.Elements())
                             {
-                                return false;
+                                if (!TryEmitTriggerToCollection(sb, styleVar + ".Triggers", trigEl, styleTargetType, ctx))
+                                {
+                                    return false;
+                                }
                             }
+                        }
+                        finally
+                        {
+                            ctx.CurrentNameScopeExpr = prevNameScope;
                         }
                     }
                     else
@@ -2037,6 +2059,7 @@ namespace CSUI.Generators
                             {
                                 return false;
                             }
+                            EmitTriggerActionNameRegistration(sb, actionEl, actVar, ctx);
                             sb.Append(trigVar).Append(".Actions.Add(").Append(actVar).AppendLine(");");
                         }
                     }
@@ -2046,6 +2069,7 @@ namespace CSUI.Generators
                         {
                             return false;
                         }
+                        EmitTriggerActionNameRegistration(sb, child, actVar, ctx);
                         sb.Append(trigVar).Append(".Actions.Add(").Append(actVar).AppendLine(");");
                     }
                 }
@@ -2125,6 +2149,29 @@ namespace CSUI.Generators
             return null;
         }
 
+        private static void EmitTriggerActionNameRegistration(
+            StringBuilder sb,
+            XElement actionEl,
+            string actVar,
+            XamlCompileContext ctx)
+        {
+            if (string.IsNullOrEmpty(ctx.CurrentNameScopeExpr))
+            {
+                return;
+            }
+            string? actionName = actionEl.Attribute(XName.Get("Name", ctx.XamlNs))?.Value
+                ?? actionEl.Attribute("Name")?.Value;
+            if (!string.IsNullOrEmpty(actionName))
+            {
+                sb.Append(ctx.CurrentNameScopeExpr)
+                    .Append(".RegisterName(")
+                    .Append(ToCSharpStringLiteral(actionName))
+                    .Append(", ")
+                    .Append(actVar)
+                    .AppendLine(");");
+            }
+        }
+
         private static bool TryEmitTriggerBodyChildren(
             StringBuilder sb,
             string trigVar,
@@ -2169,6 +2216,7 @@ namespace CSUI.Generators
                         {
                             return ctx.Fail($"Trigger {collProp} action '{actionEl.Name.LocalName}' failed");
                         }
+                        EmitTriggerActionNameRegistration(sb, actionEl, actVar, ctx);
                         sb.Append(trigVar).Append(collProp).Append(".Add(").Append(actVar).AppendLine(");");
                     }
                     if (dummyBindingSb.Length > 0) sb.Append(dummyBindingSb);
@@ -2667,6 +2715,8 @@ namespace CSUI.Generators
             }
 
             bool pushedTplRes = false;
+            string? prevNameScope = ctx.CurrentNameScopeExpr;
+            ctx.CurrentNameScopeExpr = tplVar;
             try
             {
                 if (resourcesEl is not null)
@@ -2715,6 +2765,7 @@ namespace CSUI.Generators
             }
             finally
             {
+                ctx.CurrentNameScopeExpr = prevNameScope;
                 if (pushedTplRes)
                 {
                     ctx.ResourceScopes.RemoveAt(0);
