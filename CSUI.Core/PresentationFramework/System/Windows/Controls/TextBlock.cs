@@ -34,39 +34,44 @@ namespace System.Windows.Controls
                 new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty FontFamilyProperty =
-            DependencyProperty.Register(
-                nameof(FontFamily),
-                typeof(FontFamily),
+            TextElement.FontFamilyProperty.AddOwner(
                 typeof(TextBlock),
-                new FrameworkPropertyMetadata(new FontFamily("Segoe UI"), FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
+                new FrameworkPropertyMetadata(
+                    SystemFonts.MessageFontFamily,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
+                    OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty FontSizeProperty =
-            DependencyProperty.Register(
-                nameof(FontSize),
-                typeof(double),
+            TextElement.FontSizeProperty.AddOwner(
                 typeof(TextBlock),
-                new FrameworkPropertyMetadata(12.0, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
+                new FrameworkPropertyMetadata(
+                    SystemFonts.ThemeMessageFontSize,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
+                    OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty FontWeightProperty =
-            DependencyProperty.Register(
-                nameof(FontWeight),
-                typeof(FontWeight),
+            TextElement.FontWeightProperty.AddOwner(
                 typeof(TextBlock),
-                new FrameworkPropertyMetadata(FontWeights.Normal, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
+                new FrameworkPropertyMetadata(
+                    SystemFonts.MessageFontWeight,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
+                    OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty FontStyleProperty =
-            DependencyProperty.Register(
-                nameof(FontStyle),
-                typeof(FontStyle),
+            TextElement.FontStyleProperty.AddOwner(
                 typeof(TextBlock),
-                new FrameworkPropertyMetadata(FontStyles.Normal, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
+                new FrameworkPropertyMetadata(
+                    SystemFonts.MessageFontStyle,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
+                    OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty ForegroundProperty =
-            DependencyProperty.Register(
-                nameof(Foreground),
-                typeof(Brush),
+            TextElement.ForegroundProperty.AddOwner(
                 typeof(TextBlock),
-                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
+                new FrameworkPropertyMetadata(
+                    Brushes.Black,
+                    FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.SubPropertiesDoNotAffectRender | FrameworkPropertyMetadataOptions.Inherits,
+                    OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty BackgroundProperty =
             DependencyProperty.Register(
@@ -289,7 +294,7 @@ namespace System.Windows.Controls
 
             Typeface typeface = new Typeface(FontFamily, FontStyle, FontWeight, FontStretches.Normal);
             double emSize = Math.Max(1.0, FontSize);
-            Brush fg = Foreground ?? Brushes.White;
+            Brush fg = Foreground ?? Brushes.Black;
 
 #pragma warning disable CS0618 // Type or member is obsolete
             FormattedText ft = new FormattedText(
@@ -306,12 +311,7 @@ namespace System.Windows.Controls
                 ft.MaxTextWidth = Math.Max(0.0, availableWidth);
             }
 
-            if (TextTrimming != TextTrimming.None)
-            {
-                ft.Trimming = TextTrimming == TextTrimming.CharacterEllipsis
-                    ? TextTrimming.CharacterEllipsis
-                    : TextTrimming.WordEllipsis;
-            }
+            ft.Trimming = TextTrimming;
 
             ft.TextAlignment = TextAlignment;
 

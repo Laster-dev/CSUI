@@ -1981,7 +1981,7 @@ namespace System.Windows.Media
         private double []                       _maxTextWidths;
         private double                          _maxTextHeight = double.MaxValue;
         private int                             _maxLineCount = int.MaxValue;
-        private TextTrimming                    _trimming = TextTrimming.WordEllipsis;
+        private TextTrimming                    _trimming = TextTrimming.None;
 
         private TextFormattingMode              _textFormattingMode;
 
