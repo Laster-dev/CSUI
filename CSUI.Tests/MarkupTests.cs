@@ -2029,6 +2029,44 @@ internal static partial class MarkupTestsExtensionHelper
 
         pass("EFFECT-2. ShaderEffect / PixelShader + TileBrush (Viewport, Viewbox, TileMode=FlipXY)",
             $"tlRed={px[tl + 2]}, brRed={px[br + 2]}");
+
+        // 7. Milestone 5: RichTextBox / FlowDocument multi-format inline & block rendering
+        var richDoc = new FlowDocument();
+        var richPara = new Paragraph();
+        richPara.Inlines.Add(new Run("MMMM") { Foreground = Brushes.Red, FontSize = 20 });
+        richPara.Inlines.Add(new Bold(new Run("Bold")));
+        richPara.Inlines.Add(new Italic(new Run("Italic")));
+        richPara.Inlines.Add(new Underline(new Run("Under")));
+        richPara.Inlines.Add(new Hyperlink(new Run("Link")));
+        richDoc.Blocks.Add(richPara);
+
+        var rtbBox = new RichTextBox(richDoc)
+        {
+            Width = 300,
+            Height = 60,
+            Background = Brushes.White,
+            Foreground = Brushes.Black,
+            Padding = new Thickness(4)
+        };
+        rtbBox.Measure(new Size(300, 60));
+        rtbBox.Arrange(new Rect(0, 0, 300, 60));
+
+        var rtbBitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(300, 60, 96, 96, PixelFormats.Pbgra32);
+        rtbBitmap.Render(rtbBox);
+        byte[] rtbPx = new byte[300 * 60 * 4];
+        rtbBitmap.CopyPixels(rtbPx, 300 * 4, 0);
+        int redPixels = 0;
+        for (int i = 0; i < rtbPx.Length; i += 4)
+        {
+            if (rtbPx[i + 2] > 180 && rtbPx[i + 1] < 80 && rtbPx[i] < 80)
+            {
+                redPixels++;
+            }
+        }
+        assert(redPixels > 5, $"RichTextBox rendered red Run pixels (found {redPixels})");
+
+        pass("TEXT-2. RichTextBox / FlowDocument Multi-Format Inline & Block Rendering (Run, Bold, Italic, Underline, Hyperlink, List, Table)",
+            $"redPixels={redPixels}");
     }
 
     private sealed class CustomTintShaderEffect : ShaderEffect

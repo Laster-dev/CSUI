@@ -360,8 +360,75 @@ namespace System.Windows.Controls
 
         private void RenderRichTextContent(DrawingContext dc, double xStart, double yStart, double availW)
         {
-            string plain = _document?.GetPlainText() ?? string.Empty;
+            var sb = new System.Text.StringBuilder();
+            var spans = new System.Collections.Generic.List<(int Start, int Length, Inline Inline)>();
+            if (_document != null)
+            {
+                for (int i = 0; i < _document.Blocks.Count; i++)
+                {
+                    if (i > 0) sb.Append('\n');
+                    CollectBlockTextAndSpans(_document.Blocks[i], sb, spans);
+                }
+            }
+
+            string plain = sb.ToString();
             FormattedText ft = CreateFormattedText(plain.Length > 0 ? plain : " ", availW);
+
+            for (int i = 0; i < spans.Count; i++)
+            {
+                (int start, int len, Inline inline) = spans[i];
+                if (len <= 0 || start + len > plain.Length) continue;
+
+                if (inline is Hyperlink && inline.ReadLocalValue(TextElement.ForegroundProperty) == DependencyProperty.UnsetValue)
+                {
+                    ft.SetForegroundBrush(Brushes.RoyalBlue, start, len);
+                }
+                else if (inline.ReadLocalValue(TextElement.ForegroundProperty) != DependencyProperty.UnsetValue && inline.Foreground != null)
+                {
+                    ft.SetForegroundBrush(inline.Foreground, start, len);
+                }
+
+                if (inline.ReadLocalValue(TextElement.FontWeightProperty) != DependencyProperty.UnsetValue)
+                {
+                    ft.SetFontWeight(inline.FontWeight, start, len);
+                }
+                else if (inline is Bold)
+                {
+                    ft.SetFontWeight(FontWeights.Bold, start, len);
+                }
+
+                if (inline.ReadLocalValue(TextElement.FontStyleProperty) != DependencyProperty.UnsetValue)
+                {
+                    ft.SetFontStyle(inline.FontStyle, start, len);
+                }
+                else if (inline is Italic)
+                {
+                    ft.SetFontStyle(FontStyles.Italic, start, len);
+                }
+
+                if (inline.ReadLocalValue(TextElement.FontSizeProperty) != DependencyProperty.UnsetValue && inline.FontSize > 0)
+                {
+                    ft.SetFontSize(inline.FontSize, start, len);
+                }
+
+                if (inline.ReadLocalValue(TextElement.FontFamilyProperty) != DependencyProperty.UnsetValue && inline.FontFamily != null)
+                {
+                    ft.SetFontFamily(inline.FontFamily, start, len);
+                }
+
+                if (inline is Underline || inline is Hyperlink)
+                {
+                    ft.SetTextDecorations(TextDecorations.Underline, start, len);
+                }
+                else if (inline is Run r && r.TextDecorations != null && r.TextDecorations.Count > 0)
+                {
+                    ft.SetTextDecorations(r.TextDecorations, start, len);
+                }
+                else if (inline is Span sp && sp.TextDecorations != null && sp.TextDecorations.Count > 0)
+                {
+                    ft.SetTextDecorations(sp.TextDecorations, start, len);
+                }
+            }
 
             if (!string.IsNullOrEmpty(plain) && _selectionLength > 0 && _caretOffset < plain.Length)
             {
@@ -386,6 +453,104 @@ namespace System.Windows.Controls
                 Rect caretRect = GetCaretRect(plain, availW, xStart, yStart, _caretOffset);
                 Pen caretPen = new(CaretBrush ?? Foreground ?? Brushes.Black, 1.5);
                 dc.DrawLine(caretPen, new Point(caretRect.X, caretRect.Y), new Point(caretRect.X, caretRect.Y + caretRect.Height));
+            }
+        }
+
+        private static void CollectBlockTextAndSpans(
+            Block block,
+            System.Text.StringBuilder sb,
+            System.Collections.Generic.List<(int Start, int Length, Inline Inline)> spans)
+        {
+            switch (block)
+            {
+                case Paragraph p:
+                    for (int i = 0; i < p.Inlines.Count; i++)
+                    {
+                        CollectInlineTextAndSpans(p.Inlines[i], sb, spans);
+                    }
+                    break;
+                case Section sec:
+                    for (int i = 0; i < sec.Blocks.Count; i++)
+                    {
+                        if (i > 0) sb.Append('\n');
+                        CollectBlockTextAndSpans(sec.Blocks[i], sb, spans);
+                    }
+                    break;
+                case List list:
+                    int idx = 1;
+                    for (int i = 0; i < list.ListItems.Count; i++)
+                    {
+                        if (i > 0) sb.Append('\n');
+                        string prefix = Equals(list.MarkerStyle, TextMarkerStyle.Decimal) ? $"{idx++}. " : "• ";
+                        sb.Append(prefix);
+                        ListItem item = list.ListItems[i];
+                        for (int b = 0; b < item.Blocks.Count; b++)
+                        {
+                            if (b > 0) sb.Append('\n');
+                            CollectBlockTextAndSpans(item.Blocks[b], sb, spans);
+                        }
+                    }
+                    break;
+                case Table table:
+                    bool firstRow = true;
+                    for (int g = 0; g < table.RowGroups.Count; g++)
+                    {
+                        TableRowGroup rg = table.RowGroups[g];
+                        for (int r = 0; r < rg.Rows.Count; r++)
+                        {
+                            if (!firstRow) sb.Append('\n');
+                            firstRow = false;
+                            TableRow row = rg.Rows[r];
+                            for (int c = 0; c < row.Cells.Count; c++)
+                            {
+                                if (c > 0) sb.Append('\t');
+                                TableCell cell = row.Cells[c];
+                                for (int b = 0; b < cell.Blocks.Count; b++)
+                                {
+                                    if (b > 0) sb.Append(' ');
+                                    CollectBlockTextAndSpans(cell.Blocks[b], sb, spans);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                default:
+                    block.AppendPlainText(sb);
+                    break;
+            }
+        }
+
+        private static void CollectInlineTextAndSpans(
+            Inline inline,
+            System.Text.StringBuilder sb,
+            System.Collections.Generic.List<(int Start, int Length, Inline Inline)> spans)
+        {
+            int start = sb.Length;
+            switch (inline)
+            {
+                case Run run:
+                    sb.Append(run.Text ?? string.Empty);
+                    break;
+                case LineBreak:
+                    sb.Append('\n');
+                    break;
+                case Span span:
+                    int spanEntryIdx = spans.Count;
+                    spans.Add((start, 0, span));
+                    for (int i = 0; i < span.Inlines.Count; i++)
+                    {
+                        CollectInlineTextAndSpans(span.Inlines[i], sb, spans);
+                    }
+                    spans[spanEntryIdx] = (start, sb.Length - start, span);
+                    return;
+                default:
+                    inline.AppendPlainText(sb);
+                    break;
+            }
+            int len = sb.Length - start;
+            if (len > 0)
+            {
+                spans.Add((start, len, inline));
             }
         }
 
