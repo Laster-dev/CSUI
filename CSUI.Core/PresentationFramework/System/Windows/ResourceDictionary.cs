@@ -457,7 +457,10 @@ namespace System.Windows
             else
             {
                 canCache = true;
+            }
 
+            if (value == null)
+            {
                 //Search for the value in the Merged Dictionaries
                 if (_mergedDictionaries != null)
                 {
@@ -932,29 +935,69 @@ namespace System.Windows
         private sealed class NonSharedResourceFactory
         {
             private readonly Func<object> _factory;
+            private bool _isEvaluating;
             public NonSharedResourceFactory(Func<object> factory) => _factory = factory;
-            public object Create() => _factory();
+            public bool IsEvaluating => _isEvaluating;
+            public object Create()
+            {
+                if (_isEvaluating) return null;
+                _isEvaluating = true;
+                try
+                {
+                    return _factory();
+                }
+                finally
+                {
+                    _isEvaluating = false;
+                }
+            }
         }
 
         private sealed class DeferredSharedResourceFactory
         {
             private readonly Func<object> _factory;
+            private bool _isEvaluating;
             public DeferredSharedResourceFactory(Func<object> factory) => _factory = factory;
-            public object Create() => _factory();
+            public bool IsEvaluating => _isEvaluating;
+            public object Create()
+            {
+                if (_isEvaluating) return null;
+                _isEvaluating = true;
+                try
+                {
+                    return _factory();
+                }
+                finally
+                {
+                    _isEvaluating = false;
+                }
+            }
         }
 
         protected virtual void OnGettingValue(object key, ref object value, out bool canCache)
         {
             if (value is NonSharedResourceFactory nonShared)
             {
+                if (nonShared.IsEvaluating)
+                {
+                    value = null;
+                    canCache = false;
+                    return;
+                }
                 value = nonShared.Create();
                 canCache = false;
                 return;
             }
             if (value is DeferredSharedResourceFactory deferred)
             {
+                if (deferred.IsEvaluating)
+                {
+                    value = null;
+                    canCache = false;
+                    return;
+                }
                 value = deferred.Create();
-                canCache = true;
+                canCache = value != null;
                 return;
             }
             canCache = true;

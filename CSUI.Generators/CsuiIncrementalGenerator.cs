@@ -2975,7 +2975,8 @@ namespace CSUI.Generators
                     ISymbol? attachedDp = FindDependencyPropertyField(ownerType, propName + "Property");
                     if (attachedDp is null) return ctx.Fail($"Attached DP '{ownerType.Name}.{propName}Property' not found");
                     dpExpr = attachedDp.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + attachedDp.Name;
-                    valType = FindStaticGetMethod(ownerType, "Get" + propName)?.ReturnType;
+                    valType = FindStaticGetMethod(ownerType, "Get" + propName)?.ReturnType
+                        ?? FindProperty(ownerType, propName)?.Type;
                 }
                 else
                 {
