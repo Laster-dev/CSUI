@@ -296,8 +296,7 @@ namespace System.Windows.Controls.Primitives
                     }
                     content.Arrange(new Rect(contentOffsetX, 0, contentSize.Width, contentSize.Height));
 
-                    double centerY = GetFirstLineHeight(content) * 0.5d;
-                    bulletOffsetY += Math.Max(0d, centerY - bulletSize.Height * 0.5d);
+                    bulletOffsetY = Math.Max(0d, (content.RenderSize.Height - bulletSize.Height) * 0.5d);
                 }
 
                 // Re-Position the bullet if exist

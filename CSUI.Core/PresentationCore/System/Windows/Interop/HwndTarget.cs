@@ -733,7 +733,7 @@ namespace System.Windows.Interop
                 {
                     void* d2dContext = _dxTarget.D2DContext;
                     Color clearColor = _backgroundColor;
-                    if (clearColor.A == 0)
+                    if (clearColor.A == 0 && !_usesPerPixelOpacity)
                     {
                         bool darkTheme = false;
                         if (RootVisual is DependencyObject rootDo &&

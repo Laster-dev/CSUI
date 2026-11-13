@@ -17,6 +17,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using MS.Internal.Controls;
 using MS.Internal.KnownBoxes;
+using MS.Internal;
 using MS.Win32;
 
 namespace System.Windows.Controls.Primitives
@@ -83,6 +84,10 @@ namespace System.Windows.Controls.Primitives
     {
         private HwndSource _popupHwndSource;
         private PopupRoot _popupRoot;
+        private HwndSourceHook _ownerHook;
+        private WeakReference<HwndSource> _ownerSourceRef;
+        private WeakReference<Window> _ownerWindowRef;
+        private Size _lastArrangedDesired = Size.Empty;
 
         static Popup()
         {
@@ -241,12 +246,34 @@ namespace System.Windows.Controls.Primitives
                 nameof(StaysOpen),
                 typeof(bool),
                 typeof(Popup),
-                new FrameworkPropertyMetadata(BooleanBoxes.TrueBox));
+                new FrameworkPropertyMetadata(BooleanBoxes.TrueBox, OnStaysOpenChanged));
 
         public bool StaysOpen
         {
             get => (bool)GetValue(StaysOpenProperty);
             set => SetValue(StaysOpenProperty, BooleanBoxes.Box(value));
+        }
+
+        private static void OnStaysOpenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var popup = (Popup)d;
+            if (popup.IsOpen && popup._popupRoot != null)
+            {
+                if ((bool)e.NewValue)
+                {
+                    popup.TeardownOutsideClickDismissal();
+                }
+                else
+                {
+                    IntPtr ownerHwnd = IntPtr.Zero;
+                    UIElement target = popup.PlacementTarget ?? (popup.Parent as UIElement);
+                    if (target != null && PresentationSource.FromVisual(target) is HwndSource targetSource)
+                    {
+                        ownerHwnd = targetSource.Handle;
+                    }
+                    popup.EstablishOutsideClickDismissal(ownerHwnd, target);
+                }
+            }
         }
 
         public static readonly DependencyProperty AllowsTransparencyProperty =
@@ -412,6 +439,33 @@ namespace System.Windows.Controls.Primitives
             return new Size(0.0, 0.0);
         }
 
+        private (double DpiX, double DpiY) GetDpiScale()
+        {
+            UIElement target = PlacementTarget ?? (Parent as UIElement);
+            if (target != null && PresentationSource.FromVisual(target) is HwndSource targetSource && targetSource.CompositionTarget != null)
+            {
+                Matrix m = targetSource.CompositionTarget.TransformToDevice;
+                if (m.M11 > 0 && m.M22 > 0)
+                {
+                    return (m.M11, m.M22);
+                }
+            }
+            if (_popupHwndSource?.CompositionTarget != null)
+            {
+                Matrix m = _popupHwndSource.CompositionTarget.TransformToDevice;
+                if (m.M11 > 0 && m.M22 > 0)
+                {
+                    return (m.M11, m.M22);
+                }
+            }
+            var sysDpi = DpiUtil.GetSystemDpi();
+            if (sysDpi != null && sysDpi.DpiScaleX > 0 && sysDpi.DpiScaleY > 0)
+            {
+                return (sysDpi.DpiScaleX, sysDpi.DpiScaleY);
+            }
+            return (1.0, 1.0);
+        }
+
         private void OpenPopupWindow()
         {
             if (_popupHwndSource != null)
@@ -426,11 +480,13 @@ namespace System.Windows.Controls.Primitives
                 _popupRoot.Child = child;
             }
 
+            var (dpiX, dpiY) = GetDpiScale();
             Size desired = MeasurePopupChild();
-            Point screenPos = CalculateScreenPosition(desired);
+            _lastArrangedDesired = desired;
+            Point screenPos = CalculateScreenPosition(desired, dpiX, dpiY);
 
-            int widthPx = Math.Max(1, (int)Math.Ceiling(desired.Width));
-            int heightPx = Math.Max(1, (int)Math.Ceiling(desired.Height));
+            int widthPx = Math.Max(1, (int)Math.Ceiling(desired.Width * dpiX));
+            int heightPx = Math.Max(1, (int)Math.Ceiling(desired.Height * dpiY));
             int xPx = (int)Math.Round(screenPos.X);
             int yPx = (int)Math.Round(screenPos.Y);
 
@@ -460,6 +516,13 @@ namespace System.Windows.Controls.Primitives
             _popupRoot.Arrange(new Rect(0.0, 0.0, desired.Width, desired.Height));
             _popupHwndSource.CompositionTarget?.OnRenderFrame(false);
 
+            _popupRoot.LayoutUpdated += OnPopupRootLayoutUpdated;
+
+            if (!StaysOpen)
+            {
+                EstablishOutsideClickDismissal(ownerHwnd, target);
+            }
+
             OnOpened(EventArgs.Empty);
         }
 
@@ -468,6 +531,13 @@ namespace System.Windows.Controls.Primitives
             if (_popupHwndSource == null)
             {
                 return;
+            }
+
+            TeardownOutsideClickDismissal();
+
+            if (_popupRoot != null)
+            {
+                _popupRoot.LayoutUpdated -= OnPopupRootLayoutUpdated;
             }
 
             HwndSource src = _popupHwndSource;
@@ -492,11 +562,12 @@ namespace System.Windows.Controls.Primitives
                 return;
             }
 
+            var (dpiX, dpiY) = GetDpiScale();
             Size desired = MeasurePopupChild();
-            Point screenPos = CalculateScreenPosition(desired);
+            Point screenPos = CalculateScreenPosition(desired, dpiX, dpiY);
 
-            int widthPx = Math.Max(1, (int)Math.Ceiling(desired.Width));
-            int heightPx = Math.Max(1, (int)Math.Ceiling(desired.Height));
+            int widthPx = Math.Max(1, (int)Math.Ceiling(desired.Width * dpiX));
+            int heightPx = Math.Max(1, (int)Math.Ceiling(desired.Height * dpiY));
             int xPx = (int)Math.Round(screenPos.X);
             int yPx = (int)Math.Round(screenPos.Y);
 
@@ -512,6 +583,139 @@ namespace System.Windows.Controls.Primitives
             _popupRoot.Measure(desired);
             _popupRoot.Arrange(new Rect(0.0, 0.0, desired.Width, desired.Height));
             _popupHwndSource.CompositionTarget?.OnRenderFrame(false);
+        }
+
+        private void OnPopupRootLayoutUpdated(object sender, EventArgs e)
+        {
+            if (!IsOpen || _popupHwndSource == null || _popupRoot == null)
+            {
+                return;
+            }
+
+            Size desired = _popupRoot.DesiredSize;
+            if (desired != _lastArrangedDesired && desired.Width > 0 && desired.Height > 0)
+            {
+                _lastArrangedDesired = desired;
+                UpdatePopupTransformAndPosition();
+            }
+        }
+
+        private void EstablishOutsideClickDismissal(IntPtr ownerHwnd, UIElement target)
+        {
+            if (_popupRoot == null)
+            {
+                return;
+            }
+
+            Mouse.Capture(_popupRoot, CaptureMode.SubTree);
+            Mouse.AddPreviewMouseDownOutsideCapturedElementHandler(_popupRoot, OnPreviewMouseDownOutside);
+            _popupRoot.LostMouseCapture += OnLostMouseCapture;
+
+            if (target != null && PresentationSource.FromVisual(target) is HwndSource targetSource)
+            {
+                _ownerHook = new HwndSourceHook(OwnerWindowHook);
+                targetSource.AddHook(_ownerHook);
+                _ownerSourceRef = new WeakReference<HwndSource>(targetSource);
+            }
+
+            Window ownerWindow = Window.GetWindow(target ?? this);
+            if (ownerWindow != null)
+            {
+                ownerWindow.Deactivated += OnOwnerWindowDeactivated;
+                ownerWindow.LocationChanged += OnOwnerWindowLocationChanged;
+                _ownerWindowRef = new WeakReference<Window>(ownerWindow);
+            }
+        }
+
+        private void TeardownOutsideClickDismissal()
+        {
+            if (_popupRoot != null)
+            {
+                Mouse.RemovePreviewMouseDownOutsideCapturedElementHandler(_popupRoot, OnPreviewMouseDownOutside);
+                _popupRoot.LostMouseCapture -= OnLostMouseCapture;
+                if (Mouse.Captured == _popupRoot || (_popupRoot != null && Mouse.Captured is DependencyObject dep && _popupRoot.IsAncestorOf(dep)))
+                {
+                    Mouse.Capture(null);
+                }
+            }
+
+            if (_ownerHook != null && _ownerSourceRef != null && _ownerSourceRef.TryGetTarget(out var ownerSource))
+            {
+                ownerSource.RemoveHook(_ownerHook);
+            }
+            _ownerHook = null;
+            _ownerSourceRef = null;
+
+            if (_ownerWindowRef != null && _ownerWindowRef.TryGetTarget(out var ownerWin))
+            {
+                ownerWin.Deactivated -= OnOwnerWindowDeactivated;
+                ownerWin.LocationChanged -= OnOwnerWindowLocationChanged;
+            }
+            _ownerWindowRef = null;
+        }
+
+        private void OnPreviewMouseDownOutside(object sender, MouseButtonEventArgs e)
+        {
+            if (!StaysOpen && IsOpen)
+            {
+                SetCurrentValue(IsOpenProperty, BooleanBoxes.FalseBox);
+            }
+        }
+
+        private void OnLostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (!StaysOpen && IsOpen)
+            {
+                IInputElement captured = Mouse.Captured;
+                if (captured == null || (_popupRoot != null && captured is DependencyObject d && !_popupRoot.IsAncestorOf(d) && !ReferenceEquals(d, _popupRoot)))
+                {
+                    SetCurrentValue(IsOpenProperty, BooleanBoxes.FalseBox);
+                }
+            }
+        }
+
+        private const int WM_MOUSEACTIVATE = 0x0021;
+        private const int WM_NCLBUTTONDOWN = 0x00A1;
+        private const int WM_NCRBUTTONDOWN = 0x00A4;
+        private const int WM_NCMBUTTONDOWN = 0x00A7;
+        private const int WM_LBUTTONDOWN = 0x0201;
+        private const int WM_RBUTTONDOWN = 0x0204;
+        private const int WM_MBUTTONDOWN = 0x0207;
+
+        private IntPtr OwnerWindowHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            switch (msg)
+            {
+                case WM_NCLBUTTONDOWN:
+                case WM_NCRBUTTONDOWN:
+                case WM_NCMBUTTONDOWN:
+                case WM_LBUTTONDOWN:
+                case WM_RBUTTONDOWN:
+                case WM_MBUTTONDOWN:
+                case WM_MOUSEACTIVATE:
+                    if (!StaysOpen && IsOpen)
+                    {
+                        SetCurrentValue(IsOpenProperty, BooleanBoxes.FalseBox);
+                    }
+                    break;
+            }
+            return IntPtr.Zero;
+        }
+
+        private void OnOwnerWindowDeactivated(object sender, EventArgs e)
+        {
+            if (!StaysOpen && IsOpen)
+            {
+                SetCurrentValue(IsOpenProperty, BooleanBoxes.FalseBox);
+            }
+        }
+
+        private void OnOwnerWindowLocationChanged(object sender, EventArgs e)
+        {
+            if (!StaysOpen && IsOpen)
+            {
+                SetCurrentValue(IsOpenProperty, BooleanBoxes.FalseBox);
+            }
         }
 
         private Size MeasurePopupChild()
@@ -536,10 +740,10 @@ namespace System.Windows.Controls.Primitives
                 !double.IsNaN(explicitH) && explicitH > 0 ? explicitH : 40.0);
         }
 
-        private Point CalculateScreenPosition(Size popupSize)
+        private Point CalculateScreenPosition(Size popupSize, double dpiX, double dpiY)
         {
-            double dx = HorizontalOffset;
-            double dy = VerticalOffset;
+            double dx = HorizontalOffset * dpiX;
+            double dy = VerticalOffset * dpiY;
 
             UIElement target = PlacementTarget ?? (Parent as UIElement);
             Point targetOrigin = new Point(0.0, 0.0);
@@ -547,7 +751,7 @@ namespace System.Windows.Controls.Primitives
 
             if (target != null)
             {
-                targetSize = target.RenderSize;
+                targetSize = new Size(target.RenderSize.Width * dpiX, target.RenderSize.Height * dpiY);
                 if (PresentationSource.FromVisual(target) != null)
                 {
                     try
@@ -561,32 +765,74 @@ namespace System.Windows.Controls.Primitives
                 }
             }
 
-            return Placement switch
+            if (Placement is PlacementMode.Mouse or PlacementMode.MousePoint)
+            {
+                if (UnsafeNativeMethods.GetCursorPos(out NativeMethods.POINT cursorPt))
+                {
+                    targetOrigin = new Point(cursorPt.x, cursorPt.y);
+                }
+            }
+
+            Rect placementRect = PlacementRectangle;
+            if (!placementRect.IsEmpty)
+            {
+                targetOrigin = new Point(targetOrigin.X + placementRect.X * dpiX, targetOrigin.Y + placementRect.Y * dpiY);
+                targetSize = new Size(placementRect.Width * dpiX, placementRect.Height * dpiY);
+            }
+
+            Size popupSizePx = new Size(popupSize.Width * dpiX, popupSize.Height * dpiY);
+
+            Point pt = Placement switch
             {
                 PlacementMode.Bottom => new Point(targetOrigin.X + dx, targetOrigin.Y + targetSize.Height + dy),
-                PlacementMode.Top => new Point(targetOrigin.X + dx, targetOrigin.Y - popupSize.Height + dy),
+                PlacementMode.Top => new Point(targetOrigin.X + dx, targetOrigin.Y - popupSizePx.Height + dy),
                 PlacementMode.Right => new Point(targetOrigin.X + targetSize.Width + dx, targetOrigin.Y + dy),
-                PlacementMode.Left => new Point(targetOrigin.X - popupSize.Width + dx, targetOrigin.Y + dy),
+                PlacementMode.Left => new Point(targetOrigin.X - popupSizePx.Width + dx, targetOrigin.Y + dy),
                 PlacementMode.Center => new Point(
-                    targetOrigin.X + (targetSize.Width - popupSize.Width) * 0.5 + dx,
-                    targetOrigin.Y + (targetSize.Height - popupSize.Height) * 0.5 + dy),
+                    targetOrigin.X + (targetSize.Width - popupSizePx.Width) * 0.5 + dx,
+                    targetOrigin.Y + (targetSize.Height - popupSizePx.Height) * 0.5 + dy),
                 PlacementMode.Relative or PlacementMode.RelativePoint => new Point(targetOrigin.X + dx, targetOrigin.Y + dy),
+                PlacementMode.Mouse => new Point(targetOrigin.X + dx, targetOrigin.Y + targetSize.Height + dy),
+                PlacementMode.MousePoint => new Point(targetOrigin.X + dx, targetOrigin.Y + dy),
                 PlacementMode.Custom when CustomPopupPlacementCallback != null =>
-                    ResolveCustomPlacement(popupSize, targetOrigin, targetSize, new Point(dx, dy)),
+                    ResolveCustomPlacement(popupSize, targetOrigin, targetSize, new Point(dx, dy), dpiX, dpiY),
                 _ => new Point(dx, dy)
             };
+
+            double screenW = SystemParameters.VirtualScreenWidth * dpiX;
+            double screenH = SystemParameters.VirtualScreenHeight * dpiY;
+            if (screenW > 0 && screenH > 0)
+            {
+                if (pt.X + popupSizePx.Width > screenW)
+                {
+                    pt.X = Math.Max(0.0, screenW - popupSizePx.Width);
+                }
+                if (pt.Y + popupSizePx.Height > screenH)
+                {
+                    if (Placement == PlacementMode.Bottom && target != null)
+                    {
+                        pt.Y = Math.Max(0.0, targetOrigin.Y - popupSizePx.Height - dy);
+                    }
+                    else
+                    {
+                        pt.Y = Math.Max(0.0, screenH - popupSizePx.Height);
+                    }
+                }
+            }
+
+            return pt;
         }
 
-        private Point ResolveCustomPlacement(Size popupSize, Point targetOrigin, Size targetSize, Point offset)
+        private Point ResolveCustomPlacement(Size popupSize, Point targetOrigin, Size targetSize, Point offsetPx, double dpiX, double dpiY)
         {
-            CustomPopupPlacement[] placements = CustomPopupPlacementCallback(popupSize, targetSize, offset);
+            CustomPopupPlacement[] placements = CustomPopupPlacementCallback(popupSize, new Size(targetSize.Width / dpiX, targetSize.Height / dpiY), new Point(offsetPx.X / dpiX, offsetPx.Y / dpiY));
             if (placements != null && placements.Length > 0)
             {
                 return new Point(
-                    targetOrigin.X + placements[0].Point.X + offset.X,
-                    targetOrigin.Y + placements[0].Point.Y + offset.Y);
+                    targetOrigin.X + placements[0].Point.X * dpiX + offsetPx.X,
+                    targetOrigin.Y + placements[0].Point.Y * dpiY + offsetPx.Y);
             }
-            return new Point(targetOrigin.X + offset.X, targetOrigin.Y + offset.Y);
+            return new Point(targetOrigin.X + offsetPx.X, targetOrigin.Y + offsetPx.Y);
         }
 
         protected virtual void OnOpened(EventArgs e)
@@ -605,19 +851,36 @@ namespace System.Windows.Controls.Primitives
         }
     }
 
-    internal sealed class PopupRoot : Decorator
+    internal sealed class PopupRoot : FrameworkElement
     {
         private readonly NonLogicalAdornerDecorator _adornerDecorator = new NonLogicalAdornerDecorator();
 
         public PopupRoot()
         {
-            base.Child = _adornerDecorator;
+            AddVisualChild(_adornerDecorator);
         }
 
-        public override UIElement Child
+        public UIElement Child
         {
             get => _adornerDecorator.Child;
             set => _adornerDecorator.Child = value;
+        }
+
+        protected override int VisualChildrenCount => 1;
+
+        protected override Visual GetVisualChild(int index) =>
+            index == 0 ? _adornerDecorator : throw new ArgumentOutOfRangeException(nameof(index));
+
+        protected override Size MeasureOverride(Size constraint)
+        {
+            _adornerDecorator.Measure(constraint);
+            return _adornerDecorator.DesiredSize;
+        }
+
+        protected override Size ArrangeOverride(Size arrangeSize)
+        {
+            _adornerDecorator.Arrange(new Rect(arrangeSize));
+            return arrangeSize;
         }
 
         protected override Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>

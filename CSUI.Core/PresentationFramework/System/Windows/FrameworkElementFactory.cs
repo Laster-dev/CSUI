@@ -277,10 +277,13 @@ namespace System.Windows
                 throw new ArgumentException(SR.Format(SR.InvalidPropertyValue, value, dp.Name));
             }
 
-            // Styling the logical tree is not supported
+            // Styling the logical tree is not supported via shared template values.
+            // In CSUI, redirect to a post-instantiate action so the visual/content element
+            // is assigned directly to the instantiated element without throwing.
             if (StyleHelper.IsStylingLogicalTree(dp, value))
             {
-                throw new NotSupportedException(SR.Format(SR.ModifyingLogicalTreeViaStylesNotImplemented, value, "FrameworkElementFactory.SetValue"));
+                AddPostInstantiateAction(target => target.SetValue(dp, value));
+                return;
             }
 
             if (dp.ReadOnly)

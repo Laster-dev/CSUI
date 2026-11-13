@@ -79,20 +79,14 @@ namespace System.Windows.Media
             string uriPath;
 
             MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _font.GetFontFace();
-            try
+            _cachedFontFace = fontFaceDWrite;
+            using (MS.Internal.Text.TextInterface.FontFile fontFile = fontFaceDWrite.GetFileZero())
             {
-                using (MS.Internal.Text.TextInterface.FontFile fontFile = fontFaceDWrite.GetFileZero())
-                {
-                    uriPath = fontFile.GetUriPath();
-                }
+                uriPath = fontFile.GetUriPath();
+            }
 
-                // store the original Uri that contains the face index
-                _originalUri = Util.CombineUriWithFaceIndex(uriPath, checked((int)fontFaceDWrite.Index));
-            }
-            finally
-            {
-                fontFaceDWrite.Release();
-            }
+            // store the original Uri that contains the face index
+            _originalUri = Util.CombineUriWithFaceIndex(uriPath, checked((int)fontFaceDWrite.Index));
 
             Uri typefaceSource = new Uri(uriPath);
            
@@ -108,6 +102,30 @@ namespace System.Windows.Media
 
             _initializationState = InitializationState.IsInitialized; // fully initialized
         }
+
+        ~GlyphTypeface()
+        {
+            _cachedFontFace?.Dispose();
+        }
+
+        internal MS.Internal.Text.TextInterface.FontFace GetFontFace()
+        {
+            if (_cachedFontFace != null)
+                return _cachedFontFace;
+
+            lock (_fontFaceLock)
+            {
+                if (_cachedFontFace == null)
+                {
+                    _cachedFontFace = _font.GetFontFace();
+                }
+                return _cachedFontFace;
+            }
+        }
+
+        internal MS.Internal.Text.TextInterface.FontFace FontFaceDWrite => GetFontFace();
+
+        internal unsafe void* DWriteFontFaceNoAddRef => GetFontFace().DWriteFontFaceNoAddRef;
 
         private void Initialize(Uri typefaceSource, StyleSimulations styleSimulations)
         {
@@ -954,19 +972,7 @@ namespace System.Windows.Media
             get
             {
                 CheckInitialized(); // This can only be called on fully initialized GlyphTypeface
-                int glyphCount;
-
-                MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _font.GetFontFace();
-                try
-                {
-                    glyphCount = fontFaceDWrite.GlyphCount;
-                }
-                finally
-                {
-                    fontFaceDWrite.Release();
-                }
-
-                return glyphCount;
+                return GetFontFace().GlyphCount;
             }
         }
 
@@ -1053,29 +1059,22 @@ namespace System.Windows.Media
         {
             MS.Internal.Text.TextInterface.GlyphMetrics glyphMetrics;
 
-            MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _font.GetFontFace();
-            try
+            MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = GetFontFace();
+            if (glyphIndex >= fontFaceDWrite.GlyphCount)
+                throw new ArgumentOutOfRangeException(nameof(glyphIndex), SR.Format(SR.GlyphIndexOutOfRange, glyphIndex));
+
+            glyphMetrics = new MS.Internal.Text.TextInterface.GlyphMetrics();
+
+            if (textFormattingMode == TextFormattingMode.Ideal)
             {
-                if (glyphIndex >= fontFaceDWrite.GlyphCount)
-                    throw new ArgumentOutOfRangeException(nameof(glyphIndex), SR.Format(SR.GlyphIndexOutOfRange, glyphIndex));
-
-                glyphMetrics = new MS.Internal.Text.TextInterface.GlyphMetrics();
-
-                if (textFormattingMode == TextFormattingMode.Ideal)
-                {
-                    // We can safely pass pointers to glyphIndex and glyphMetrics since both are value types and are allocated on the stack.
-                    fontFaceDWrite.GetDesignGlyphMetrics(&glyphIndex, 1, &glyphMetrics);
-                }
-                else
-                {
-                    // We can safely pass pointers to glyphIndex and glyphMetrics since both are value types and are allocated on the stack.
-                    fontFaceDWrite.GetDisplayGlyphMetrics(&glyphIndex, 1, &glyphMetrics, checked((float)emSize),
-                        textFormattingMode != TextFormattingMode.Display, isSideways, pixelsPerDip);
-                }
+                // We can safely pass pointers to glyphIndex and glyphMetrics since both are value types and are allocated on the stack.
+                fontFaceDWrite.GetDesignGlyphMetrics(&glyphIndex, 1, &glyphMetrics);
             }
-            finally
+            else
             {
-                fontFaceDWrite.Release();
+                // We can safely pass pointers to glyphIndex and glyphMetrics since both are value types and are allocated on the stack.
+                fontFaceDWrite.GetDisplayGlyphMetrics(&glyphIndex, 1, &glyphMetrics, checked((float)emSize),
+                    textFormattingMode != TextFormattingMode.Display, isSideways, pixelsPerDip);
             }
 
             return glyphMetrics;
@@ -1084,22 +1083,15 @@ namespace System.Windows.Media
         private unsafe void GlyphMetrics(ushort* pGlyphIndices, int characterCount, MS.Internal.Text.TextInterface.GlyphMetrics* pGlyphMetrics, double emSize, 
             float pixelsPerDip, TextFormattingMode textFormattingMode, bool isSideways)
         {
-            MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _font.GetFontFace();
-            try
+            MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = GetFontFace();
+            if (textFormattingMode == TextFormattingMode.Ideal)
             {
-                if (textFormattingMode == TextFormattingMode.Ideal)
-                {
-                    fontFaceDWrite.GetDesignGlyphMetrics(pGlyphIndices, checked((uint)characterCount), pGlyphMetrics);
-                }
-                else
-                {
-                    fontFaceDWrite.GetDisplayGlyphMetrics(pGlyphIndices, checked((uint)characterCount), pGlyphMetrics, 
-                        checked((float)emSize), textFormattingMode != TextFormattingMode.Display, isSideways, pixelsPerDip);
-                }
+                fontFaceDWrite.GetDesignGlyphMetrics(pGlyphIndices, checked((uint)characterCount), pGlyphMetrics);
             }
-            finally
+            else
             {
-                fontFaceDWrite.Release();
+                fontFaceDWrite.GetDisplayGlyphMetrics(pGlyphIndices, checked((uint)characterCount), pGlyphMetrics, 
+                    checked((float)emSize), textFormattingMode != TextFormattingMode.Display, isSideways, pixelsPerDip);
             }
         }
 
@@ -1252,30 +1244,23 @@ namespace System.Windows.Media
 
             unsafe
             {
-                MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _font.GetFontFace();
+                MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = GetFontFace();
                 nint glyphPtr = (nint)(&glyphIndex);
-                try
+                return GeometryDirect2DHelpers.ManagedD2DSimplifiedGeometrySink.ReadBack(nativeSink =>
                 {
-                    return GeometryDirect2DHelpers.ManagedD2DSimplifiedGeometrySink.ReadBack(nativeSink =>
-                    {
-                        int hr = IDWriteFontFaceVtbl.GetGlyphRunOutline(
-                            fontFaceDWrite.DWriteFontFaceNoAddRef,
-                            (float)renderingEmSize,
-                            (ushort*)glyphPtr,
-                            null,
-                            null,
-                            1,
-                            sideways,
-                            false,
-                            (void*)nativeSink);
-                        HRESULT.Check(hr);
-                        return hr;
-                    });
-                }
-                finally
-                {
-                    fontFaceDWrite.Release();
-                }
+                    int hr = IDWriteFontFaceVtbl.GetGlyphRunOutline(
+                        fontFaceDWrite.DWriteFontFaceNoAddRef,
+                        (float)renderingEmSize,
+                        (ushort*)glyphPtr,
+                        null,
+                        null,
+                        1,
+                        sideways,
+                        false,
+                        (void*)nativeSink);
+                    HRESULT.Check(hr);
+                    return hr;
+                });
             }
         }
 
@@ -1534,19 +1519,7 @@ namespace System.Windows.Media
             get
             {
                 CheckInitialized(); // This can only be called on fully initialized GlyphTypeface
-                int faceIndex;
-
-                MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _font.GetFontFace();
-                try
-                {
-                    faceIndex = checked((int)fontFaceDWrite.Index);
-                }
-                finally
-                {
-                    fontFaceDWrite.Release();
-                }
-
-                return faceIndex;
+                return checked((int)GetFontFace().Index);
             }
         }
 
@@ -1675,19 +1648,7 @@ namespace System.Windows.Media
         /// </summary>
         private GlyphIndexer CreateGlyphIndexer(GlyphAccessor accessor)
         {
-            GlyphIndexer indexer;
-
-            MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _font.GetFontFace();
-            try
-            {
-                indexer = new GlyphIndexer(accessor, fontFaceDWrite.GlyphCount);
-            }
-            finally
-            {
-                fontFaceDWrite.Release();
-            }
-
-            return indexer;
+            return new GlyphIndexer(accessor, GetFontFace().GlyphCount);
         }
 
         #endregion
@@ -1945,6 +1906,9 @@ namespace System.Windows.Media
         //------------------------------------------------------
 
         #region Private Fields
+
+        private MS.Internal.Text.TextInterface.FontFace _cachedFontFace;
+        private readonly object                         _fontFaceLock = new();
 
         private FontFaceLayoutInfo          _fontFace;
 

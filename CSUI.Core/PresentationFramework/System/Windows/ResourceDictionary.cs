@@ -128,6 +128,16 @@ namespace System.Windows
             ArgumentNullException.ThrowIfNull(source);
             ArgumentNullException.ThrowIfNull(factory);
             _registeredSources[source.OriginalString] = factory;
+            s_sharedPackDictionaryCache.TryRemove(source.OriginalString, out _);
+            s_sharedFactoryDictionaryCache.TryRemove(factory, out _);
+            string norm = NormalizeResourceSourceKey(source.OriginalString);
+            s_sharedPackDictionaryCache.TryRemove(norm, out _);
+        }
+
+        internal static void ClearSharedDictionaryCache()
+        {
+            s_sharedPackDictionaryCache.Clear();
+            s_sharedFactoryDictionaryCache.Clear();
         }
 
         ///<summary>
@@ -157,17 +167,67 @@ namespace System.Windows
                 Uri uri = BindUriHelper.GetResolvedUri(_baseUri, sourceUri);
 
                 ResourceDictionary loadedRD = null;
-                if (_registeredSources.TryGetValue(uri.OriginalString, out Func<ResourceDictionary> factory) ||
-                    _registeredSources.TryGetValue(sourceUri.OriginalString, out factory))
+                string matchedKey = null;
+                Func<ResourceDictionary> factory = null;
+
+                if (uri != null && _registeredSources.TryGetValue(uri.OriginalString, out factory))
                 {
-                    loadedRD = factory();
+                    matchedKey = uri.OriginalString;
+                }
+                else if (sourceUri != null && _registeredSources.TryGetValue(sourceUri.OriginalString, out factory))
+                {
+                    matchedKey = sourceUri.OriginalString;
                 }
                 else
                 {
-                    string norm = NormalizeResourceSourceKey(sourceUri.OriginalString);
+                    string norm = NormalizeResourceSourceKey(sourceUri?.OriginalString);
                     if (_registeredSources.TryGetValue(norm, out factory))
                     {
-                        loadedRD = factory();
+                        matchedKey = norm;
+                    }
+                    else if (uri != null)
+                    {
+                        string normUri = NormalizeResourceSourceKey(uri.OriginalString);
+                        if (_registeredSources.TryGetValue(normUri, out factory))
+                        {
+                            matchedKey = normUri;
+                        }
+                    }
+                }
+
+                if (factory != null)
+                {
+                    if (!s_sharedFactoryDictionaryCache.TryGetValue(factory, out loadedRD))
+                    {
+                        if (matchedKey == null || !s_sharedPackDictionaryCache.TryGetValue(matchedKey, out loadedRD))
+                        {
+                            loadedRD = factory();
+                            if (loadedRD != null)
+                            {
+                                s_sharedFactoryDictionaryCache.TryAdd(factory, loadedRD);
+                                if (matchedKey != null)
+                                {
+                                    s_sharedPackDictionaryCache.TryAdd(matchedKey, loadedRD);
+                                }
+                                if (uri != null && !string.IsNullOrEmpty(uri.OriginalString))
+                                {
+                                    s_sharedPackDictionaryCache.TryAdd(uri.OriginalString, loadedRD);
+                                }
+                                if (sourceUri != null && !string.IsNullOrEmpty(sourceUri.OriginalString))
+                                {
+                                    s_sharedPackDictionaryCache.TryAdd(sourceUri.OriginalString, loadedRD);
+                                }
+                                string norm = NormalizeResourceSourceKey(sourceUri?.OriginalString);
+                                if (!string.IsNullOrEmpty(norm))
+                                {
+                                    s_sharedPackDictionaryCache.TryAdd(norm, loadedRD);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            s_sharedFactoryDictionaryCache.TryAdd(factory, loadedRD);
+                        }
                     }
                 }
 
@@ -2160,6 +2220,12 @@ namespace System.Windows
 
         private static readonly ConcurrentDictionary<string, Func<ResourceDictionary>> _registeredSources =
             new ConcurrentDictionary<string, Func<ResourceDictionary>>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly ConcurrentDictionary<string, ResourceDictionary> s_sharedPackDictionaryCache =
+            new ConcurrentDictionary<string, ResourceDictionary>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly ConcurrentDictionary<Func<ResourceDictionary>, ResourceDictionary> s_sharedFactoryDictionaryCache =
+            new ConcurrentDictionary<Func<ResourceDictionary>, ResourceDictionary>();
 
         private Hashtable                                 _baseDictionary = null;
         private WeakReferenceList                         _ownerFEs = null;

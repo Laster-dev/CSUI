@@ -127,7 +127,12 @@ namespace System.Windows.Controls
                 Size childSize = child.DesiredSize;
                 Size scale = ComputeScaleFactor(arrangeSize, childSize, Stretch, StretchDirection);
 
-                child.Arrange(new Rect(new Point(0, 0), childSize));
+                double scaledW = childSize.Width * scale.Width;
+                double scaledH = childSize.Height * scale.Height;
+                double offsetX = Math.Max(0.0, (arrangeSize.Width - scaledW) * 0.5);
+                double offsetY = Math.Max(0.0, (arrangeSize.Height - scaledH) * 0.5);
+
+                child.Arrange(new Rect(new Point(offsetX, offsetY), childSize));
                 child.RenderTransform = new ScaleTransform(scale.Width, scale.Height);
             }
 

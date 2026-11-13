@@ -2508,6 +2508,12 @@ namespace CSUI.Generators
                     }
                     valExpr = $"new global::System.Windows.DynamicResourceExtension({keyExpr})";
                 }
+                else if (trimmed.StartsWith("{", StringComparison.Ordinal) && trimmed.EndsWith("}", StringComparison.Ordinal) &&
+                         TryBuildCustomMarkupExtensionExpr(trimmed.Substring(1, trimmed.Length - 2).Trim(), setterEl, ctx, out INamedTypeSymbol? customExtType, out string customExtExpr) &&
+                         customExtType is not null && InheritsFrom(customExtType, "System.Windows.DynamicResourceExtension"))
+                {
+                    valExpr = customExtExpr;
+                }
                 else
                 {
                     ITypeSymbol targetValType = propClrType ?? ctx.Compilation.GetSpecialType(SpecialType.System_Object);
@@ -3090,7 +3096,15 @@ namespace CSUI.Generators
                 {
                     return ctx.Fail($"FEF attr '{attrLocal}' value '{attr.Value}' on '{elemType.Name}' failed");
                 }
-                sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", ").Append(valExpr).AppendLine(");");
+                if (valType is INamedTypeSymbol valNamed && (InheritsFrom(valNamed, "System.Windows.Media.Visual") || InheritsFrom(valNamed, "System.Windows.ContentElement")))
+                {
+                    sb.Append(fefVar).Append(".AddPostInstantiateAction(__feObj => ((global::System.Windows.DependencyObject)__feObj).SetValue(")
+                      .Append(dpExpr).Append(", ").Append(valExpr).AppendLine("));");
+                }
+                else
+                {
+                    sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", ").Append(valExpr).AppendLine(");");
+                }
             }
 
             foreach (XElement child in el.Elements())
@@ -3206,6 +3220,11 @@ namespace CSUI.Generators
                         if (valElemType is not null && InheritsFrom(valElemType, "System.Windows.Data.BindingBase"))
                         {
                             sb.Append(fefVar).Append(".SetBinding(").Append(dpExpr).Append(", ").Append(valVar).AppendLine(");");
+                        }
+                        else if (valElemType is not null && (InheritsFrom(valElemType, "System.Windows.Media.Visual") || InheritsFrom(valElemType, "System.Windows.ContentElement")))
+                        {
+                            sb.Append(fefVar).Append(".AddPostInstantiateAction(__feObj => ((global::System.Windows.DependencyObject)__feObj).SetValue(")
+                              .Append(dpExpr).Append(", ").Append(valVar).AppendLine("));");
                         }
                         else
                         {
@@ -3444,7 +3463,7 @@ namespace CSUI.Generators
                         string keyRaw = inner.Substring("DynamicResource ".Length).Trim();
                         if (!TryResolveMarkupOrLiteralKeyExpr(keyRaw, el, ctx, out string keyExpr)) return false;
                         string dpFullExpr = dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dpField.Name;
-                        if (InheritsFrom(ownerType, "System.Windows.FrameworkElement") || InheritsFrom(ownerType, "System.Windows.FrameworkContentElement"))
+                        if (InheritsFrom(targetType, "System.Windows.FrameworkElement") || InheritsFrom(targetType, "System.Windows.FrameworkContentElement"))
                         {
                             sb.Append(targetExpr).Append(".SetResourceReference(").Append(dpFullExpr).Append(", ").Append(keyExpr).AppendLine(");");
                         }
@@ -3454,6 +3473,28 @@ namespace CSUI.Generators
                               .Append(targetExpr).Append(", ").Append(dpFullExpr).Append(", ").Append(keyExpr).AppendLine(");");
                         }
                         return true;
+                    }
+                }
+
+                if (TryBuildCustomMarkupExtensionExpr(inner, el, ctx, out INamedTypeSymbol? customExtType, out string customExtExpr))
+                {
+                    if (customExtType is not null && InheritsFrom(customExtType, "System.Windows.DynamicResourceExtension"))
+                    {
+                        ISymbol? dpField = FindDependencyPropertyField(ownerType, propName + "Property");
+                        if (dpField is not null)
+                        {
+                            string dpFullExpr = dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dpField.Name;
+                            if (InheritsFrom(targetType, "System.Windows.FrameworkElement") || InheritsFrom(targetType, "System.Windows.FrameworkContentElement"))
+                            {
+                                sb.Append(targetExpr).Append(".SetResourceReference(").Append(dpFullExpr).Append(", (").Append(customExtExpr).AppendLine(").ResourceKey);");
+                            }
+                            else
+                            {
+                                sb.Append("global::System.Windows.DynamicResourceExtension.SetResourceReference(")
+                                  .Append(targetExpr).Append(", ").Append(dpFullExpr).Append(", (").Append(customExtExpr).AppendLine(").ResourceKey);");
+                            }
+                            return true;
+                        }
                     }
                 }
 

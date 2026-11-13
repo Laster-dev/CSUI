@@ -92,9 +92,61 @@ namespace System.Windows.Media
 
         #region Direct2D & Internal Helpers
 
+        private nint _cachedD2DGeometry;
+        private nint _cachedD2DFactory;
+        private readonly object _d2dCacheLock = new();
+
+        ~StreamGeometry()
+        {
+            ClearD2DCache();
+        }
+
         internal override unsafe void* CreateD2DGeometry(void* d2dFactory)
         {
-            return GeometryDirect2DHelpers.CreateD2DPathFromFigures(d2dFactory, _figures, FillRule, Transform);
+            if (d2dFactory == null)
+            {
+                return null;
+            }
+
+            lock (_d2dCacheLock)
+            {
+                if (_cachedD2DGeometry != 0 && (void*)_cachedD2DFactory == d2dFactory)
+                {
+                    void* p = (void*)_cachedD2DGeometry;
+                    CSUI.Core.Interop.DirectX.ComHelpers.AddRef(p);
+                    return p;
+                }
+
+                ClearD2DCacheNoLock();
+
+                void* newGeom = GeometryDirect2DHelpers.CreateD2DPathFromFigures(d2dFactory, _figures, FillRule, Transform);
+                if (newGeom != null)
+                {
+                    CSUI.Core.Interop.DirectX.ComHelpers.AddRef(newGeom);
+                    _cachedD2DGeometry = (nint)newGeom;
+                    _cachedD2DFactory = (nint)d2dFactory;
+                }
+                return newGeom;
+            }
+        }
+
+        private unsafe void ClearD2DCacheNoLock()
+        {
+            if (_cachedD2DGeometry != 0)
+            {
+                void* old = (void*)_cachedD2DGeometry;
+                _cachedD2DGeometry = 0;
+                _cachedD2DFactory = 0;
+                CSUI.Core.Interop.DirectX.ComHelpers.Release(old);
+            }
+        }
+
+        private void ClearD2DCache()
+        {
+            lock (_d2dCacheLock)
+            {
+                ClearD2DCacheNoLock();
+            }
         }
 
         internal void Close(PathFigureCollection figures)
@@ -124,6 +176,7 @@ namespace System.Windows.Media
         {
             _boundsValid = false;
             _bounds = Rect.Empty;
+            ClearD2DCache();
         }
 
         internal override PathGeometry GetAsPathGeometry()

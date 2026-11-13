@@ -3184,6 +3184,8 @@ namespace System.Windows
             {
                 uie.InvalidateArrange();
             }
+            uie.InvalidateVisual();
+            uie.SetFlagsOnAllChannels(true, System.Windows.Media.VisualProxyFlags.IsClipDirty | System.Windows.Media.VisualProxyFlags.IsSubtreeDirtyForRender);
         }
 
         /// <summary>

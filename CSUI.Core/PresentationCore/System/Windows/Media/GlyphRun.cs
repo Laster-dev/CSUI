@@ -1741,7 +1741,13 @@ namespace System.Windows.Media
                 return;
             }
 
-            MS.Internal.Text.TextInterface.FontFace fontFaceDWrite = _glyphTypeface.FontDWrite.GetFontFace();
+            void* dwriteFontFace = _glyphTypeface.DWriteFontFaceNoAddRef;
+            if (dwriteFontFace == null)
+            {
+                CSUI.Core.Interop.DirectX.ComHelpers.Release(d2dBrush);
+                return;
+            }
+
             ushort* pIndices = null;
             float* pAdvances = null;
             DWRITE_GLYPH_OFFSET* pOffsets = null;
@@ -1790,7 +1796,7 @@ namespace System.Windows.Media
 
                 DWRITE_GLYPH_RUN dwriteRun = new DWRITE_GLYPH_RUN
                 {
-                    fontFace = fontFaceDWrite.DWriteFontFaceNoAddRef,
+                    fontFace = dwriteFontFace,
                     fontEmSize = (float)_renderingEmSize,
                     glyphCount = (uint)glyphCount,
                     glyphIndices = pIndices,
@@ -1819,7 +1825,6 @@ namespace System.Windows.Media
                     if (pAdvances != null) NativeMemory.Free(pAdvances);
                     if (pOffsets != null) NativeMemory.Free(pOffsets);
                 }
-                fontFaceDWrite.Release();
                 CSUI.Core.Interop.DirectX.ComHelpers.Release(d2dBrush);
             }
         }
