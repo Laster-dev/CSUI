@@ -39,6 +39,9 @@ namespace System.Windows.Controls
 
         static ContentPresenter()
         {
+            System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(TextBlock).TypeHandle);
+            System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(AccessText).TypeHandle);
+
             DataTemplate template;
 
             // Default template for UIElements

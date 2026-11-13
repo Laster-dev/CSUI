@@ -1016,6 +1016,28 @@ internal static class WpfAllControlsTests
         Assert(btnTb!.Foreground is SolidColorBrush tbScb && tbScb.Color == SystemColors.ControlTextColor && tbScb.Color != Colors.White,
             $"Button inner TextBlock Foreground expected {SystemColors.ControlTextColor} (not White), got {btnTb.Foreground}");
 
+        // 1b. Button with custom ControlTemplate (Border > ContentPresenter without explicit Content binding) and Label render string Content
+        var customBtnTpl = new ControlTemplate(typeof(Button));
+        var customBorder = FrameworkElementFactory.Create<Border>();
+        var customCpFef = FrameworkElementFactory.Create<ContentPresenter>();
+        customCpFef.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        customCpFef.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        customBorder.AppendChild(customCpFef);
+        customBtnTpl.VisualTree = customBorder;
+        var customBtn = new Button { Content = "AC", Template = customBtnTpl };
+        customBtn.Measure(new Size(80, 40));
+        customBtn.Arrange(new Rect(0, 0, 80, 40));
+        var customBtnTb = FindVisualDescendant<TextBlock>(customBtn);
+        Assert(customBtnTb != null && customBtnTb.Text == "AC",
+            $"Custom-templated Button must render 'AC', got '{customBtnTb?.Text}'");
+
+        var lbl = new Label { Content = "0", FontSize = 60 };
+        lbl.Measure(new Size(200, 100));
+        lbl.Arrange(new Rect(0, 0, 200, 100));
+        var lblTb = FindVisualDescendant<TextBlock>(lbl);
+        Assert(lblTb != null && lblTb.Text == "0",
+            $"Label must render '0', got '{lblTb?.Text}'");
+
         // 2. TextBlock with TextWrapping="Wrap" and default TextTrimming="None" formats multi-word text without dropping "ToggleButton"
         const string multiWordText = "ButtonBase: Button, ToggleButton, CheckBox, RadioButton";
         var wrapTb = new TextBlock
