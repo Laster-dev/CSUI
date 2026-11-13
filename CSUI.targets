@@ -17,6 +17,8 @@
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"
                       Condition="Exists('$(_CsuiRootDir)CSUI.Generators\CSUI.Generators.csproj') and '@(ProjectReference->WithMetadataValue(&quot;Filename&quot;, &quot;CSUI.Generators&quot;))' == ''" />
+    <ProjectReference Include="$(_CsuiRootDir)CSUI.WebView2\CSUI.WebView2.csproj"
+                      Condition="Exists('$(_CsuiRootDir)CSUI.WebView2\CSUI.WebView2.csproj') and '$(MSBuildProjectFullPath)' != '$(_CsuiRootDir)CSUI.WebView2\CSUI.WebView2.csproj' and '@(PackageReference->WithMetadataValue(&quot;Identity&quot;, &quot;Microsoft.Web.WebView2&quot;))' != '' and '@(ProjectReference->WithMetadataValue(&quot;Filename&quot;, &quot;CSUI.WebView2&quot;))' == ''" />
   </ItemGroup>
 
   <!-- Map standard WPF Page / ApplicationDefinition / Resource items into CSUI compile-time XAML + pack:// resources -->
@@ -51,7 +53,15 @@
     </ItemGroup>
   </Target>
 
-  <!-- Strip transitive Microsoft.WindowsDesktop.App.WPF references pulled by third-party NuGet packages -->
+  <!-- Strip transitive Microsoft.WindowsDesktop.App.WPF & NuGet WebView2.Wpf references -->
+  <Target Name="_CsuiStripNuGetWebView2WpfBeforeResolve"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(CsuiWpfDropIn)' == 'true' and '$(MSBuildProjectFullPath)' != '$(_CsuiRootDir)CSUI.WebView2\CSUI.WebView2.csproj' and Exists('$(_CsuiRootDir)CSUI.WebView2\CSUI.WebView2.csproj')">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="_CsuiStripSystemWpfReferences"
           AfterTargets="ResolveAssemblyReferences"
           Condition="'$(CsuiWpfDropIn)' == 'true'">
