@@ -3,130 +3,107 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="CSUI - 基础控件全套用法演示 (Standard WPF Basic Controls)"
         Width="1020" Height="780"
-        WindowStartupLocation="CenterScreen"
-        Background="#1E1E1E">
+        WindowStartupLocation="CenterScreen">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Orientation="Vertical" Margin="28" Spacing="20">
             <!-- Header Title -->
             <StackPanel Orientation="Vertical" Spacing="4">
-                <TextBlock Text="CSUI 基础控件体系演示 (Basic Controls Gallery)"
-                           FontSize="22" FontWeight="Bold" Foreground="#FFFFFF" />
-                <TextBlock Text="严格遵循标准 WPF 控件继承规范、输入路由、范围约束及字素簇安全编辑的核心交互逻辑。"
-                           FontSize="13" Foreground="#8E8E93" />
+                <TextBlock Text="CSUI 基础控件体系演示 (Basic Controls Gallery)" />
+                <TextBlock Text="严格遵循标准 WPF 控件继承规范、输入路由、范围约束及字素簇安全编辑的核心交互逻辑。" />
             </StackPanel>
 
             <!-- 1. 按钮与开关控件族 -->
-            <Border Background="#252526" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="8" Padding="16">
-                <StackPanel Orientation="Vertical" Spacing="12">
-                    <TextBlock Text="1. 按钮与开关体系 (ButtonBase: Button, ToggleButton, CheckBox, RadioButton)"
-                               FontSize="15" FontWeight="Bold" Foreground="#38BDF8" />
-                    <TextBlock Text="演示 ClickMode、IsDefault/IsCancel、Command 抽象、三态循环流转与 RadioButton 同组排他互斥逻辑："
-                               FontSize="12" Foreground="#A1A1AA" />
+            <StackPanel Orientation="Vertical" Spacing="12">
+                <TextBlock Text="1. 按钮与开关体系 (ButtonBase: Button, ToggleButton, CheckBox, RadioButton)" />
+                <TextBlock Text="演示 ClickMode、IsDefault/IsCancel、Command 抽象、三态循环流转与 RadioButton 同组排他互斥逻辑：" />
 
-                    <!-- Buttons Row -->
-                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,4,0,0">
-                        <Button x:Name="BtnCounter" Content="点击计数按钮 (0)" Width="150" Height="34" Foreground="#FFFFFF" />
-                        <Button x:Name="BtnReset" Content="重置计数器" Width="110" Height="34" Foreground="#FFFFFF" />
-                        <Button Content="禁用状态按钮" IsEnabled="False" Width="120" Height="34" Foreground="#71717A" />
-                        <ToggleButton x:Name="ToggleCycle" Content="三态切换按钮 (Cycle)" IsThreeState="True" Width="180" Height="34" Foreground="#FFFFFF" />
-                    </StackPanel>
-
-                    <!-- CheckBoxes Row -->
-                    <StackPanel Orientation="Horizontal" Spacing="24" Margin="0,8,0,0">
-                        <CheckBox x:Name="ChkFeatureA" Content="启动硬件光线追踪 (IsChecked=True)" IsChecked="True" Foreground="#E4E4E7" />
-                        <CheckBox x:Name="ChkFeatureB" Content="启用独立合成器线程 (IsChecked=False)" IsChecked="False" Foreground="#E4E4E7" />
-                        <CheckBox x:Name="ChkFeatureC" Content="高精度手势预测 (三态支持)" IsThreeState="True" Foreground="#E4E4E7" />
-                    </StackPanel>
-
-                    <!-- RadioButtons Row -->
-                    <StackPanel Orientation="Horizontal" Spacing="24" Margin="0,8,0,0">
-                        <TextBlock Text="主题模式单选分组 (GroupName=&quot;ThemeMode&quot;):" Foreground="#A1A1AA" VerticalAlignment="Center" />
-                        <RadioButton x:Name="RbThemeDark" GroupName="ThemeMode" Content="深色模式 (Dark)" IsChecked="True" Foreground="#E4E4E7" />
-                        <RadioButton x:Name="RbThemeLight" GroupName="ThemeMode" Content="浅色模式 (Light)" Foreground="#E4E4E7" />
-                        <RadioButton x:Name="RbThemeMica" GroupName="ThemeMode" Content="原生云母 (Mica Alt)" Foreground="#E4E4E7" />
-                    </StackPanel>
+                <!-- Buttons Row -->
+                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,4,0,0">
+                    <Button x:Name="BtnCounter" Content="点击计数按钮 (0)" Width="150" />
+                    <Button x:Name="BtnReset" Content="重置计数器" Width="110" />
+                    <Button Content="禁用状态按钮" IsEnabled="False" Width="120" />
+                    <ToggleButton x:Name="ToggleCycle" Content="三态切换按钮 (Cycle)" IsThreeState="True" Width="180" />
                 </StackPanel>
-            </Border>
+
+                <!-- CheckBoxes Row -->
+                <StackPanel Orientation="Horizontal" Spacing="24" Margin="0,8,0,0">
+                    <CheckBox x:Name="ChkFeatureA" Content="启动硬件光线追踪 (IsChecked=True)" IsChecked="True" />
+                    <CheckBox x:Name="ChkFeatureB" Content="启用独立合成器线程 (IsChecked=False)" IsChecked="False" />
+                    <CheckBox x:Name="ChkFeatureC" Content="高精度手势预测 (三态支持)" IsThreeState="True" />
+                </StackPanel>
+
+                <!-- RadioButtons Row -->
+                <StackPanel Orientation="Horizontal" Spacing="24" Margin="0,8,0,0">
+                    <TextBlock Text="主题模式单选分组 (GroupName=&quot;ThemeMode&quot;):" VerticalAlignment="Center" />
+                    <RadioButton x:Name="RbThemeDark" GroupName="ThemeMode" Content="深色模式 (Dark)" IsChecked="True" />
+                    <RadioButton x:Name="RbThemeLight" GroupName="ThemeMode" Content="浅色模式 (Light)" />
+                    <RadioButton x:Name="RbThemeMica" GroupName="ThemeMode" Content="原生云母 (Mica Alt)" />
+                </StackPanel>
+            </StackPanel>
 
             <!-- 2. 数值与范围控件族 -->
-            <Border Background="#252526" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="8" Padding="16">
-                <StackPanel Orientation="Vertical" Spacing="14">
-                    <TextBlock Text="2. 数值与进度体系 (RangeBase: ProgressBar, Slider)"
-                               FontSize="15" FontWeight="Bold" Foreground="#38BDF8" />
-                    <TextBlock Text="演示 Minimum/Maximum 边界强制约束、刻度吸附计算、鼠标拖拽/方向键步进与进度条联动："
-                               FontSize="12" Foreground="#A1A1AA" />
+            <StackPanel Orientation="Vertical" Spacing="14">
+                <TextBlock Text="2. 数值与进度体系 (RangeBase: ProgressBar, Slider)" />
+                <TextBlock Text="演示 Minimum/Maximum 边界强制约束、刻度吸附计算、鼠标拖拽/方向键步进与进度条联动：" />
 
-                    <!-- Slider Row -->
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <TextBlock Text="交互滑块 (Slider):" Foreground="#E4E4E7" Width="140" VerticalAlignment="Center" />
-                        <Slider x:Name="DemoSlider" Minimum="0" Maximum="100" Value="60" SmallChange="1" LargeChange="10"
-                                TickFrequency="10" IsSnapToTickEnabled="True" Width="360" Height="24" />
-                        <TextBlock x:Name="TxtSliderVal" Text="60%" FontSize="14" FontWeight="Bold" Foreground="#38BDF8" Width="80" VerticalAlignment="Center" />
-                    </StackPanel>
-
-                    <!-- Synchronized ProgressBar Row -->
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <TextBlock Text="联动进度条 (ProgressBar):" Foreground="#E4E4E7" Width="140" VerticalAlignment="Center" />
-                        <ProgressBar x:Name="DemoProgressBar" Minimum="0" Maximum="100" Value="60" Width="360" Height="8" />
-                        <TextBlock Text="与 Slider.Value 严格同步" FontSize="12" Foreground="#71717A" VerticalAlignment="Center" />
-                    </StackPanel>
-
-                    <!-- Indeterminate ProgressBar Row -->
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <TextBlock Text="不确定状态进度条:" Foreground="#E4E4E7" Width="140" VerticalAlignment="Center" />
-                        <ProgressBar IsIndeterminate="True" Minimum="0" Maximum="100" Value="25" Width="360" Height="8" />
-                        <TextBlock Text="IsIndeterminate=True" FontSize="12" Foreground="#71717A" VerticalAlignment="Center" />
-                    </StackPanel>
+                <!-- Slider Row -->
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <TextBlock Text="交互滑块 (Slider):" Width="140" VerticalAlignment="Center" />
+                    <Slider x:Name="DemoSlider" Minimum="0" Maximum="100" Value="60" SmallChange="1" LargeChange="10"
+                            TickFrequency="10" IsSnapToTickEnabled="True" Width="360" />
+                    <TextBlock x:Name="TxtSliderVal" Text="60%" Width="80" VerticalAlignment="Center" />
                 </StackPanel>
-            </Border>
+
+                <!-- Synchronized ProgressBar Row -->
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <TextBlock Text="联动进度条 (ProgressBar):" Width="140" VerticalAlignment="Center" />
+                    <ProgressBar x:Name="DemoProgressBar" Minimum="0" Maximum="100" Value="60" Width="360" Height="16" />
+                    <TextBlock Text="与 Slider.Value 严格同步" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Indeterminate ProgressBar Row -->
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <TextBlock Text="不确定状态进度条:" Width="140" VerticalAlignment="Center" />
+                    <ProgressBar IsIndeterminate="True" Minimum="0" Maximum="100" Value="25" Width="360" Height="16" />
+                    <TextBlock Text="IsIndeterminate=True" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
 
             <!-- 3. 文本与密码编辑控件族 -->
-            <Border Background="#252526" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="8" Padding="16">
-                <StackPanel Orientation="Vertical" Spacing="14">
-                    <TextBlock Text="3. 文本与密码编辑体系 (TextBoxBase: TextBox, PasswordBox)"
-                               FontSize="15" FontWeight="Bold" Foreground="#38BDF8" />
-                    <TextBlock Text="深度绑定 ModernImeService 输入法状态机、平滑物理光标 SmoothCaretTracker 与 Unicode 字素簇安全退格："
-                               FontSize="12" Foreground="#A1A1AA" />
+            <StackPanel Orientation="Vertical" Spacing="14">
+                <TextBlock Text="3. 文本与密码编辑体系 (TextBoxBase: TextBox, PasswordBox)" />
+                <TextBlock Text="深度绑定 ModernImeService 输入法状态机、平滑物理光标 SmoothCaretTracker 与 Unicode 字素簇安全退格：" />
 
-                    <!-- Single line TextBox -->
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <TextBlock Text="单行文本框 (TextBox):" Foreground="#E4E4E7" Width="140" VerticalAlignment="Center" />
-                        <TextBox x:Name="TxtSampleInput" Text="CSUI: Modern AOT UI Engine 🚀 👨‍👩‍👧‍👦"
-                                 Width="360" Height="34" Padding="8,4"
-                                 Background="#2D2D30" Foreground="#FFFFFF" BorderBrush="#555555" BorderThickness="1" />
-                        <TextBlock x:Name="TxtClusterCount" Text="Emoji/ZWJ 字素簇安全编辑" FontSize="12" Foreground="#71717A" VerticalAlignment="Center" />
-                    </StackPanel>
-
-                    <!-- Readonly TextBox -->
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <TextBlock Text="只读文本框 (ReadOnly):" Foreground="#E4E4E7" Width="140" VerticalAlignment="Center" />
-                        <TextBox Text="只读保护：此文本框只允许选区与复制，禁止任何键入变更。"
-                                 IsReadOnly="True" Width="360" Height="34" Padding="8,4"
-                                 Background="#202022" Foreground="#71717A" BorderBrush="#3F3F46" BorderThickness="1" />
-                        <TextBlock Text="IsReadOnly=True" FontSize="12" Foreground="#71717A" VerticalAlignment="Center" />
-                    </StackPanel>
-
-                    <!-- PasswordBox -->
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <TextBlock Text="密码输入框 (PasswordBox):" Foreground="#E4E4E7" Width="140" VerticalAlignment="Center" />
-                        <PasswordBox x:Name="PwdSampleInput" Password="HighSecurity#2026" PasswordChar="●"
-                                     Width="360" Height="34" Padding="8,4"
-                                     Background="#2D2D30" Foreground="#FFFFFF" BorderBrush="#555555" BorderThickness="1" />
-                        <TextBlock x:Name="TxtPwdMask" Text="掩码保护已启用" FontSize="12" Foreground="#71717A" VerticalAlignment="Center" />
-                    </StackPanel>
+                <!-- Single line TextBox -->
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <TextBlock Text="单行文本框 (TextBox):" Width="140" VerticalAlignment="Center" />
+                    <TextBox x:Name="TxtSampleInput" Width="140" />
+                    <TextBlock x:Name="TxtClusterCount" Text="Emoji/ZWJ 字素簇安全编辑" VerticalAlignment="Center" />
                 </StackPanel>
-            </Border>
+
+                <!-- Readonly TextBox -->
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <TextBlock Text="只读文本框 (ReadOnly):" Width="140" VerticalAlignment="Center" />
+                    <TextBox Text="只读保护：此文本框只允许选区与复制，禁止任何键入变更。"
+                             IsReadOnly="True" Width="360" />
+                    <TextBlock Text="IsReadOnly=True" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- PasswordBox -->
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <TextBlock Text="密码输入框 (PasswordBox):" Width="140" VerticalAlignment="Center" />
+                    <PasswordBox x:Name="PwdSampleInput" Password="HighSecurity#2026" PasswordChar="●"
+                                 Width="360" />
+                    <TextBlock x:Name="TxtPwdMask" Text="掩码保护已启用" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
 
             <!-- 4. 实时交互事件监控面板 -->
-            <Border Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="16">
-                <StackPanel Orientation="Vertical" Spacing="8">
-                    <TextBlock Text="实时控件交互与路由事件日志 (Interactive Event Stream):"
-                               FontSize="13" FontWeight="Bold" Foreground="#A1A1AA" />
-                    <TextBlock x:Name="TxtEventLog"
-                               Text="[就绪] 尝试在上方点击按钮、切换开关、拖动滑块或键入文本测试交互..."
-                               FontSize="13" Foreground="#34D399" />
-                </StackPanel>
-            </Border>
+            <StackPanel Orientation="Vertical" Spacing="8">
+                <TextBlock Text="实时控件交互与路由事件日志 (Interactive Event Stream):" />
+                <TextBlock x:Name="TxtEventLog"
+                           Text="[就绪] 尝试在上方点击按钮、切换开关、拖动滑块或键入文本测试交互..." />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Window>

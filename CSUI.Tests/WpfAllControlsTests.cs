@@ -67,6 +67,7 @@ internal static class WpfAllControlsTests
         TestBatch7MessageBoxFileDialogsGlyphsAndRibbon();
         TestAero2AuthenticDefaultThemes();
         TestAero2BehaviorAndTriggers();
+        TestAero2LayoutTextAndInheritance();
     }
 
     private static void TestShapesAndGpuRendering()
@@ -975,6 +976,120 @@ internal static class WpfAllControlsTests
         Assert(dtTb.Template != null && dtBtn.Template != null, "Aero2 TextBox and Button styles with DataTriggers resolve without throwing");
 
         Pass("CTRL-10. Aero2 Visual/Trigger Behavior, Layout, Input, ProgressBar, Slider, ScrollBar & PropertyPath");
+    }
+
+    private static void TestAero2LayoutTextAndInheritance()
+    {
+        static T? FindVisualDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is T match)
+                {
+                    return match;
+                }
+                T? nested = FindVisualDescendant<T>(child);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+            return null;
+        }
+
+        // 1. Button with Aero2 default style propagates black Foreground to ContentPresenter / TextBlock (not white)
+        var btn = new Button { Content = "Aero2 Button" };
+        btn.Measure(new Size(140, 36));
+        btn.Arrange(new Rect(0, 0, 140, 36));
+        Assert(btn.Foreground is SolidColorBrush btnFg && btnFg.Color == SystemColors.ControlTextColor,
+            $"Button Foreground expected {SystemColors.ControlTextColor}, got {btn.Foreground}");
+        var btnCp = FindVisualDescendant<ContentPresenter>(btn);
+        Assert(btnCp != null, "Button ContentPresenter must exist");
+        var cpFg = TextElement.GetForeground(btnCp!);
+        Assert(cpFg is SolidColorBrush cpScb && cpScb.Color == SystemColors.ControlTextColor && cpScb.Color != Colors.White,
+            $"Button ContentPresenter Foreground expected {SystemColors.ControlTextColor} (not White), got {cpFg}");
+        var btnTb = FindVisualDescendant<TextBlock>(btnCp!);
+        Assert(btnTb != null, "Button ContentPresenter should generate a TextBlock for string Content");
+        Assert(btnTb!.Foreground is SolidColorBrush tbScb && tbScb.Color == SystemColors.ControlTextColor && tbScb.Color != Colors.White,
+            $"Button inner TextBlock Foreground expected {SystemColors.ControlTextColor} (not White), got {btnTb.Foreground}");
+
+        // 2. TextBlock with TextWrapping="Wrap" and default TextTrimming="None" formats multi-word text without dropping "ToggleButton"
+        const string multiWordText = "ButtonBase: Button, ToggleButton, CheckBox, RadioButton";
+        var wrapTb = new TextBlock
+        {
+            Text = multiWordText,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12
+        };
+        AssertEqual(wrapTb.TextTrimming, TextTrimming.None, "TextBlock default TextTrimming must be None");
+
+        var singleLineTb = new TextBlock
+        {
+            Text = "ButtonBase",
+            TextWrapping = TextWrapping.NoWrap,
+            FontSize = 12
+        };
+        singleLineTb.Measure(new Size(160, double.PositiveInfinity));
+        wrapTb.Measure(new Size(160, double.PositiveInfinity));
+        Assert(wrapTb.DesiredSize.Width <= 160.0 + 0.1, $"Wrapped TextBlock DesiredSize.Width expected <= 160, got {wrapTb.DesiredSize.Width}");
+        Assert(wrapTb.DesiredSize.Height > singleLineTb.DesiredSize.Height * 1.5,
+            $"Wrapped TextBlock DesiredSize.Height ({wrapTb.DesiredSize.Height}) expected > 1.5x single-line height ({singleLineTb.DesiredSize.Height})");
+
+        // Compare with a version missing "ToggleButton" to verify "ToggleButton" is formatted and contributes to wrapped layout
+        var withoutToggleTb = new TextBlock
+        {
+            Text = "ButtonBase: Button, CheckBox, RadioButton",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12
+        };
+        withoutToggleTb.Measure(new Size(135, double.PositiveInfinity));
+        wrapTb.Measure(new Size(135, double.PositiveInfinity));
+        Assert(wrapTb.DesiredSize.Height > withoutToggleTb.DesiredSize.Height,
+            $"Wrapped TextBlock with ToggleButton ({wrapTb.DesiredSize.Height}) expected taller than without ToggleButton ({withoutToggleTb.DesiredSize.Height}) at width 135");
+
+        var ft = new FormattedText(
+            multiWordText,
+            CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight,
+            new Typeface("Segoe UI"),
+            12.0,
+            Brushes.Black,
+            1.0);
+        AssertEqual(ft.Trimming, TextTrimming.None, "FormattedText default Trimming must be None");
+        double unwrappedWidth = ft.Width;
+        double singleLineHeight = ft.Height;
+        ft.MaxTextWidth = 100.0;
+        Assert(unwrappedWidth > 100.0, $"FormattedText unwrapped width ({unwrappedWidth}) expected > 100");
+        Assert(ft.Height > singleLineHeight * 1.5, $"FormattedText wrapped height ({ft.Height}) expected > 1.5x single-line height ({singleLineHeight})");
+
+        // 3. CheckBox and RadioButton inside horizontal StackPanel (PositiveInfinity width) do not collapse Grid * column
+        var hStack = new StackPanel { Orientation = Orientation.Horizontal };
+        var chk = new CheckBox { Content = "Enable Option" };
+        var rb = new RadioButton { Content = "Choice Alpha" };
+        hStack.Children.Add(chk);
+        hStack.Children.Add(rb);
+        hStack.Measure(new Size(400, 100));
+        hStack.Arrange(new Rect(0, 0, 400, 100));
+        Assert(chk.DesiredSize.Width > 40, $"CheckBox DesiredSize.Width in horizontal StackPanel expected > 40, got {chk.DesiredSize.Width}");
+        Assert(rb.DesiredSize.Width > 40, $"RadioButton DesiredSize.Width in horizontal StackPanel expected > 40, got {rb.DesiredSize.Width}");
+        var chkCp = FindVisualDescendant<ContentPresenter>(chk);
+        var rbCp = FindVisualDescendant<ContentPresenter>(rb);
+        Assert(chkCp != null && chkCp.ActualWidth > 20, $"CheckBox ContentPresenter.ActualWidth expected > 20, got {chkCp?.ActualWidth}");
+        Assert(rbCp != null && rbCp.ActualWidth > 20, $"RadioButton ContentPresenter.ActualWidth expected > 20, got {rbCp?.ActualWidth}");
+
+        // 4. ProgressBar inside a Grid measures/arranges non-zero PART_Indicator width
+        var grid = new Grid { Width = 220, Height = 24 };
+        var prog = new ProgressBar { Minimum = 0, Maximum = 100, Value = 50, Height = 20 };
+        grid.Children.Add(prog);
+        grid.Measure(new Size(220, 24));
+        grid.Arrange(new Rect(0, 0, 220, 24));
+        var progIndicator = FindVisualPart<FrameworkElement>(prog, "PART_Indicator");
+        Assert(progIndicator != null && progIndicator.ActualWidth > 50,
+            $"ProgressBar inside Grid PART_Indicator.ActualWidth expected > 50, got {progIndicator?.ActualWidth}");
+
+        Pass("CTRL-11. Aero2 Foreground Inheritance, TextBlock Wrapping/Trimming, Horizontal StackPanel CheckBox/RadioButton & Grid ProgressBar");
     }
 
     private static bool HasNonBackgroundPixels(byte[] pixels, int width, int height, int stride)
