@@ -15,6 +15,7 @@ namespace CSUI.Previewer
             string targetFile = null;
             bool topmost = false;
             bool verifyOnce = false;
+            bool ipcMode = false;
 
             foreach (string arg in args)
             {
@@ -26,10 +27,19 @@ namespace CSUI.Previewer
                 {
                     verifyOnce = true;
                 }
+                else if (string.Equals(arg, "--ipc", StringComparison.OrdinalIgnoreCase))
+                {
+                    ipcMode = true;
+                }
                 else if (!arg.StartsWith("--", StringComparison.Ordinal) && targetFile == null)
                 {
                     targetFile = arg;
                 }
+            }
+
+            if (ipcMode)
+            {
+                return PreviewIpcServer.Run();
             }
 
             if (targetFile != null)
