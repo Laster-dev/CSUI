@@ -134,6 +134,52 @@ namespace System.Windows.Markup
         public string ArgumentName { get; }
     }
 
+    [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
+    public sealed class XmlnsDefinitionAttribute : Attribute
+    {
+        public XmlnsDefinitionAttribute(string xmlNamespace, string clrNamespace)
+        {
+            ArgumentNullException.ThrowIfNull(xmlNamespace);
+            ArgumentNullException.ThrowIfNull(clrNamespace);
+            XmlNamespace = xmlNamespace;
+            ClrNamespace = clrNamespace;
+        }
+
+        public string XmlNamespace { get; }
+        public string ClrNamespace { get; }
+        public string AssemblyName { get; set; }
+    }
+
+    [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
+    public sealed class XmlnsPrefixAttribute : Attribute
+    {
+        public XmlnsPrefixAttribute(string xmlNamespace, string prefix)
+        {
+            ArgumentNullException.ThrowIfNull(xmlNamespace);
+            ArgumentNullException.ThrowIfNull(prefix);
+            XmlNamespace = xmlNamespace;
+            Prefix = prefix;
+        }
+
+        public string XmlNamespace { get; }
+        public string Prefix { get; }
+    }
+
+    [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
+    public sealed class XmlnsCompatibleWithAttribute : Attribute
+    {
+        public XmlnsCompatibleWithAttribute(string oldNamespace, string newNamespace)
+        {
+            ArgumentNullException.ThrowIfNull(oldNamespace);
+            ArgumentNullException.ThrowIfNull(newNamespace);
+            OldNamespace = oldNamespace;
+            NewNamespace = newNamespace;
+        }
+
+        public string OldNamespace { get; }
+        public string NewNamespace { get; }
+    }
+
     public class XamlParseException : SystemException
     {
         public XamlParseException() { }

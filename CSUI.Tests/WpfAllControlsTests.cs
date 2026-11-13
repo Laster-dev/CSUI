@@ -1202,6 +1202,21 @@ internal static class WpfAllControlsTests
             win.Close();
         }
 
+        // 4. Verify XmlnsDefinition / XmlnsPrefix metadata on CSUI.Core assembly for XAML IntelliSense
+        var xmlnsDefs = typeof(Window).Assembly.GetCustomAttributes(typeof(System.Windows.Markup.XmlnsDefinitionAttribute), false);
+        bool hasControlsMapping = false;
+        bool hasWindowsMapping = false;
+        foreach (System.Windows.Markup.XmlnsDefinitionAttribute def in xmlnsDefs)
+        {
+            if (def.XmlNamespace == "http://schemas.microsoft.com/winfx/2006/xaml/presentation")
+            {
+                if (def.ClrNamespace == "System.Windows.Controls") hasControlsMapping = true;
+                if (def.ClrNamespace == "System.Windows") hasWindowsMapping = true;
+            }
+        }
+        Assert(hasControlsMapping && hasWindowsMapping,
+            "CSUI.Core must expose XmlnsDefinition mappings for http://schemas.microsoft.com/winfx/2006/xaml/presentation");
+
         Pass("CTRL-12. TextBox/PasswordBox/RichTextBox Caret Blink & Outside Click Focus Clear");
     }
 
