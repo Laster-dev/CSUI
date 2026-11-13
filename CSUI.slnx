@@ -4,4 +4,5 @@
   <Project Path="CSUI.Generators/CSUI.Generators.csproj" />
   <Project Path="CSUI.Tests/CSUI.Tests.csproj" />
   <Project Path="CSUI.SampleApp/CSUI.SampleApp.csproj" />
+  <Project Path="CSUI.Previewer/CSUI.Previewer.csproj" />
 </Solution>
