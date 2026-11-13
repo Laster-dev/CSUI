@@ -359,6 +359,20 @@ namespace CSUI.Markup
             {
                 return ParseControlTemplateElement(xmlElement, context);
             }
+            if (localName == "Array" || localName == "ArrayExtension")
+            {
+                return ParseArrayElement(xmlElement, parentContextElement, context);
+            }
+            string xmlNs = xmlElement.Name.NamespaceName;
+            if (xmlNs == "http://schemas.microsoft.com/winfx/2006/xaml" ||
+                xmlNs.StartsWith("clr-namespace:System;", StringComparison.Ordinal) ||
+                xmlNs == "clr-namespace:System")
+            {
+                if (localName == "String") return xmlElement.Value;
+                if (localName == "Int32" && int.TryParse(xmlElement.Value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int iVal)) return iVal;
+                if (localName == "Double" && double.TryParse(xmlElement.Value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double dVal)) return dVal;
+                if (localName == "Boolean" && bool.TryParse(xmlElement.Value.Trim(), out bool bVal)) return bVal;
+            }
 
             if (!s_typesByName.TryGetValue(localName, out XamlTypeMetadata meta))
             {
@@ -401,7 +415,7 @@ namespace CSUI.Markup
                 string attrName = attr.Name.LocalName;
                 string attrVal = attr.Value;
 
-                if (attrName == "Class" || attrName == "DataType" || attrName == "Key")
+                if (attrName == "Class" || attrName == "DataType" || attrName == "Key" || attrName == "Shared")
                 {
                     continue;
                 }
@@ -555,7 +569,9 @@ namespace CSUI.Markup
                     else
                     {
                         string key = GetXamlKey(child);
-                        object val = InstantiateElement(child, existingInstance: null, feWithResources, context);
+                        object val = IsXamlNonShared(child)
+                            ? ResourceDictionary.CreateNonShared(() => InstantiateElement(child, existingInstance: null, feWithResources, context))
+                            : InstantiateElement(child, existingInstance: null, feWithResources, context);
                         if (key != null)
                         {
                             feWithResources.Resources[key] = val;
@@ -667,6 +683,18 @@ namespace CSUI.Markup
                     target.SetValue(dp, null);
                     return;
                 }
+                else if (inner.StartsWith("x:Reference ", StringComparison.Ordinal) || inner.StartsWith("Reference ", StringComparison.Ordinal))
+                {
+                    string refName = inner.StartsWith("x:Reference ", StringComparison.Ordinal)
+                        ? inner.Substring("x:Reference ".Length).Trim()
+                        : inner.Substring("Reference ".Length).Trim();
+                    object found = context.NameScope.FindName(refName) ?? contextFe?.FindName(refName);
+                    if (found != null)
+                    {
+                        target.SetValue(dp, found);
+                    }
+                    return;
+                }
                 else if (inner.StartsWith("Binding", StringComparison.Ordinal) || inner.StartsWith("x:Bind", StringComparison.Ordinal))
                 {
                     Binding parsedBinding = ParseBindingMarkup(inner, dp.PropertyType, contextFe, context);
@@ -699,7 +727,9 @@ namespace CSUI.Markup
                 }
 
                 string key = GetXamlKey(itemEl);
-                object value = InstantiateElement(itemEl, existingInstance: null, contextFe, context);
+                object value = IsXamlNonShared(itemEl)
+                    ? ResourceDictionary.CreateNonShared(() => InstantiateElement(itemEl, existingInstance: null, contextFe, context))
+                    : InstantiateElement(itemEl, existingInstance: null, contextFe, context);
                 if (!string.IsNullOrEmpty(key))
                 {
                     dict[key] = value;
@@ -710,6 +740,69 @@ namespace CSUI.Markup
                     dict[styleVal.TargetType] = styleVal;
                 }
             }
+        }
+
+        private static bool IsXamlNonShared(XElement el)
+        {
+            foreach (XAttribute attr in el.Attributes())
+            {
+                if (attr.Name.LocalName == "Shared" &&
+                    string.Equals(attr.Value?.Trim(), "False", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static object ParseArrayElement(XElement arrayEl, FrameworkElement contextFe, XamlLoadContext context)
+        {
+            string typeAttr = arrayEl.Attribute("Type")?.Value;
+            Type elemType = ResolveTypeName(typeAttr);
+
+            var items = new List<object>();
+            foreach (XElement child in arrayEl.Elements())
+            {
+                items.Add(InstantiateElement(child, existingInstance: null, contextFe, context));
+            }
+
+            if (elemType == typeof(string))
+            {
+                var arr = new string[items.Count];
+                for (int i = 0; i < items.Count; i++) arr[i] = items[i]?.ToString();
+                return arr;
+            }
+            if (elemType == typeof(int))
+            {
+                var arr = new int[items.Count];
+                for (int i = 0; i < items.Count; i++) arr[i] = items[i] is int v ? v : Convert.ToInt32(items[i], CultureInfo.InvariantCulture);
+                return arr;
+            }
+            if (elemType == typeof(double))
+            {
+                var arr = new double[items.Count];
+                for (int i = 0; i < items.Count; i++) arr[i] = items[i] is double v ? v : Convert.ToDouble(items[i], CultureInfo.InvariantCulture);
+                return arr;
+            }
+            if (elemType == typeof(bool))
+            {
+                var arr = new bool[items.Count];
+                for (int i = 0; i < items.Count; i++) arr[i] = items[i] is bool v ? v : Convert.ToBoolean(items[i], CultureInfo.InvariantCulture);
+                return arr;
+            }
+            if (elemType == typeof(Brush))
+            {
+                var arr = new Brush[items.Count];
+                for (int i = 0; i < items.Count; i++) arr[i] = items[i] as Brush;
+                return arr;
+            }
+            if (elemType == typeof(UIElement))
+            {
+                var arr = new UIElement[items.Count];
+                for (int i = 0; i < items.Count; i++) arr[i] = items[i] as UIElement;
+                return arr;
+            }
+            return items.ToArray();
         }
 
         private static Style ParseStyleElement(XElement styleEl, FrameworkElement contextFe, XamlLoadContext context)
@@ -1589,7 +1682,19 @@ namespace CSUI.Markup
             {
                 clean = clean.Substring(colon + 1);
             }
-            return s_typesByName.TryGetValue(clean, out XamlTypeMetadata meta) ? meta.ClrType : null;
+            if (s_typesByName.TryGetValue(clean, out XamlTypeMetadata meta))
+            {
+                return meta.ClrType;
+            }
+            return clean switch
+            {
+                "String" or "string" => typeof(string),
+                "Int32" or "int" => typeof(int),
+                "Double" or "double" => typeof(double),
+                "Boolean" or "bool" => typeof(bool),
+                "Object" or "object" => typeof(object),
+                _ => null,
+            };
         }
 
         internal static DependencyProperty ResolveDependencyProperty(string ownerTypeName, string propName)

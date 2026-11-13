@@ -887,8 +887,27 @@ namespace System.Windows
             }
         }
 
+        public static object CreateNonShared(Func<object> factory)
+        {
+            ArgumentNullException.ThrowIfNull(factory);
+            return new NonSharedResourceFactory(factory);
+        }
+
+        private sealed class NonSharedResourceFactory
+        {
+            private readonly Func<object> _factory;
+            public NonSharedResourceFactory(Func<object> factory) => _factory = factory;
+            public object Create() => _factory();
+        }
+
         protected virtual void OnGettingValue(object key, ref object value, out bool canCache)
         {
+            if (value is NonSharedResourceFactory nonShared)
+            {
+                value = nonShared.Create();
+                canCache = false;
+                return;
+            }
             canCache = true;
         }
 

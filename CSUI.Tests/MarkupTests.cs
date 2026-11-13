@@ -43,6 +43,7 @@ internal static class MarkupTests
         TestAsyncCompositorAndIndependentAnimations();
         TestModernGestureEngineAndPinchPan();
         TestPerMonitorV2DpiHotPlug();
+        TestXamlMarkupExtensionsAndResourceFeatures();
     }
 
     public sealed class MarkupCard : Decorator
@@ -1742,6 +1743,9 @@ internal static class MarkupTests
         Pass("DPI-1. Per-Monitor v2 Dynamic DPI Hot-Plug & SwapChain Reconfiguration (WM_DPICHANGED, Instant Buffer Resize, Zero-Blur)",
             $"oldDpi={reportedOldDpi.PixelsPerInchX}, newDpi={reportedNewDpi.PixelsPerInchX}, suggested={suggestedRect150.Width}x{suggestedRect150.Height}");
     }
+
+    private static void TestXamlMarkupExtensionsAndResourceFeatures()
+        => MarkupTestsExtensionHelper.RunMarkupExtensionsTest(Pass, Assert);
 }
 
 [AotBindable]
@@ -1819,5 +1823,76 @@ public partial class GeneratedDashboardView : Panel
     partial void OnComponentInitialized()
     {
         ComponentHookCalled = true;
+    }
+}
+
+internal static partial class MarkupTestsExtensionHelper
+{
+    public static void RunMarkupExtensionsTest(Action<string, string> pass, Action<bool, string> assert)
+    {
+        // 1. Direct MarkupExtension types in System.Windows.Markup
+        var nullExt = new NullExtension();
+        assert(nullExt.ProvideValue(null!) == null, "NullExtension returns null");
+
+        var typeExt = new TypeExtension(typeof(TextBlock));
+        assert(Equals(typeExt.ProvideValue(null!), typeof(TextBlock)), "TypeExtension returns typeof(TextBlock)");
+
+        var staticExt = new StaticExtension { MemberType = typeof(Brushes), Member = nameof(Brushes.Coral) };
+        assert(staticExt.MemberType == typeof(Brushes) && staticExt.Member == nameof(Brushes.Coral),
+            "StaticExtension stores MemberType and Member");
+
+        var arrayExt = new ArrayExtension(typeof(string));
+        arrayExt.AddChild("One");
+        arrayExt.AddChild("Two");
+        var arrResult = arrayExt.ProvideValue(null!) as string[];
+        assert(arrResult is { Length: 2 } && arrResult[0] == "One" && arrResult[1] == "Two", "ArrayExtension builds typed array");
+
+        // 2. Compile-time generated XAML (ZeroModWpfView): x:Shared="False", x:Array, x:Reference
+        var view = new ZeroModWpfView();
+        object b1 = view.FindResource("NonSharedBrush");
+        object b2 = view.FindResource("NonSharedBrush");
+        assert(b1 is SolidColorBrush && b2 is SolidColorBrush && !ReferenceEquals(b1, b2),
+            "Compiled XAML x:Shared='False' returns distinct instances");
+
+        var compiledTags = view.FindResource("CompiledTags") as string[];
+        assert(compiledTags is { Length: 2 } && compiledTags[0] == "Alpha" && compiledTags[1] == "Beta",
+            "Compiled XAML <x:Array> created typed string[]");
+
+        assert(ReferenceEquals(view.RefTb.Tag, view.TitleTb),
+            "Compiled XAML {x:Reference TitleTb} resolved TitleTb");
+
+        // 3. Runtime XamlMarkup.Load: x:Shared="False", x:Array, x:Reference
+        const string runtimeXaml = """
+        <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+            <StackPanel.Resources>
+                <SolidColorBrush x:Key="RtNonShared" x:Shared="False" Color="DodgerBlue" />
+                <x:Array x:Key="RtArray" Type="{x:Type sys:String}">
+                    <sys:String>First</sys:String>
+                    <sys:String>Second</sys:String>
+                </x:Array>
+            </StackPanel.Resources>
+            <TextBlock x:Name="RtSource" Text="HelloRef" />
+            <TextBlock x:Name="RtTarget" Tag="{x:Reference RtSource}" />
+        </StackPanel>
+        """;
+        var sp = XamlMarkup.Load<StackPanel>(runtimeXaml, out XamlLoadContext rtCtx);
+        object r1 = sp.FindResource("RtNonShared");
+        object r2 = sp.FindResource("RtNonShared");
+        assert(r1 is SolidColorBrush && r2 is SolidColorBrush && !ReferenceEquals(r1, r2),
+            "Runtime XAML x:Shared='False' returns distinct instances");
+
+        var rtArr = sp.FindResource("RtArray") as string[];
+        assert(rtArr is { Length: 2 } && rtArr[0] == "First" && rtArr[1] == "Second",
+            "Runtime XAML <x:Array> created typed string[]");
+
+        var rtSource = sp.FindName("RtSource") as TextBlock;
+        var rtTarget = sp.FindName("RtTarget") as TextBlock;
+        assert(rtSource != null && rtTarget != null && ReferenceEquals(rtTarget.Tag, rtSource),
+            "Runtime XAML {x:Reference RtSource} resolved RtSource");
+
+        pass("MK-6. XAML MarkupExtensions & Resource Features (StaticExtension, TypeExtension, NullExtension, x:Array, x:Shared='False', x:Reference)",
+            $"compiledTags={compiledTags!.Length}, rtArr={rtArr!.Length}");
     }
 }

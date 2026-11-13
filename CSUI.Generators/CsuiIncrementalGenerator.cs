@@ -965,7 +965,7 @@ namespace CSUI.Generators
 
                 if (attrNs == ctx.XamlNs)
                 {
-                    if (attrLocal == "Class" || attrLocal == "ClassModifier" || attrLocal == "FieldModifier" || attrLocal == "Key")
+                    if (attrLocal == "Class" || attrLocal == "ClassModifier" || attrLocal == "FieldModifier" || attrLocal == "Key" || attrLocal == "Shared")
                     {
                         continue;
                     }
@@ -1229,6 +1229,56 @@ namespace CSUI.Generators
 
             if (ns == ctx.XamlNs || ns == "clr-namespace:System;assembly=mscorlib" || ns == "clr-namespace:System;assembly=System.Runtime")
             {
+                if (local == "Array" || local == "ArrayExtension")
+                {
+                    string elemTypeName = "object";
+                    string? typeRaw = valEl.Attribute("Type")?.Value;
+                    if (!string.IsNullOrWhiteSpace(typeRaw))
+                    {
+                        if (!TryResolveTypeAttributeExpr(typeRaw!, valEl, ctx, out INamedTypeSymbol? elemSym, out _) || elemSym is null)
+                        {
+                            varName = "";
+                            return false;
+                        }
+                        elemTypeName = elemSym.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    }
+
+                    var itemVars = new List<string>();
+                    foreach (XElement child in valEl.Elements())
+                    {
+                        if (child.Name.LocalName == "Array.Items" || child.Name.LocalName == "ArrayExtension.Items")
+                        {
+                            foreach (XElement innerItem in child.Elements())
+                            {
+                                if (!TryEmitAnyValueElement(sb, bindingSb, innerItem, ctx, out string itemVar))
+                                {
+                                    varName = "";
+                                    return false;
+                                }
+                                itemVars.Add(itemVar);
+                            }
+                        }
+                        else
+                        {
+                            if (!TryEmitAnyValueElement(sb, bindingSb, child, ctx, out string itemVar))
+                            {
+                                varName = "";
+                                return false;
+                            }
+                            itemVars.Add(itemVar);
+                        }
+                    }
+
+                    varName = ctx.NextVar("__arr");
+                    sb.Append("var ").Append(varName).Append(" = new ").Append(elemTypeName).Append("[] { ");
+                    for (int i = 0; i < itemVars.Count; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        sb.Append(itemVars[i]);
+                    }
+                    sb.AppendLine(" };");
+                    return true;
+                }
                 if (local == "String")
                 {
                     varName = ctx.NextVar("__str");
@@ -1482,12 +1532,32 @@ namespace CSUI.Generators
                 return false;
             }
 
-            if (!TryEmitAnyValueElement(sb, bindingSb, entryEl, ctx, out string valVar))
+            string? sharedAttr = entryEl.Attribute(XName.Get("Shared", ctx.XamlNs))?.Value;
+            if (string.Equals(sharedAttr?.Trim(), "False", StringComparison.OrdinalIgnoreCase))
+            {
+                var nonSharedSb = new StringBuilder();
+                var nonSharedBindingSb = new StringBuilder();
+                if (!TryEmitAnyValueElement(nonSharedSb, nonSharedBindingSb, entryEl, ctx, out string valVar))
+                {
+                    return false;
+                }
+
+                sb.Append(dictExpr).Append('[').Append(keyExpr).Append("] = global::System.Windows.ResourceDictionary.CreateNonShared(() => {").AppendLine();
+                sb.Append(nonSharedSb);
+                if (nonSharedBindingSb.Length > 0)
+                {
+                    sb.Append(nonSharedBindingSb);
+                }
+                sb.Append("return ").Append(valVar).AppendLine("; });");
+                return true;
+            }
+
+            if (!TryEmitAnyValueElement(sb, bindingSb, entryEl, ctx, out string sharedValVar))
             {
                 return false;
             }
 
-            sb.Append(dictExpr).Append('[').Append(keyExpr).Append("] = ").Append(valVar).AppendLine(";");
+            sb.Append(dictExpr).Append('[').Append(keyExpr).Append("] = ").Append(sharedValVar).AppendLine(";");
             return true;
         }
 
@@ -3128,6 +3198,30 @@ namespace CSUI.Generators
                 INamedTypeSymbol? sym = ResolveMarkupType(typePart, el, ctx);
                 if (sym is null) return false;
                 resolvedExpr = "typeof(" + sym.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")";
+                return true;
+            }
+
+            if (inner.StartsWith("x:Reference ", StringComparison.Ordinal) || inner.StartsWith("Reference ", StringComparison.Ordinal))
+            {
+                string refName = inner.StartsWith("x:Reference ", StringComparison.Ordinal)
+                    ? inner.Substring("x:Reference ".Length).Trim()
+                    : inner.Substring("Reference ".Length).Trim();
+                if (refName.StartsWith("Name=", StringComparison.Ordinal))
+                {
+                    refName = refName.Substring("Name=".Length).Trim();
+                }
+                refName = refName.Trim('\'', '"');
+                if (string.IsNullOrWhiteSpace(refName)) return false;
+                string lookup = $"((global::System.Windows.FrameworkElement)this).FindName({ToCSharpStringLiteral(refName)})";
+                if (targetType is not null && targetType.SpecialType != SpecialType.System_Object)
+                {
+                    string targetTypeName = targetType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    resolvedExpr = $"(({targetTypeName}){lookup}!)";
+                }
+                else
+                {
+                    resolvedExpr = lookup;
+                }
                 return true;
             }
 
