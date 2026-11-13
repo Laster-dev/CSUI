@@ -248,18 +248,18 @@ internal static class ModernArchitectureTests
         AssertEqual(WindowBackdropType.Acrylic, WindowBackdropType.TransientWindow, "Acrylic alias should equal TransientWindow");
         AssertEqual(WindowBackdropType.MicaAlt, WindowBackdropType.TabbedWindow, "MicaAlt alias should equal TabbedWindow");
 
-        // 2. Window WindowBackdropType property
+        // 2. Window BackdropType property
         var window = new Window();
-        AssertEqual(window.WindowBackdropType, WindowBackdropType.Auto, "Default window backdrop type should be Auto");
+        AssertEqual(window.BackdropType, WindowBackdropType.Auto, "Default window backdrop type should be Auto");
 
-        window.WindowBackdropType = WindowBackdropType.Mica;
-        AssertEqual(window.WindowBackdropType, WindowBackdropType.Mica, "WindowBackdropType should be set to Mica");
+        window.BackdropType = WindowBackdropType.Mica;
+        AssertEqual(window.BackdropType, WindowBackdropType.Mica, "BackdropType should be set to Mica");
 
-        window.WindowBackdropType = WindowBackdropType.MicaAlt;
-        AssertEqual(window.WindowBackdropType, WindowBackdropType.MicaAlt, "WindowBackdropType should be set to MicaAlt");
+        window.BackdropType = WindowBackdropType.MicaAlt;
+        AssertEqual(window.BackdropType, WindowBackdropType.MicaAlt, "BackdropType should be set to MicaAlt");
 
-        window.WindowBackdropType = WindowBackdropType.Acrylic;
-        AssertEqual(window.WindowBackdropType, WindowBackdropType.Acrylic, "WindowBackdropType should be set to Acrylic");
+        window.BackdropType = WindowBackdropType.Acrylic;
+        AssertEqual(window.BackdropType, WindowBackdropType.Acrylic, "BackdropType should be set to Acrylic");
 
         // 3. Support detection
         bool supportsNone = WindowBackdropManager.IsSupported(WindowBackdropType.None);

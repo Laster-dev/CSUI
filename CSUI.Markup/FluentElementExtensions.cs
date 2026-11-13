@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Appearance;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
@@ -986,7 +987,7 @@ namespace CSUI.Markup
         public static T Backdrop<T>(this T window, WindowBackdropType backdropType)
             where T : Window
         {
-            window.WindowBackdropType = backdropType;
+            window.BackdropType = backdropType;
             return window;
         }
 

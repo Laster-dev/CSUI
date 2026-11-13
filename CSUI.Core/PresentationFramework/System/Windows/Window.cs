@@ -1834,7 +1834,7 @@ namespace System.Windows
             }
 
             // Setting WindowBackdrop
-            WindowBackdropManager.SetBackdrop(this, WindowBackdropType);
+            WindowBackdropManager.SetBackdrop(this, BackdropType);
 
             EventHandler handler = (EventHandler)Events[EVENT_SOURCEINITIALIZED];
             if (handler != null) handler(this, e);
@@ -2980,17 +2980,17 @@ namespace System.Windows
         /// <summary>
         /// Gets or sets a value determining preferred Windows 11 backdrop material (Mica, Acrylic, Mica Alt) for current <see cref="Window"/>.
         /// </summary>
-        public WindowBackdropType WindowBackdropType
+        public WindowBackdropType BackdropType
         {
-            get => (WindowBackdropType)GetValue(WindowBackdropTypeProperty);
-            set => SetValue(WindowBackdropTypeProperty, value);
+            get => (WindowBackdropType)GetValue(BackdropTypeProperty);
+            set => SetValue(BackdropTypeProperty, value);
         }
 
         /// <summary>
-        /// DependencyProperty for <see cref="WindowBackdropType"/>.
+        /// DependencyProperty for <see cref="BackdropType"/>.
         /// </summary>
-        public static readonly DependencyProperty WindowBackdropTypeProperty = DependencyProperty.Register(
-            nameof(WindowBackdropType),
+        public static readonly DependencyProperty BackdropTypeProperty = DependencyProperty.Register(
+            nameof(BackdropType),
             typeof(WindowBackdropType),
             typeof(Window),
             new PropertyMetadata(

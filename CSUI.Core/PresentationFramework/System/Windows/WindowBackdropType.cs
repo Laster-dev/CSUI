@@ -5,7 +5,7 @@
 #nullable disable
 using SR = MS.Internal.PresentationFramework.SR;
 
-namespace System.Windows;
+namespace System.Windows.Appearance;
 
 /// <summary>
 /// Specifies the Windows 11 DWM system backdrop material to render behind the window.

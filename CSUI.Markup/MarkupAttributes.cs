@@ -2,7 +2,7 @@
 using System;
 using System.Windows.Input;
 
-namespace System.Windows.Markup
+namespace CSUI.Markup
 {
     /// <summary>
     /// Marks a partial class as an observable ViewModel/Model.

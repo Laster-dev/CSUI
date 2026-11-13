@@ -56,6 +56,32 @@ namespace System.Windows.Controls
                 typeof(TextBox),
                 new FrameworkPropertyMetadata(0));
 
+        public static readonly DependencyProperty MaxLinesProperty =
+            DependencyProperty.Register(
+                nameof(MaxLines),
+                typeof(int),
+                typeof(TextBox),
+                new FrameworkPropertyMetadata(int.MaxValue));
+
+        public static readonly DependencyProperty MinLinesProperty =
+            DependencyProperty.Register(
+                nameof(MinLines),
+                typeof(int),
+                typeof(TextBox),
+                new FrameworkPropertyMetadata(1));
+
+        public int MaxLines
+        {
+            get => (int)GetValue(MaxLinesProperty);
+            set => SetValue(MaxLinesProperty, value);
+        }
+
+        public int MinLines
+        {
+            get => (int)GetValue(MinLinesProperty);
+            set => SetValue(MinLinesProperty, value);
+        }
+
         public static readonly DependencyProperty CaretIndexProperty =
             DependencyProperty.Register(
                 nameof(CaretIndex),

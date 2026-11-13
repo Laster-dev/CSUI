@@ -698,8 +698,13 @@ namespace System.Windows.Controls
                 {
                     RoutedEvent = ScrollChangedEvent
                 };
-                RaiseEvent(args);
+                OnScrollChanged(args);
             }
+        }
+
+        protected virtual void OnScrollChanged(ScrollChangedEventArgs e)
+        {
+            RaiseEvent(e);
         }
 
         protected override Size MeasureOverride(Size constraint)

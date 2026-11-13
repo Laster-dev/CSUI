@@ -16,14 +16,14 @@ namespace CSUI.Generators
     [Generator(LanguageNames.CSharp)]
     public sealed class CsuiIncrementalGenerator : IIncrementalGenerator
     {
-        private const string ObservableObjectAttrName = "System.Windows.Markup.ObservableObjectAttribute";
-        private const string ObservablePropertyAttrName = "System.Windows.Markup.ObservablePropertyAttribute";
-        private const string AlsoNotifyChangeForAttrName = "System.Windows.Markup.AlsoNotifyChangeForAttribute";
-        private const string RelayCommandAttrName = "System.Windows.Markup.RelayCommandAttribute";
-        private const string BindableAttrName = "System.Windows.Markup.BindableAttribute";
-        private const string AotBindableAttrName = "System.Windows.Markup.AotBindableAttribute";
+        private const string ObservableObjectAttrName = "CSUI.Markup.ObservableObjectAttribute";
+        private const string ObservablePropertyAttrName = "CSUI.Markup.ObservablePropertyAttribute";
+        private const string AlsoNotifyChangeForAttrName = "CSUI.Markup.AlsoNotifyChangeForAttribute";
+        private const string RelayCommandAttrName = "CSUI.Markup.RelayCommandAttribute";
+        private const string BindableAttrName = "CSUI.Markup.BindableAttribute";
+        private const string AotBindableAttrName = "CSUI.Markup.AotBindableAttribute";
         private const string ComponentModelBindableAttrName = "System.ComponentModel.BindableAttribute";
-        private const string XamlTypeAttrName = "System.Windows.Markup.XamlTypeAttribute";
+        private const string XamlTypeAttrName = "CSUI.Markup.XamlTypeAttribute";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -248,8 +248,8 @@ namespace CSUI.Generators
                         string cmdPropName = baseName + "Command";
                         string cmdFieldName = "_" + char.ToLowerInvariant(baseName[0]) + baseName.Substring(1) + "Command";
                         string cmdType = paramType is null
-                            ? "global::System.Windows.Markup.RelayCommand"
-                            : $"global::System.Windows.Markup.RelayCommand<{paramType}>";
+                            ? "global::CSUI.Markup.RelayCommand"
+                            : $"global::CSUI.Markup.RelayCommand<{paramType}>";
 
                         relayCommands.Add(new RelayCommandModel(
                             method.Name,
@@ -512,8 +512,8 @@ namespace CSUI.Generators
             foreach (RelayCommandModel cmd in model.RelayCommands)
             {
                 string cmdType = cmd.ParameterType is null
-                    ? "global::System.Windows.Markup.RelayCommand"
-                    : $"global::System.Windows.Markup.RelayCommand<{cmd.ParameterType}>";
+                    ? "global::CSUI.Markup.RelayCommand"
+                    : $"global::CSUI.Markup.RelayCommand<{cmd.ParameterType}>";
 
                 sb.Append(memberIndent).Append("private ").Append(cmdType).Append("? ").Append(cmd.CommandFieldName).AppendLine(";");
 
@@ -696,8 +696,11 @@ namespace CSUI.Generators
             var namedElements = new List<(string Name, string TagName, string FullTypeName)>();
             CollectNamedElements(root, XamlNs, ns, compilation, namedElements);
 
-            bool hasCodeBehind = compilation.GetTypeByMetadataName(xClass) is not null;
-            INamedTypeSymbol? inferredBaseType = hasCodeBehind
+            INamedTypeSymbol? existingClass = compilation.GetTypeByMetadataName(xClass);
+            bool hasExplicitBaseClass = existingClass is not null &&
+                existingClass.BaseType is not null &&
+                existingClass.BaseType.SpecialType != SpecialType.System_Object;
+            INamedTypeSymbol? inferredBaseType = hasExplicitBaseClass
                 ? null
                 : ResolveElementType(root.Name.LocalName, root.Name.NamespaceName, ns, compilation);
 
@@ -740,7 +743,7 @@ namespace CSUI.Generators
 
             foreach ((string elemName, string tagName, string fullTypeName) in namedElements)
             {
-                string fieldType = compiledBody is not null && !string.IsNullOrEmpty(fullTypeName) ? fullTypeName : tagName;
+                string fieldType = !string.IsNullOrEmpty(fullTypeName) ? fullTypeName : tagName;
                 sb.Append(memberIndent).Append("internal ").Append(fieldType).Append(' ').Append(elemName).AppendLine(" = null!;");
             }
 
@@ -784,13 +787,14 @@ namespace CSUI.Generators
             {
                 sb.Append(memberIndent).AppendLine("    global::CSUI.Markup.XamlMarkup.LoadInto(this, __GeneratedXamlSource, out global::CSUI.Markup.XamlLoadContext __ctx);");
 
-                foreach ((string elemName, string tagName, _) in namedElements)
+                foreach ((string elemName, string tagName, string fullTypeName) in namedElements)
                 {
+                    string fieldType = !string.IsNullOrEmpty(fullTypeName) ? fullTypeName : tagName;
                     sb.Append(memberIndent)
                       .Append("    this.")
                       .Append(elemName)
                       .Append(" = __ctx.FindName<")
-                      .Append(tagName)
+                      .Append(fieldType)
                       .Append(">(\"")
                       .Append(elemName)
                       .AppendLine("\")!;");
@@ -1078,6 +1082,10 @@ namespace CSUI.Generators
 
                 if (FindEvent(targetType, attrLocal) is IEventSymbol evt)
                 {
+                    if (!ctx.HasInstanceClass)
+                    {
+                        return ctx.Fail($"Instance event '{attrLocal}' requires x:Class");
+                    }
                     sb.Append(targetExpr).Append('.').Append(evt.Name).Append(" += this.").Append(attr.Value.Trim()).AppendLine(";");
                     continue;
                 }
@@ -3316,9 +3324,16 @@ namespace CSUI.Generators
                     {
                         string keyRaw = inner.Substring("DynamicResource ".Length).Trim();
                         if (!TryResolveMarkupOrLiteralKeyExpr(keyRaw, el, ctx, out string keyExpr)) return false;
-                        sb.Append(targetExpr).Append(".SetResourceReference(")
-                          .Append(dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
-                          .Append('.').Append(dpField.Name).Append(", ").Append(keyExpr).AppendLine(");");
+                        string dpFullExpr = dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dpField.Name;
+                        if (InheritsFrom(ownerType, "System.Windows.FrameworkElement") || InheritsFrom(ownerType, "System.Windows.FrameworkContentElement"))
+                        {
+                            sb.Append(targetExpr).Append(".SetResourceReference(").Append(dpFullExpr).Append(", ").Append(keyExpr).AppendLine(");");
+                        }
+                        else
+                        {
+                            sb.Append("global::System.Windows.DynamicResourceExtension.SetResourceReference(")
+                              .Append(targetExpr).Append(", ").Append(dpFullExpr).Append(", ").Append(keyExpr).AppendLine(");");
+                        }
                         return true;
                     }
                 }
@@ -3643,9 +3658,16 @@ namespace CSUI.Generators
                 {
                     return false;
                 }
-                sb.Append(targetExpr).Append(".SetResourceReference(")
-                  .Append(dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
-                  .Append('.').Append(dpField.Name).Append(", ").Append(keyExpr).AppendLine(");");
+                string dpFullExpr = dpField.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + dpField.Name;
+                if (InheritsFrom(targetType, "System.Windows.FrameworkElement") || InheritsFrom(targetType, "System.Windows.FrameworkContentElement"))
+                {
+                    sb.Append(targetExpr).Append(".SetResourceReference(").Append(dpFullExpr).Append(", ").Append(keyExpr).AppendLine(");");
+                }
+                else
+                {
+                    sb.Append("global::System.Windows.DynamicResourceExtension.SetResourceReference(")
+                      .Append(targetExpr).Append(", ").Append(dpFullExpr).Append(", ").Append(keyExpr).AppendLine(");");
+                }
                 return true;
             }
 
@@ -3841,6 +3863,48 @@ namespace CSUI.Generators
             return result;
         }
 
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, Dictionary<string, List<string>>> s_xmlnsMapCache =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, Dictionary<string, List<string>>>();
+
+        private static Dictionary<string, List<string>> GetXmlnsMap(Compilation compilation)
+        {
+            return s_xmlnsMapCache.GetValue(compilation, static comp =>
+            {
+                var map = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+                static void ScanAssembly(IAssemblySymbol? asm, Dictionary<string, List<string>> target)
+                {
+                    if (asm is null) return;
+                    foreach (AttributeData attr in asm.GetAttributes())
+                    {
+                        if (attr.AttributeClass?.ToDisplayString() == "System.Windows.Markup.XmlnsDefinitionAttribute" &&
+                            attr.ConstructorArguments.Length >= 2 &&
+                            attr.ConstructorArguments[0].Value is string xmlNs &&
+                            attr.ConstructorArguments[1].Value is string clrNs &&
+                            !string.IsNullOrEmpty(xmlNs) &&
+                            !string.IsNullOrEmpty(clrNs))
+                        {
+                            if (!target.TryGetValue(xmlNs, out var list))
+                            {
+                                list = new List<string>();
+                                target[xmlNs] = list;
+                            }
+                            if (!list.Contains(clrNs))
+                            {
+                                list.Add(clrNs);
+                            }
+                        }
+                    }
+                }
+
+                ScanAssembly(comp.Assembly, map);
+                foreach (IAssemblySymbol refAsm in comp.SourceModule.ReferencedAssemblySymbols)
+                {
+                    ScanAssembly(refAsm, map);
+                }
+                return map;
+            });
+        }
+
         private static INamedTypeSymbol? ResolveElementType(
             string localName,
             string xmlNs,
@@ -3853,6 +3917,16 @@ namespace CSUI.Generators
                 int semi = rest.IndexOf(';');
                 string clrNs = semi >= 0 ? rest.Substring(0, semi) : rest;
                 return compilation.GetTypeByMetadataName(clrNs + "." + localName);
+            }
+
+            if (!string.IsNullOrEmpty(xmlNs) &&
+                GetXmlnsMap(compilation).TryGetValue(xmlNs, out List<string>? mappedNamespaces))
+            {
+                foreach (string clrNs in mappedNamespaces)
+                {
+                    INamedTypeSymbol? found = compilation.GetTypeByMetadataName(clrNs + "." + localName);
+                    if (found is not null) return found;
+                }
             }
 
             if (!string.IsNullOrEmpty(classNamespace))
@@ -5092,7 +5166,10 @@ namespace CSUI.Generators
                 }
                 else if (root.Name.LocalName == "ResourceDictionary")
                 {
-                    var rdCtx = new XamlCompileContext(compilation, string.Empty, XamlNs, rootIsFrameworkElement: false);
+                    var rdCtx = new XamlCompileContext(compilation, string.Empty, XamlNs, rootIsFrameworkElement: false)
+                    {
+                        HasInstanceClass = false
+                    };
                     var rdBody = new StringBuilder();
                     var dummyBind = new StringBuilder();
                     if (TryEmitResourcesCollection(rdBody, dummyBind, "__rd", root, rdCtx) && dummyBind.Length == 0)

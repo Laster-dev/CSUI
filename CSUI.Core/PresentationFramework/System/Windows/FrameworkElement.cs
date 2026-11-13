@@ -248,6 +248,12 @@ namespace System.Windows
             ((FrameworkElement)d).UpdateThemeStyleProperty();
         }
 
+        public void UpdateDefaultStyle()
+        {
+            UpdateStyleProperty();
+            UpdateThemeStyleProperty();
+        }
+
 
         // Cache the ThemeStyle for the current instance if there is a DefaultStyleKey specified for it
         internal Style ThemeStyle

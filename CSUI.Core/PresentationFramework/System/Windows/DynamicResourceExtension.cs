@@ -88,8 +88,33 @@ namespace System.Windows
 
         private object _resourceKey;
 
+        /// <summary>
+        /// Applies a dynamic resource reference to any <see cref="DependencyObject"/>, including non-element
+        /// objects such as <see cref="System.Windows.Media.SolidColorBrush"/>.
+        /// </summary>
+        public static void SetResourceReference(DependencyObject target, DependencyProperty dp, object resourceKey)
+        {
+            ArgumentNullException.ThrowIfNull(target);
+            ArgumentNullException.ThrowIfNull(dp);
 
+            if (target is FrameworkElement fe)
+            {
+                fe.SetResourceReference(dp, resourceKey);
+                return;
+            }
 
+            if (target is FrameworkContentElement fce)
+            {
+                fce.SetResourceReference(dp, resourceKey);
+                return;
+            }
+
+            object resolved = Application.Current?.TryFindResource(resourceKey) ?? SystemResources.FindResourceInternal(resourceKey);
+            if (resolved != null && resolved != DependencyProperty.UnsetValue)
+            {
+                target.SetValue(dp, resolved);
+            }
+        }
     }
 }
 

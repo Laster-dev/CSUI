@@ -50,4 +50,35 @@
       </EmbeddedResource>
     </ItemGroup>
   </Target>
+
+  <!-- Strip transitive Microsoft.WindowsDesktop.App.WPF references pulled by third-party NuGet packages -->
+  <Target Name="_CsuiStripSystemWpfReferences"
+          AfterTargets="ResolveAssemblyReferences"
+          Condition="'$(CsuiWpfDropIn)' == 'true'">
+    <ItemGroup>
+      <_CsuiWpfRefToRemove Include="@(ReferencePath)"
+                           Condition="'%(ReferencePath.Filename)' == 'WindowsBase'
+                                   or '%(ReferencePath.Filename)' == 'PresentationCore'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework.Aero'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework.Aero2'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework.AeroLite'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework.Classic'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework.Luna'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework.Royale'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework-SystemCore'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework-SystemData'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework-SystemDrawing'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework-SystemXml'
+                                   or '%(ReferencePath.Filename)' == 'PresentationFramework-SystemXmlLinq'
+                                   or '%(ReferencePath.Filename)' == 'PresentationUI'
+                                   or '%(ReferencePath.Filename)' == 'ReachFramework'
+                                   or '%(ReferencePath.Filename)' == 'System.Xaml'
+                                   or '%(ReferencePath.Filename)' == 'UIAutomationProvider'
+                                   or '%(ReferencePath.Filename)' == 'UIAutomationTypes'
+                                   or '%(ReferencePath.Filename)' == 'UIAutomationClient'
+                                   or '%(ReferencePath.Filename)' == 'UIAutomationClientsideProviders'" />
+      <ReferencePath Remove="@(_CsuiWpfRefToRemove)" />
+    </ItemGroup>
+  </Target>
 </Project>

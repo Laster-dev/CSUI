@@ -1717,6 +1717,7 @@ namespace System.Windows
             OnPropertyChanged(args);
 
             DependencyPropertyListenerHook?.Invoke(this, args.Property);
+            NotifyDpValueChanged(args.Property);
 
             if (args.IsAValueChange || args.IsASubPropertyChange)
             {
@@ -1754,6 +1755,46 @@ namespace System.Windows
                             ((DependentList)dependentList).InvalidateDependents(this, new DependencyPropertyChangedEventArgs(dp, (PropertyMetadata)null, null));
                     }
                 }
+            }
+        }
+
+        private static readonly UncommonField<Dictionary<DependencyProperty, EventHandler>> _dpValueChangedField =
+            new UncommonField<Dictionary<DependencyProperty, EventHandler>>();
+
+        internal void AddDpValueChanged(DependencyProperty dp, EventHandler handler)
+        {
+            var map = _dpValueChangedField.GetValue(this);
+            if (map == null)
+            {
+                map = new Dictionary<DependencyProperty, EventHandler>();
+                _dpValueChangedField.SetValue(this, map);
+            }
+
+            if (map.TryGetValue(dp, out var existing))
+                map[dp] = existing + handler;
+            else
+                map[dp] = handler;
+        }
+
+        internal void RemoveDpValueChanged(DependencyProperty dp, EventHandler handler)
+        {
+            var map = _dpValueChangedField.GetValue(this);
+            if (map == null || !map.TryGetValue(dp, out var existing))
+                return;
+
+            var updated = existing - handler;
+            if (updated == null)
+                map.Remove(dp);
+            else
+                map[dp] = updated;
+        }
+
+        private void NotifyDpValueChanged(DependencyProperty dp)
+        {
+            var map = _dpValueChangedField.GetValue(this);
+            if (map != null && map.TryGetValue(dp, out var handler))
+            {
+                handler?.Invoke(this, EventArgs.Empty);
             }
         }
 
