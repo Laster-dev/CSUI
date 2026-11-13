@@ -1126,6 +1126,14 @@ namespace CSUI.Markup
             {
                 return Enum.Parse<System.Windows.Media.Animation.EasingMode>(raw, ignoreCase: true);
             }
+            if (targetType == typeof(TileMode))
+            {
+                return Enum.Parse<TileMode>(raw, ignoreCase: true);
+            }
+            if (targetType == typeof(BrushMappingMode))
+            {
+                return Enum.Parse<BrushMappingMode>(raw, ignoreCase: true);
+            }
             if (targetType == typeof(Stretch))
             {
                 return Enum.Parse<Stretch>(raw, ignoreCase: true);
@@ -1254,6 +1262,14 @@ namespace CSUI.Markup
             if (targetType == typeof(System.Windows.Media.Animation.EasingMode))
             {
                 return Enum.Parse<System.Windows.Media.Animation.EasingMode>(raw, ignoreCase: true);
+            }
+            if (targetType == typeof(TileMode))
+            {
+                return Enum.Parse<TileMode>(raw, ignoreCase: true);
+            }
+            if (targetType == typeof(BrushMappingMode))
+            {
+                return Enum.Parse<BrushMappingMode>(raw, ignoreCase: true);
             }
             if (targetType == typeof(Stretch))
             {
@@ -2412,6 +2428,20 @@ namespace CSUI.Markup
             RegisterType<System.Windows.Media.Animation.CircleEase>();
             RegisterType<System.Windows.Media.Animation.PowerEase>();
             RegisterProperty(typeof(System.Windows.Media.Animation.EasingFunctionBase), "EasingMode", System.Windows.Media.Animation.EasingFunctionBase.EasingModeProperty);
+
+            // TileBrush family (ImageBrush, VisualBrush, DrawingBrush)
+            RegisterType<ImageBrush>();
+            RegisterProperty(typeof(ImageBrush), nameof(ImageBrush.ImageSource), ImageBrush.ImageSourceProperty);
+            RegisterType<VisualBrush>();
+            RegisterProperty(typeof(VisualBrush), nameof(VisualBrush.Visual), VisualBrush.VisualProperty);
+            RegisterType<DrawingBrush>();
+            RegisterProperty(typeof(DrawingBrush), nameof(DrawingBrush.Drawing), DrawingBrush.DrawingProperty);
+            RegisterProperty(typeof(TileBrush), nameof(TileBrush.Viewport), TileBrush.ViewportProperty);
+            RegisterProperty(typeof(TileBrush), nameof(TileBrush.ViewportUnits), TileBrush.ViewportUnitsProperty);
+            RegisterProperty(typeof(TileBrush), nameof(TileBrush.Viewbox), TileBrush.ViewboxProperty);
+            RegisterProperty(typeof(TileBrush), nameof(TileBrush.ViewboxUnits), TileBrush.ViewboxUnitsProperty);
+            RegisterProperty(typeof(TileBrush), nameof(TileBrush.TileMode), TileBrush.TileModeProperty);
+            RegisterProperty(typeof(TileBrush), nameof(TileBrush.Stretch), TileBrush.StretchProperty);
         }
     }
 }

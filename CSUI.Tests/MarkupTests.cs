@@ -1989,6 +1989,95 @@ internal static partial class MarkupTestsExtensionHelper
 
         pass("MK-8. Pack URI (pack://application:,,,/ & ;component/) + ValidationRule & Validation.ErrorTemplate",
             "packResolved=True, validationCleared=True");
+
+        // 6. Milestone 4: ShaderEffect / PixelShader + TileBrush (Viewport, Viewbox, TileMode=FlipXY)
+        var customEffect = new CustomTintShaderEffect { Intensity = 0.75 };
+        customEffect.UpdateConstants();
+        assert(customEffect.HasConstant0 && customEffect.Constant0X > 0.74f && customEffect.Constant0X < 0.76f,
+            "ShaderEffect PixelShaderConstantCallback & UpdateShaderValue stored float4 constant");
+        Rect paddedBounds = customEffect.GetRenderBounds(new Rect(10, 10, 50, 50));
+        assert(Math.Abs(paddedBounds.Width - 54.0) < 1e-6 && Math.Abs(paddedBounds.Height - 54.0) < 1e-6,
+            "ShaderEffect Padding expands render bounds");
+
+        var tileDrawing = new DrawingGroup();
+        using (var dc = tileDrawing.Open())
+        {
+            dc.DrawRectangle(Brushes.Red, null, new Rect(0, 0, 10, 10));
+            dc.DrawRectangle(Brushes.Blue, null, new Rect(10, 10, 10, 10));
+        }
+        var tileBrush = new DrawingBrush(tileDrawing)
+        {
+            Viewport = new Rect(0, 0, 0.5, 0.5),
+            ViewportUnits = BrushMappingMode.RelativeToBoundingBox,
+            TileMode = TileMode.FlipXY
+        };
+        var dv = new DrawingVisual();
+        using (var dc = dv.RenderOpen())
+        {
+            dc.DrawRectangle(tileBrush, null, new Rect(0, 0, 100, 100));
+        }
+        var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(100, 100, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(dv);
+        byte[] px = new byte[100 * 100 * 4];
+        rtb.CopyPixels(px, 100 * 4, 0);
+        // Top-left quadrant (10,10) should be Red (BGRA: B=0, G=0, R=255, A=255)
+        int tl = (10 * 100 + 10) * 4;
+        // Bottom-right quadrant (90,90) with FlipXY mirrors (10,10) -> should also be Red!
+        int br = (90 * 100 + 90) * 4;
+        assert(px[tl + 2] > 200 && px[tl] < 30 && px[br + 2] > 200 && px[br] < 30,
+            "TileBrush TileMode.FlipXY rendered mirrored quadrants");
+
+        pass("EFFECT-2. ShaderEffect / PixelShader + TileBrush (Viewport, Viewbox, TileMode=FlipXY)",
+            $"tlRed={px[tl + 2]}, brRed={px[br + 2]}");
+    }
+
+    private sealed class CustomTintShaderEffect : ShaderEffect
+    {
+        public static readonly DependencyProperty InputProperty =
+            RegisterPixelShaderSamplerProperty("Input", typeof(CustomTintShaderEffect), 0);
+
+        public static readonly DependencyProperty IntensityProperty =
+            DependencyProperty.Register(
+                nameof(Intensity),
+                typeof(double),
+                typeof(CustomTintShaderEffect),
+                new PropertyMetadata(0.5, PixelShaderConstantCallback(0)));
+
+        public CustomTintShaderEffect()
+        {
+            var ps = new PixelShader();
+            ps.SetStreamSource(new System.IO.MemoryStream(new byte[] { 0x44, 0x58, 0x42, 0x43 }));
+            PixelShader = ps;
+            PaddingLeft = 2;
+            PaddingRight = 2;
+            PaddingTop = 2;
+            PaddingBottom = 2;
+        }
+
+        public Brush Input
+        {
+            get => (Brush)GetValue(InputProperty);
+            set => SetValue(InputProperty, value);
+        }
+
+        public double Intensity
+        {
+            get => (double)GetValue(IntensityProperty);
+            set => SetValue(IntensityProperty, value);
+        }
+
+        public void UpdateConstants()
+        {
+            UpdateShaderValue(InputProperty);
+            UpdateShaderValue(IntensityProperty);
+        }
+
+        public bool HasConstant0 => TryGetConstant(0, out _);
+        public float Constant0X => TryGetConstant(0, out var v) ? v.X : 0f;
+
+        public new Rect GetRenderBounds(Rect r) => base.GetRenderBounds(r);
+
+        protected override Freezable CreateInstanceCore() => new CustomTintShaderEffect();
     }
 
     private sealed class PositiveIntRule : ValidationRule
