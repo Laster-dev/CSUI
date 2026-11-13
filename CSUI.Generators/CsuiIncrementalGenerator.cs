@@ -1692,12 +1692,32 @@ namespace CSUI.Generators
                             return false;
                         }
                     }
+                    else if (local == "EventSetter")
+                    {
+                        if (!TryEmitEventSetterToCollection(sb, styleVar + ".Setters", child, styleTargetType, ctx))
+                        {
+                            return false;
+                        }
+                    }
                     else if (local == "Style.Setters")
                     {
                         foreach (XElement sEl in child.Elements())
                         {
-                            if (sEl.Name.LocalName != "Setter" ||
-                                !TryEmitSetterToCollection(sb, styleVar + ".Setters", sEl, styleTargetType, allowTargetName: false, ctx))
+                            if (sEl.Name.LocalName == "Setter")
+                            {
+                                if (!TryEmitSetterToCollection(sb, styleVar + ".Setters", sEl, styleTargetType, allowTargetName: false, ctx))
+                                {
+                                    return false;
+                                }
+                            }
+                            else if (sEl.Name.LocalName == "EventSetter")
+                            {
+                                if (!TryEmitEventSetterToCollection(sb, styleVar + ".Setters", sEl, styleTargetType, ctx))
+                                {
+                                    return false;
+                                }
+                            }
+                            else
                             {
                                 return false;
                             }
@@ -1729,6 +1749,51 @@ namespace CSUI.Generators
                     ctx.LocalResourceKeyScopes.Pop();
                 }
             }
+        }
+
+        private static bool TryEmitEventSetterToCollection(
+            StringBuilder sb,
+            string settersExpr,
+            XElement esEl,
+            INamedTypeSymbol? targetType,
+            XamlCompileContext ctx)
+        {
+            string? eventRaw = esEl.Attribute("Event")?.Value;
+            string? handlerName = esEl.Attribute("Handler")?.Value;
+            if (string.IsNullOrWhiteSpace(eventRaw) || string.IsNullOrWhiteSpace(handlerName) || !ctx.HasInstanceClass)
+            {
+                return false;
+            }
+
+            if (!TryResolveRoutedEventExpr(eventRaw!, esEl, targetType, ctx, out string routedEventExpr))
+            {
+                return false;
+            }
+
+            string cleanEventName = eventRaw!.Trim();
+            int dot = cleanEventName.IndexOf('.');
+            if (dot > 0) cleanEventName = cleanEventName.Substring(dot + 1).Trim();
+
+            IEventSymbol? clrEvent = targetType is not null ? FindEvent(targetType, cleanEventName) : null;
+            string delegateType = clrEvent is not null
+                ? clrEvent.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                : "global::System.Windows.RoutedEventHandler";
+
+            string handledToo = string.Equals(esEl.Attribute("HandledEventsToo")?.Value?.Trim(), "True", StringComparison.OrdinalIgnoreCase)
+                ? "true"
+                : "false";
+
+            sb.Append(settersExpr)
+              .Append(".Add(new global::System.Windows.EventSetter(")
+              .Append(routedEventExpr)
+              .Append(", new ")
+              .Append(delegateType)
+              .Append("(this.")
+              .Append(handlerName!.Trim())
+              .Append(")) { HandledEventsToo = ")
+              .Append(handledToo)
+              .AppendLine(" });");
+            return true;
         }
 
         private static bool TryEmitTriggerToCollection(

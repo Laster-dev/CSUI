@@ -11,6 +11,8 @@
   <ItemGroup Condition="'$(MSBuildProjectFullPath)' != '$(_CsuiRootDir)CSUI.Core\CSUI.Core.csproj' and '$(MSBuildProjectFullPath)' != '$(_CsuiRootDir)CSUI.Generators\CSUI.Generators.csproj'">
     <ProjectReference Include="$(_CsuiRootDir)CSUI.Core\CSUI.Core.csproj"
                       Condition="Exists('$(_CsuiRootDir)CSUI.Core\CSUI.Core.csproj') and '@(ProjectReference->WithMetadataValue(&quot;Filename&quot;, &quot;CSUI.Core&quot;))' == ''" />
+    <ProjectReference Include="$(_CsuiRootDir)CSUI.Markup\CSUI.Markup.csproj"
+                      Condition="Exists('$(_CsuiRootDir)CSUI.Markup\CSUI.Markup.csproj') and '$(MSBuildProjectFullPath)' != '$(_CsuiRootDir)CSUI.Markup\CSUI.Markup.csproj' and '@(ProjectReference->WithMetadataValue(&quot;Filename&quot;, &quot;CSUI.Markup&quot;))' == ''" />
     <ProjectReference Include="$(_CsuiRootDir)CSUI.Generators\CSUI.Generators.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"
