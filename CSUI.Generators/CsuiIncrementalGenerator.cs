@@ -1124,6 +1124,18 @@ namespace CSUI.Generators
                         {
                             continue; // Already emitted in step 2
                         }
+                        if (propName == "Triggers")
+                        {
+                            foreach (XElement trigEl in childEl.Elements())
+                            {
+                                if (!TryEmitTriggerToCollection(sb, targetExpr + ".Triggers", trigEl, targetType, ctx))
+                                {
+                                    if (pushedScope) ctx.ResourceScopes.RemoveAt(scopeInsertIndex);
+                                    return false;
+                                }
+                            }
+                            continue;
+                        }
 
                         IPropertySymbol? prop = FindProperty(targetType, propName);
                         if (prop is null)
@@ -1888,7 +1900,120 @@ namespace CSUI.Generators
                 return true;
             }
 
+            if (local == "EventTrigger")
+            {
+                string? routedEventRaw = trigEl.Attribute("RoutedEvent")?.Value;
+                if (string.IsNullOrWhiteSpace(routedEventRaw) ||
+                    !TryResolveRoutedEventExpr(routedEventRaw!, trigEl, defaultTargetType, ctx, out string routedEventExpr))
+                {
+                    return false;
+                }
+
+                string trigVar = ctx.NextVar("__etrig");
+                sb.Append("var ").Append(trigVar).Append(" = new global::System.Windows.EventTrigger(").Append(routedEventExpr).AppendLine(");");
+                string? sourceName = trigEl.Attribute("SourceName")?.Value;
+                if (!string.IsNullOrEmpty(sourceName))
+                {
+                    sb.Append(trigVar).Append(".SourceName = ").Append(ToCSharpStringLiteral(sourceName!)).AppendLine(";");
+                }
+
+                var dummyBindingSb = new StringBuilder();
+                foreach (XElement child in trigEl.Elements())
+                {
+                    if (child.Name.LocalName == "EventTrigger.Actions")
+                    {
+                        foreach (XElement actionEl in child.Elements())
+                        {
+                            if (!TryEmitAnyValueElement(sb, dummyBindingSb, actionEl, ctx, out string actVar))
+                            {
+                                return false;
+                            }
+                            sb.Append(trigVar).Append(".Actions.Add(").Append(actVar).AppendLine(");");
+                        }
+                    }
+                    else
+                    {
+                        if (!TryEmitAnyValueElement(sb, dummyBindingSb, child, ctx, out string actVar))
+                        {
+                            return false;
+                        }
+                        sb.Append(trigVar).Append(".Actions.Add(").Append(actVar).AppendLine(");");
+                    }
+                }
+                if (dummyBindingSb.Length > 0) sb.Append(dummyBindingSb);
+                sb.Append(triggersExpr).Append(".Add(").Append(trigVar).AppendLine(");");
+                return true;
+            }
+
             return false;
+        }
+
+        private static bool TryResolveRoutedEventExpr(
+            string raw,
+            XElement el,
+            INamedTypeSymbol? defaultTargetType,
+            XamlCompileContext ctx,
+            out string routedEventExpr)
+        {
+            routedEventExpr = string.Empty;
+            string trimmed = raw.Trim();
+            int dot = trimmed.IndexOf('.');
+            if (dot > 0)
+            {
+                string ownerPart = trimmed.Substring(0, dot).Trim();
+                string eventName = trimmed.Substring(dot + 1).Trim();
+                INamedTypeSymbol? ownerType = ResolveMarkupType(ownerPart, el, ctx);
+                if (ownerType is null) return false;
+                ISymbol? field = FindStaticRoutedEventField(ownerType, eventName + "Event");
+                if (field is null) return false;
+                routedEventExpr = field.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + field.Name;
+                return true;
+            }
+
+            if (defaultTargetType is not null)
+            {
+                ISymbol? field = FindStaticRoutedEventField(defaultTargetType, trimmed + "Event");
+                if (field is not null)
+                {
+                    routedEventExpr = field.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + field.Name;
+                    return true;
+                }
+            }
+
+            foreach (string fallbackType in new[]
+            {
+                "System.Windows.FrameworkElement",
+                "System.Windows.UIElement",
+                "System.Windows.Controls.Primitives.ButtonBase",
+                "System.Windows.Controls.Control"
+            })
+            {
+                INamedTypeSymbol? sym = ctx.Compilation.GetTypeByMetadataName(fallbackType);
+                if (sym is null) continue;
+                ISymbol? field = FindStaticRoutedEventField(sym, trimmed + "Event");
+                if (field is not null)
+                {
+                    routedEventExpr = field.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + field.Name;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static ISymbol? FindStaticRoutedEventField(INamedTypeSymbol type, string fieldName)
+        {
+            for (INamedTypeSymbol? cur = type; cur is not null; cur = cur.BaseType)
+            {
+                foreach (ISymbol m in cur.GetMembers(fieldName))
+                {
+                    if (m is IFieldSymbol f && f.IsStatic)
+                    {
+                        return f;
+                    }
+                }
+            }
+            return null;
         }
 
         private static bool TryEmitTriggerBodyChildren(
@@ -1924,6 +2049,20 @@ namespace CSUI.Generators
                             return false;
                         }
                     }
+                }
+                else if (cl.EndsWith(".EnterActions", StringComparison.Ordinal) || cl.EndsWith(".ExitActions", StringComparison.Ordinal))
+                {
+                    string collProp = cl.EndsWith(".EnterActions", StringComparison.Ordinal) ? ".EnterActions" : ".ExitActions";
+                    var dummyBindingSb = new StringBuilder();
+                    foreach (XElement actionEl in child.Elements())
+                    {
+                        if (!TryEmitAnyValueElement(sb, dummyBindingSb, actionEl, ctx, out string actVar))
+                        {
+                            return false;
+                        }
+                        sb.Append(trigVar).Append(collProp).Append(".Add(").Append(actVar).AppendLine(");");
+                    }
+                    if (dummyBindingSb.Length > 0) sb.Append(dummyBindingSb);
                 }
                 else
                 {

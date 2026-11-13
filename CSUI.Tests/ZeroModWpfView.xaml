@@ -34,6 +34,18 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
+    <UserControl.Triggers>
+        <EventTrigger RoutedEvent="Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="TitleTb"
+                                     Storyboard.TargetProperty="Opacity"
+                                     From="0.2" To="1.0" Duration="0:0:0.1" />
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </UserControl.Triggers>
+
     <Grid RowDefinitions="Auto,*,Auto" Margin="8">
         <StackPanel Grid.Row="0" Orientation="Horizontal">
             <TextBlock x:Name="TitleTb" Text="{Binding Title}" />

@@ -1894,5 +1894,50 @@ internal static partial class MarkupTestsExtensionHelper
 
         pass("MK-6. XAML MarkupExtensions & Resource Features (StaticExtension, TypeExtension, NullExtension, x:Array, x:Shared='False', x:Reference)",
             $"compiledTags={compiledTags!.Length}, rtArr={rtArr!.Length}");
+
+        // 4. Compiled & Runtime EventTrigger + BeginStoryboard + Storyboard + DoubleAnimation
+        assert(view.Triggers.Count == 1 && view.Triggers[0] is EventTrigger et && et.RoutedEvent == FrameworkElement.LoadedEvent,
+            "Compiled XAML UserControl.Triggers has EventTrigger(Loaded)");
+        var compiledBegin = ((EventTrigger)view.Triggers[0]).Actions[0] as System.Windows.Media.Animation.BeginStoryboard;
+        assert(compiledBegin?.Storyboard?.Children.Count == 1 &&
+               compiledBegin.Storyboard.Children[0] is System.Windows.Media.Animation.DoubleAnimation da &&
+               Math.Abs(da.From!.Value - 0.2) < 1e-6 &&
+               Math.Abs(da.To!.Value - 1.0) < 1e-6 &&
+               System.Windows.Media.Animation.Storyboard.GetTargetName(da) == "TitleTb",
+            "Compiled XAML BeginStoryboard + Storyboard + DoubleAnimation parsed");
+
+        const string rtTriggerXaml = """
+        <Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+            <Border.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="AnimTarget"
+                                             Storyboard.TargetProperty="Opacity"
+                                             From="0.2" To="0.9" Duration="0:0:0.2">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseOut" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Border.Triggers>
+            <TextBlock x:Name="AnimTarget" Text="FadeMe" />
+        </Border>
+        """;
+        var rtBorder = XamlMarkup.Load<Border>(rtTriggerXaml);
+        assert(rtBorder.Triggers.Count == 1 && rtBorder.Triggers[0] is EventTrigger rtEt && rtEt.RoutedEvent == FrameworkElement.LoadedEvent,
+            "Runtime XAML Border.Triggers has EventTrigger(Loaded)");
+        var rtBegin = ((EventTrigger)rtBorder.Triggers[0]).Actions[0] as System.Windows.Media.Animation.BeginStoryboard;
+        assert(rtBegin?.Storyboard?.Children.Count == 1 &&
+               rtBegin.Storyboard.Children[0] is System.Windows.Media.Animation.DoubleAnimation rtDa &&
+               rtDa.EasingFunction is System.Windows.Media.Animation.CubicEase ce &&
+               ce.EasingMode == System.Windows.Media.Animation.EasingMode.EaseOut,
+            "Runtime XAML BeginStoryboard + Storyboard + DoubleAnimation + CubicEase parsed");
+
+        pass("MK-7. Declarative XAML EventTrigger, BeginStoryboard, Storyboard & Animations (Compiled & Runtime)",
+            "compiled=1, runtime=1");
     }
 }

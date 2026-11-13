@@ -582,6 +582,18 @@ namespace CSUI.Markup
                 return;
             }
 
+            if (propName == "Triggers" && instance is FrameworkElement feWithTriggers)
+            {
+                foreach (XElement child in propElement.Elements())
+                {
+                    if (InstantiateElement(child, existingInstance: null, contextFe, context) is TriggerBase tb)
+                    {
+                        feWithTriggers.Triggers.Add(tb);
+                    }
+                }
+                return;
+            }
+
             if (propName == "RowDefinitions" && instance is Grid gridRows)
             {
                 foreach (XElement child in propElement.Elements())
@@ -1031,6 +1043,50 @@ namespace CSUI.Markup
                 }
                 return double.Parse(raw, CultureInfo.InvariantCulture);
             }
+            if (targetType == typeof(double?))
+            {
+                return string.IsNullOrWhiteSpace(raw) ? null : double.Parse(raw, CultureInfo.InvariantCulture);
+            }
+            if (targetType == typeof(Color?))
+            {
+                return string.IsNullOrWhiteSpace(raw) ? null : ParseColor(raw);
+            }
+            if (targetType == typeof(Point?))
+            {
+                if (string.IsNullOrWhiteSpace(raw)) return null;
+                double[] p = ParseDoubleList(raw);
+                return new Point(p[0], p[1]);
+            }
+            if (targetType == typeof(Thickness?))
+            {
+                return string.IsNullOrWhiteSpace(raw) ? null : ParseThickness(raw);
+            }
+            if (targetType == typeof(Duration))
+            {
+                string dTrim = raw.Trim();
+                if (string.Equals(dTrim, "Automatic", StringComparison.OrdinalIgnoreCase)) return Duration.Automatic;
+                if (string.Equals(dTrim, "Forever", StringComparison.OrdinalIgnoreCase)) return Duration.Forever;
+                return new Duration(TimeSpan.Parse(dTrim, CultureInfo.InvariantCulture));
+            }
+            if (targetType == typeof(TimeSpan) || targetType == typeof(TimeSpan?))
+            {
+                return string.IsNullOrWhiteSpace(raw) ? null : TimeSpan.Parse(raw.Trim(), CultureInfo.InvariantCulture);
+            }
+            if (targetType == typeof(System.Windows.Media.Animation.RepeatBehavior))
+            {
+                string rTrim = raw.Trim();
+                if (string.Equals(rTrim, "Forever", StringComparison.OrdinalIgnoreCase)) return System.Windows.Media.Animation.RepeatBehavior.Forever;
+                if (rTrim.EndsWith("x", StringComparison.OrdinalIgnoreCase) &&
+                    double.TryParse(rTrim.Substring(0, rTrim.Length - 1), NumberStyles.Float, CultureInfo.InvariantCulture, out double rCount))
+                {
+                    return new System.Windows.Media.Animation.RepeatBehavior(rCount);
+                }
+                return new System.Windows.Media.Animation.RepeatBehavior(TimeSpan.Parse(rTrim, CultureInfo.InvariantCulture));
+            }
+            if (targetType == typeof(PropertyPath))
+            {
+                return new PropertyPath(raw.Trim());
+            }
             if (targetType == typeof(int))
             {
                 return int.Parse(raw, CultureInfo.InvariantCulture);
@@ -1065,6 +1121,10 @@ namespace CSUI.Markup
                     4 => new CornerRadius(p[0], p[1], p[2], p[3]),
                     _ => new CornerRadius(p[0])
                 };
+            }
+            if (targetType == typeof(System.Windows.Media.Animation.EasingMode))
+            {
+                return Enum.Parse<System.Windows.Media.Animation.EasingMode>(raw, ignoreCase: true);
             }
             if (targetType == typeof(Stretch))
             {
@@ -1190,6 +1250,10 @@ namespace CSUI.Markup
             if (targetType == typeof(PopupAnimation))
             {
                 return Enum.Parse<PopupAnimation>(raw, ignoreCase: true);
+            }
+            if (targetType == typeof(System.Windows.Media.Animation.EasingMode))
+            {
+                return Enum.Parse<System.Windows.Media.Animation.EasingMode>(raw, ignoreCase: true);
             }
             if (targetType == typeof(Stretch))
             {
@@ -2271,6 +2335,83 @@ namespace CSUI.Markup
             {
                 if (child is Transform3D t) grp.Children.Add(t);
             });
+
+            // Storyboard, EventTrigger, BeginStoryboard & Animations
+            RegisterType<EventTrigger>(
+                addChild: static (et, child) =>
+                {
+                    if (child is TriggerAction act) et.Actions.Add(act);
+                });
+            RegisterClrProperty<EventTrigger>("RoutedEvent", static (et, val, _) =>
+            {
+                string trimmed = val.Trim();
+                int dot = trimmed.IndexOf('.');
+                string evName = dot > 0 ? trimmed.Substring(dot + 1) : trimmed;
+                et.RoutedEvent = evName switch
+                {
+                    "Loaded" => FrameworkElement.LoadedEvent,
+                    "Unloaded" => FrameworkElement.UnloadedEvent,
+                    "MouseEnter" => UIElement.MouseEnterEvent,
+                    "MouseLeave" => UIElement.MouseLeaveEvent,
+                    "MouseDown" => UIElement.MouseDownEvent,
+                    "MouseUp" => UIElement.MouseUpEvent,
+                    "PreviewMouseDown" => UIElement.PreviewMouseDownEvent,
+                    "PreviewMouseUp" => UIElement.PreviewMouseUpEvent,
+                    "Click" => ButtonBase.ClickEvent,
+                    "Checked" => ToggleButton.CheckedEvent,
+                    "Unchecked" => ToggleButton.UncheckedEvent,
+                    "GotFocus" => UIElement.GotFocusEvent,
+                    "LostFocus" => UIElement.LostFocusEvent,
+                    _ => throw new XamlParseException($"Unknown RoutedEvent '{val}' on EventTrigger.")
+                };
+            });
+            RegisterClrProperty<EventTrigger>("SourceName", static (et, val, _) => et.SourceName = val);
+
+            RegisterType<BeginStoryboard>(contentProperty: BeginStoryboard.StoryboardProperty);
+            RegisterClrProperty<BeginStoryboard>("Name", static (bs, val, _) => bs.Name = val);
+
+            RegisterType<System.Windows.Media.Animation.Storyboard>(
+                addChild: static (sb, child) =>
+                {
+                    if (child is System.Windows.Media.Animation.Timeline tl) sb.Children.Add(tl);
+                });
+            RegisterProperty(typeof(System.Windows.Media.Animation.Storyboard), "TargetName", System.Windows.Media.Animation.Storyboard.TargetNameProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.Storyboard), "TargetProperty", System.Windows.Media.Animation.Storyboard.TargetPropertyProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.Storyboard), "Target", System.Windows.Media.Animation.Storyboard.TargetProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.Timeline), "Duration", System.Windows.Media.Animation.Timeline.DurationProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.Timeline), "BeginTime", System.Windows.Media.Animation.Timeline.BeginTimeProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.Timeline), "RepeatBehavior", System.Windows.Media.Animation.Timeline.RepeatBehaviorProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.Timeline), "AutoReverse", System.Windows.Media.Animation.Timeline.AutoReverseProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.Timeline), "SpeedRatio", System.Windows.Media.Animation.Timeline.SpeedRatioProperty);
+
+            RegisterType<System.Windows.Media.Animation.DoubleAnimation>();
+            RegisterProperty(typeof(System.Windows.Media.Animation.DoubleAnimation), "From", System.Windows.Media.Animation.DoubleAnimation.FromProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.DoubleAnimation), "To", System.Windows.Media.Animation.DoubleAnimation.ToProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.DoubleAnimation), "By", System.Windows.Media.Animation.DoubleAnimation.ByProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.DoubleAnimation), "EasingFunction", System.Windows.Media.Animation.DoubleAnimation.EasingFunctionProperty);
+
+            RegisterType<System.Windows.Media.Animation.ColorAnimation>();
+            RegisterProperty(typeof(System.Windows.Media.Animation.ColorAnimation), "From", System.Windows.Media.Animation.ColorAnimation.FromProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.ColorAnimation), "To", System.Windows.Media.Animation.ColorAnimation.ToProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.ColorAnimation), "By", System.Windows.Media.Animation.ColorAnimation.ByProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.ColorAnimation), "EasingFunction", System.Windows.Media.Animation.ColorAnimation.EasingFunctionProperty);
+
+            RegisterType<System.Windows.Media.Animation.PointAnimation>();
+            RegisterProperty(typeof(System.Windows.Media.Animation.PointAnimation), "From", System.Windows.Media.Animation.PointAnimation.FromProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.PointAnimation), "To", System.Windows.Media.Animation.PointAnimation.ToProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.PointAnimation), "By", System.Windows.Media.Animation.PointAnimation.ByProperty);
+            RegisterProperty(typeof(System.Windows.Media.Animation.PointAnimation), "EasingFunction", System.Windows.Media.Animation.PointAnimation.EasingFunctionProperty);
+
+            RegisterType<System.Windows.Media.Animation.CubicEase>();
+            RegisterType<System.Windows.Media.Animation.QuadraticEase>();
+            RegisterType<System.Windows.Media.Animation.SineEase>();
+            RegisterType<System.Windows.Media.Animation.ExponentialEase>();
+            RegisterType<System.Windows.Media.Animation.BounceEase>();
+            RegisterType<System.Windows.Media.Animation.ElasticEase>();
+            RegisterType<System.Windows.Media.Animation.BackEase>();
+            RegisterType<System.Windows.Media.Animation.CircleEase>();
+            RegisterType<System.Windows.Media.Animation.PowerEase>();
+            RegisterProperty(typeof(System.Windows.Media.Animation.EasingFunctionBase), "EasingMode", System.Windows.Media.Animation.EasingFunctionBase.EasingModeProperty);
         }
     }
 }
