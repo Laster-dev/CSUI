@@ -147,6 +147,7 @@ namespace CSUI.VisualStudio
             _designerHost = new Grid();
             _designerHost.Children.Add(designerDock);
 
+            DisconnectFromParent(_textViewHost.HostControl);
             _codeHost = new Border
             {
                 Child = _textViewHost.HostControl
@@ -296,6 +297,25 @@ namespace CSUI.VisualStudio
                 _statusText.Text = $"Error @ {DateTime.Now:HH:mm:ss}";
             });
 #pragma warning restore VSSDK007
+        }
+
+        private static void DisconnectFromParent(UIElement element)
+        {
+            if (element == null) return;
+
+            DependencyObject parent = LogicalTreeHelper.GetParent(element) ?? VisualTreeHelper.GetParent(element);
+            if (parent is ContentControl cc && ReferenceEquals(cc.Content, element))
+            {
+                cc.Content = null;
+            }
+            else if (parent is Decorator dec && ReferenceEquals(dec.Child, element))
+            {
+                dec.Child = null;
+            }
+            else if (parent is Panel panel)
+            {
+                panel.Children.Remove(element);
+            }
         }
 
         public void Dispose()
