@@ -1939,5 +1939,67 @@ internal static partial class MarkupTestsExtensionHelper
 
         pass("MK-7. Declarative XAML EventTrigger, BeginStoryboard, Storyboard & Animations (Compiled & Runtime)",
             "compiled=1, runtime=1");
+
+        // 5. pack://application:,,,/ & ;component/ ResourceDictionary.Source + ValidationRule & ErrorTemplate Adorner
+        var packRd = new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/CSUI.Tests;component/ZeroModTestTheme.xaml", UriKind.Absolute)
+        };
+        assert(packRd["ZeroModAccent"] is SolidColorBrush,
+            "pack://application:,,,/CSUI.Tests;component/ZeroModTestTheme.xaml resolved");
+
+        var compRd = new ResourceDictionary
+        {
+            Source = new Uri("/CSUI.Tests;component/ZeroModTestTheme.xaml", UriKind.Relative)
+        };
+        assert(compRd["ZeroModAccent"] is SolidColorBrush,
+            "/CSUI.Tests;component/ZeroModTestTheme.xaml resolved");
+
+        // ValidationRule + Validation.ErrorTemplate Adorner
+        var decorator = new AdornerDecorator();
+        var tb = new TextBox { Width = 120, Height = 28 };
+        var errTpl = new ControlTemplate(typeof(Control));
+        var borderFef = new FrameworkElementFactory(typeof(Border));
+        borderFef.SetValue(Border.BorderBrushProperty, Brushes.Red);
+        borderFef.SetValue(Border.BorderThicknessProperty, new Thickness(2));
+        borderFef.SetValue(FrameworkElement.NameProperty, "ErrAdornerBorder");
+        errTpl.VisualTree = borderFef;
+        Validation.SetErrorTemplate(tb, errTpl);
+
+        var vm = new GeneratedDashboardViewModel();
+        var valBinding = new Binding(nameof(GeneratedDashboardViewModel.StatusText))
+        {
+            Source = vm,
+            Mode = BindingMode.TwoWay,
+            UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
+        };
+        valBinding.ValidationRules.Add(new PositiveIntRule());
+        tb.SetBinding(TextBox.TextProperty, valBinding);
+
+        decorator.Child = tb;
+        decorator.Measure(new Size(200, 100));
+        decorator.Arrange(new Rect(0, 0, 200, 100));
+
+        tb.Text = "not-a-number";
+        assert(Validation.GetHasError(tb) && Validation.GetErrors(tb).Count == 1,
+            "ValidationRule flagged invalid input");
+        tb.Text = "25";
+        assert(!Validation.GetHasError(tb) && vm.StatusText == "25",
+            "ValidationRule cleared error on valid input");
+
+        pass("MK-8. Pack URI (pack://application:,,,/ & ;component/) + ValidationRule & Validation.ErrorTemplate",
+            "packResolved=True, validationCleared=True");
+    }
+
+    private sealed class PositiveIntRule : ValidationRule
+    {
+        public override ValidationResult Validate(object value, System.Globalization.CultureInfo cultureInfo)
+        {
+            if (int.TryParse(value?.ToString(), out int n) && n > 0)
+            {
+                return ValidationResult.ValidResult;
+            }
+            return new ValidationResult(false, "Must be positive integer.");
+        }
     }
 }

@@ -162,6 +162,14 @@ namespace System.Windows
                 {
                     loadedRD = factory();
                 }
+                else
+                {
+                    string norm = NormalizeResourceSourceKey(sourceUri.OriginalString);
+                    if (_registeredSources.TryGetValue(norm, out factory))
+                    {
+                        loadedRD = factory();
+                    }
+                }
 
                 if (loadedRD == null)
                 {
@@ -213,6 +221,28 @@ namespace System.Windows
                     NotifyOwners(new ResourcesChangeInfo(null, this));
                 }
             }
+        }
+
+        private static string NormalizeResourceSourceKey(string raw)
+        {
+            string s = (raw ?? string.Empty).Trim().Replace('\\', '/');
+            const string PackApp = "pack://application:,,,";
+            const string PackSoo = "pack://siteoforigin:,,,";
+            if (s.StartsWith(PackApp, StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(PackApp.Length);
+            }
+            else if (s.StartsWith(PackSoo, StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(PackSoo.Length);
+            }
+            s = s.TrimStart('/');
+            int compIdx = s.IndexOf(";component/", StringComparison.OrdinalIgnoreCase);
+            if (compIdx >= 0)
+            {
+                s = s.Substring(compIdx + ";component/".Length);
+            }
+            return s.TrimStart('/');
         }
 
         #region INameScope
