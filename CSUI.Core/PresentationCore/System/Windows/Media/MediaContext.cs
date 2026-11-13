@@ -285,6 +285,12 @@ namespace System.Windows.Media
                 return;
             }
 
+            if (_isRendering)
+            {
+                _postRenderDuringRender = true;
+                return;
+            }
+
             if (_currentRenderOp != null)
             {
                 if (_currentRenderOp.Priority < DispatcherPriority.Render)
@@ -347,6 +353,11 @@ namespace System.Windows.Media
 
             if (minimumDelay <= TimeSpan.Zero)
             {
+                if (_isRendering)
+                {
+                    return;
+                }
+
                 _estimatedNextVSyncTimer.Stop();
                 if (_currentRenderOp == null)
                 {
@@ -462,7 +473,9 @@ namespace System.Windows.Media
                         GetHashCode());
                 }
 
+                bool scheduleImmediateRender = false;
                 _isRendering = true;
+                _postRenderDuringRender = false;
                 try
                 {
                     (InvalidateInputDevicesHook ?? DefaultInvalidateInputDevicesHook)?.Invoke();
@@ -521,6 +534,9 @@ namespace System.Windows.Media
                         resourcesUpdated();
                     }
 
+                    // Any PostRender() calls before this point are already covered by this Render() pass.
+                    _postRenderDuringRender = false;
+
                     // Raise CompositionTarget.Rendering.
                     if (Rendering != null)
                     {
@@ -557,7 +573,12 @@ namespace System.Windows.Media
                     }
 
                     TimeSpan nextTick = _timeManager.GetNextTickNeeded();
-                    if (nextTick >= TimeSpan.Zero && resizedCompositionTarget == null)
+                    if ((_postRenderDuringRender || (_invokeOnRenderCallbacks != null && _invokeOnRenderCallbacks.Count > 0))
+                        && resizedCompositionTarget == null)
+                    {
+                        scheduleImmediateRender = true;
+                    }
+                    else if (nextTick >= TimeSpan.Zero && resizedCompositionTarget == null)
                     {
                         long framePeriod = _animationRenderRate > 0
                             ? TimeSpan.TicksPerSecond / _animationRenderRate
@@ -567,6 +588,7 @@ namespace System.Windows.Media
                             : TimeSpan.FromTicks(framePeriod);
                         ScheduleNextRenderOp(delay);
                     }
+                    _postRenderDuringRender = false;
                 }
                 finally
                 {
@@ -591,6 +613,11 @@ namespace System.Windows.Media
                             GetHashCode(),
                             renderID);
                     }
+                }
+
+                if (scheduleImmediateRender && !_isDisposed)
+                {
+                    ScheduleNextRenderOp(TimeSpan.Zero);
                 }
             }
         }
@@ -732,6 +759,7 @@ namespace System.Windows.Media
 
         private bool _isDisposed;
         private bool _isRendering;
+        private bool _postRenderDuringRender;
         private bool _isConnected;
         private bool _commitPendingAfterRender;
         private int _readOnlyAccessCounter;
