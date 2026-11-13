@@ -18,6 +18,9 @@ namespace CSUI.VisualStudio
         private readonly DispatcherTimer _debounceTimer;
 
         private readonly Image _previewImage;
+        private readonly Canvas _selectionCanvas;
+        private readonly Border _selectionBox;
+        private readonly TextBlock _inspectorText;
         private readonly ScrollViewer _previewScroll;
         private readonly Border _errorOverlay;
         private readonly TextBlock _errorText;
@@ -47,6 +50,7 @@ namespace CSUI.VisualStudio
 
             _client.FrameReceived += OnFrameReceived;
             _client.ErrorReceived += OnErrorReceived;
+            _client.HitTestReceived += OnHitTestReceived;
 
             // Preview Pane UI
             _statusText = new TextBlock
@@ -129,19 +133,65 @@ namespace CSUI.VisualStudio
             };
             RenderOptions.SetBitmapScalingMode(_previewImage, BitmapScalingMode.HighQuality);
 
+            _selectionBox = new Border
+            {
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xCC)),
+                BorderThickness = new Thickness(1.5),
+                Background = new SolidColorBrush(Color.FromArgb(0x22, 0x00, 0x7A, 0xCC)),
+                Visibility = Visibility.Collapsed
+            };
+            _selectionCanvas = new Canvas { IsHitTestVisible = false };
+            _selectionCanvas.Children.Add(_selectionBox);
+
+            var previewSurface = new Grid
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            previewSurface.Children.Add(_previewImage);
+            previewSurface.Children.Add(_selectionCanvas);
+
+            _previewImage.MouseLeftButtonDown += (_, e) =>
+            {
+                if (_bitmap == null || _previewImage.ActualWidth <= 0 || _previewImage.ActualHeight <= 0) return;
+                Point pt = e.GetPosition(_previewImage);
+                double scaleX = _bitmap.PixelWidth / _previewImage.ActualWidth;
+                double scaleY = _bitmap.PixelHeight / _previewImage.ActualHeight;
+                _client.RequestHitTest(pt.X * scaleX, pt.Y * scaleY);
+            };
+
             _previewScroll = new ScrollViewer
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)),
-                Content = _previewImage
+                Content = previewSurface
+            };
+
+            _inspectorText = new TextBlock
+            {
+                Text = "Click any element in the preview to inspect its bounds & properties",
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            var inspectorBar = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x26)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3F, 0x3F, 0x46)),
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                Padding = new Thickness(8, 4, 8, 4),
+                Child = _inspectorText
             };
 
             var designerDock = new DockPanel { LastChildFill = true };
             DockPanel.SetDock(toolbar, Dock.Top);
             DockPanel.SetDock(_errorOverlay, Dock.Top);
+            DockPanel.SetDock(inspectorBar, Dock.Bottom);
             designerDock.Children.Add(toolbar);
             designerDock.Children.Add(_errorOverlay);
+            designerDock.Children.Add(inspectorBar);
             designerDock.Children.Add(_previewScroll);
 
             _designerHost = new Grid();
@@ -295,6 +345,33 @@ namespace CSUI.VisualStudio
                 _errorText.Text = errorMessage;
                 _errorOverlay.Visibility = Visibility.Visible;
                 _statusText.Text = $"Error @ {DateTime.Now:HH:mm:ss}";
+            });
+#pragma warning restore VSSDK007
+        }
+
+        private void OnHitTestReceived(PreviewHitTestResult result)
+        {
+#pragma warning disable VSSDK007 // Fire-and-forget UI marshaling from background IPC reader
+            _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                if (_disposed || _bitmap == null || _previewImage.ActualWidth <= 0 || _previewImage.ActualHeight <= 0) return;
+
+                if (!result.Hit || result.Width <= 0 || result.Height <= 0)
+                {
+                    _selectionBox.Visibility = Visibility.Collapsed;
+                    _inspectorText.Text = result.Summary ?? "No element";
+                    return;
+                }
+
+                double scaleX = _previewImage.ActualWidth / _bitmap.PixelWidth;
+                double scaleY = _previewImage.ActualHeight / _bitmap.PixelHeight;
+                Canvas.SetLeft(_selectionBox, result.X * scaleX);
+                Canvas.SetTop(_selectionBox, result.Y * scaleY);
+                _selectionBox.Width = Math.Max(2, result.Width * scaleX);
+                _selectionBox.Height = Math.Max(2, result.Height * scaleY);
+                _selectionBox.Visibility = Visibility.Visible;
+                _inspectorText.Text = result.Summary;
             });
 #pragma warning restore VSSDK007
         }

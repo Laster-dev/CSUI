@@ -16,13 +16,26 @@ namespace CSUI.VisualStudio
         public byte[] Pixels { get; set; }
     }
 
+    internal sealed class PreviewHitTestResult
+    {
+        public int RequestId { get; set; }
+        public bool Hit { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+        public string Summary { get; set; }
+    }
+
     internal sealed class PreviewerClient : IDisposable
     {
         private const byte MsgRenderXaml = 1;
+        private const byte MsgHitTest = 3;
         private const byte MsgShutdown = 255;
 
         private const byte RespFrame = 1;
         private const byte RespError = 2;
+        private const byte RespHitTest = 3;
 
         private readonly string _xamlFilePath;
         private readonly object _sendLock = new object();
@@ -34,6 +47,7 @@ namespace CSUI.VisualStudio
 
         public event Action<PreviewFrameData> FrameReceived;
         public event Action<string> ErrorReceived;
+        public event Action<PreviewHitTestResult> HitTestReceived;
 
         public PreviewerClient(string xamlFilePath)
         {
@@ -71,6 +85,30 @@ namespace CSUI.VisualStudio
             {
                 RestartProcess();
                 ErrorReceived?.Invoke($"Previewer IPC error: {ex.Message}");
+            }
+        }
+
+        public void RequestHitTest(double x, double y)
+        {
+            if (_disposed || _writer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                int reqId = Interlocked.Increment(ref _nextRequestId);
+                lock (_sendLock)
+                {
+                    _writer.Write(MsgHitTest);
+                    _writer.Write(reqId);
+                    _writer.Write(x);
+                    _writer.Write(y);
+                    _writer.Flush();
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -153,6 +191,25 @@ namespace CSUI.VisualStudio
                     {
                         string err = reader.ReadString();
                         ErrorReceived?.Invoke(err);
+                    }
+                    else if (respType == RespHitTest)
+                    {
+                        bool hit = reader.ReadBoolean();
+                        double hx = reader.ReadDouble();
+                        double hy = reader.ReadDouble();
+                        double hw = reader.ReadDouble();
+                        double hh = reader.ReadDouble();
+                        string summary = reader.ReadString();
+                        HitTestReceived?.Invoke(new PreviewHitTestResult
+                        {
+                            RequestId = reqId,
+                            Hit = hit,
+                            X = hx,
+                            Y = hy,
+                            Width = hw,
+                            Height = hh,
+                            Summary = summary
+                        });
                     }
                 }
             }

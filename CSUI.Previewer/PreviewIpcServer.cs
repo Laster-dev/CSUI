@@ -12,10 +12,15 @@ namespace CSUI.Previewer
     internal static class PreviewIpcServer
     {
         private const byte MsgRenderXaml = 1;
+        private const byte MsgHitTest = 3;
         private const byte MsgShutdown = 255;
 
         private const byte RespFrame = 1;
         private const byte RespError = 2;
+        private const byte RespHitTest = 3;
+
+        private static Border s_lastHostBorder;
+        private static double s_lastScale = 1.0;
 
         public static int Run()
         {
@@ -45,21 +50,30 @@ namespace CSUI.Previewer
                             break;
                         }
 
-                        if (msgType != MsgRenderXaml)
+                        if (msgType == MsgRenderXaml)
                         {
-                            continue;
+                            int requestId = reader.ReadInt32();
+                            double dpiScale = reader.ReadDouble();
+                            int maxWidth = reader.ReadInt32();
+                            int maxHeight = reader.ReadInt32();
+                            string xaml = reader.ReadString();
+
+                            uiDispatcher.Invoke(() =>
+                            {
+                                RenderAndRespond(requestId, dpiScale, maxWidth, maxHeight, xaml, writer, writeLock);
+                            });
                         }
-
-                        int requestId = reader.ReadInt32();
-                        double dpiScale = reader.ReadDouble();
-                        int maxWidth = reader.ReadInt32();
-                        int maxHeight = reader.ReadInt32();
-                        string xaml = reader.ReadString();
-
-                        uiDispatcher.Invoke(() =>
+                        else if (msgType == MsgHitTest)
                         {
-                            RenderAndRespond(requestId, dpiScale, maxWidth, maxHeight, xaml, writer, writeLock);
-                        });
+                            int requestId = reader.ReadInt32();
+                            double x = reader.ReadDouble();
+                            double y = reader.ReadDouble();
+
+                            uiDispatcher.Invoke(() =>
+                            {
+                                HitTestAndRespond(requestId, x, y, writer, writeLock);
+                            });
+                        }
                     }
                 }
                 catch (EndOfStreamException)
@@ -132,6 +146,9 @@ namespace CSUI.Previewer
                 hostBorder.Arrange(new Rect(0, 0, pixelW, pixelH));
                 hostBorder.UpdateLayout();
 
+                s_lastHostBorder = hostBorder;
+                s_lastScale = scale;
+
                 var rtb = new RenderTargetBitmap(pixelW, pixelH, 96.0, 96.0, PixelFormats.Pbgra32);
                 rtb.Render(hostBorder);
 
@@ -155,6 +172,76 @@ namespace CSUI.Previewer
             catch (Exception ex)
             {
                 WriteError(writer, writeLock, requestId, ex.Message);
+            }
+        }
+
+        private static void HitTestAndRespond(
+            int requestId,
+            double x,
+            double y,
+            BinaryWriter writer,
+            object writeLock)
+        {
+            bool hit = false;
+            double bx = 0, by = 0, bw = 0, bh = 0;
+            string summary = "No element";
+
+            if (s_lastHostBorder != null)
+            {
+                HitTestResult res = VisualTreeHelper.HitTest(s_lastHostBorder, new Point(x, y));
+                DependencyObject cur = res?.VisualHit;
+                FrameworkElement fe = null;
+                while (cur != null)
+                {
+                    if (cur is FrameworkElement candidate && !ReferenceEquals(candidate, s_lastHostBorder))
+                    {
+                        fe = candidate;
+                        break;
+                    }
+                    cur = VisualTreeHelper.GetParent(cur);
+                }
+
+                fe ??= s_lastHostBorder.Child as FrameworkElement;
+                if (fe != null)
+                {
+                    hit = true;
+                    Rect bounds = new Rect(0, 0, fe.RenderSize.Width, fe.RenderSize.Height);
+                    try
+                    {
+                        bounds = fe.TransformToAncestor(s_lastHostBorder).TransformBounds(bounds);
+                    }
+                    catch
+                    {
+                    }
+
+                    bx = bounds.X;
+                    by = bounds.Y;
+                    bw = bounds.Width;
+                    bh = bounds.Height;
+
+                    string namePart = string.IsNullOrEmpty(fe.Name) ? "" : $" x:Name=\"{fe.Name}\"";
+                    string extra = fe switch
+                    {
+                        TextBlock tb when !string.IsNullOrEmpty(tb.Text) => $" | Text=\"{tb.Text}\"",
+                        ContentControl cc when cc.Content is string s => $" | Content=\"{s}\"",
+                        TextBox box when !string.IsNullOrEmpty(box.Text) => $" | Text=\"{box.Text}\"",
+                        _ => ""
+                    };
+                    summary = $"<{fe.GetType().Name}{namePart}>  {fe.RenderSize.Width:F0}×{fe.RenderSize.Height:F0}  Margin={fe.Margin}{extra}";
+                }
+            }
+
+            lock (writeLock)
+            {
+                writer.Write(RespHitTest);
+                writer.Write(requestId);
+                writer.Write(hit);
+                writer.Write(bx);
+                writer.Write(by);
+                writer.Write(bw);
+                writer.Write(bh);
+                writer.Write(summary);
+                writer.Flush();
             }
         }
 
