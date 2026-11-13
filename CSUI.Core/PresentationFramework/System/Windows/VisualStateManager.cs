@@ -4,6 +4,8 @@
 
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using MS.Internal;  // ObservableCollectionDefaultValueFactory
@@ -154,12 +156,38 @@ namespace System.Windows
             return null;
         }
 
+        private static readonly ConditionalWeakTable<INotifyCollectionChanged, FrameworkElement> s_vsgOwners = new();
+
         [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Content)]
         public static IList GetVisualStateGroups(FrameworkElement obj)
         {
             ArgumentNullException.ThrowIfNull(obj);
 
-            return obj.GetValue(VisualStateManager.VisualStateGroupsProperty) as IList;
+            IList list = obj.GetValue(VisualStateManager.VisualStateGroupsProperty) as IList;
+            if (list is INotifyCollectionChanged incc && s_vsgOwners.TryAdd(incc, obj))
+            {
+                foreach (object item in list)
+                {
+                    if (item is DependencyObject doItem)
+                    {
+                        obj.ProvideSelfAsInheritanceContext(doItem, VisualStateGroupsProperty);
+                    }
+                }
+                incc.CollectionChanged += static (sender, e) =>
+                {
+                    if (e.NewItems != null && s_vsgOwners.TryGetValue((INotifyCollectionChanged)sender, out FrameworkElement owner))
+                    {
+                        foreach (object item in e.NewItems)
+                        {
+                            if (item is DependencyObject doItem)
+                            {
+                                owner.ProvideSelfAsInheritanceContext(doItem, VisualStateGroupsProperty);
+                            }
+                        }
+                    }
+                };
+            }
+            return list;
         }
 
         #endregion

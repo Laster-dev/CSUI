@@ -4,8 +4,10 @@
 
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Windows.Markup;
 using System.Windows.Media.Animation;
+using MS.Internal;
 
 #nullable disable
 using SR = MS.Internal.PresentationFramework.SR;
@@ -38,6 +40,20 @@ namespace System.Windows
                 if (_states == null)
                 {
                     _states = new FreezableCollection<VisualState>();
+                    ProvideSelfAsInheritanceContext(_states, null);
+                    ((INotifyCollectionChanged)_states).CollectionChanged += (_, e) =>
+                    {
+                        if (e.NewItems != null)
+                        {
+                            foreach (object item in e.NewItems)
+                            {
+                                if (item is DependencyObject doItem)
+                                {
+                                    _states.ProvideSelfAsInheritanceContext(doItem, null);
+                                }
+                            }
+                        }
+                    };
                 }
 
                 return _states;
@@ -54,6 +70,20 @@ namespace System.Windows
                 if (_transitions == null)
                 {
                     _transitions = new FreezableCollection<VisualTransition>();
+                    ProvideSelfAsInheritanceContext(_transitions, null);
+                    ((INotifyCollectionChanged)_transitions).CollectionChanged += (_, e) =>
+                    {
+                        if (e.NewItems != null)
+                        {
+                            foreach (object item in e.NewItems)
+                            {
+                                if (item is DependencyObject doItem)
+                                {
+                                    _transitions.ProvideSelfAsInheritanceContext(doItem, null);
+                                }
+                            }
+                        }
+                    };
                 }
 
                 return _transitions;
@@ -161,5 +191,21 @@ namespace System.Windows
         private Collection<Storyboard> _currentStoryboards;
         private FreezableCollection<VisualState> _states;
         private FreezableCollection<VisualTransition> _transitions;
+        private DependencyObject _inheritanceContext;
+        private bool _hasMultipleInheritanceContexts;
+
+        internal override DependencyObject InheritanceContext => _inheritanceContext;
+
+        internal override void AddInheritanceContext(DependencyObject context, DependencyProperty property)
+        {
+            InheritanceContextHelper.AddInheritanceContext(context, this, ref _hasMultipleInheritanceContexts, ref _inheritanceContext);
+        }
+
+        internal override void RemoveInheritanceContext(DependencyObject context, DependencyProperty property)
+        {
+            InheritanceContextHelper.RemoveInheritanceContext(context, this, ref _hasMultipleInheritanceContexts, ref _inheritanceContext);
+        }
+
+        internal override bool HasMultipleInheritanceContexts => _hasMultipleInheritanceContexts;
     } 
 }

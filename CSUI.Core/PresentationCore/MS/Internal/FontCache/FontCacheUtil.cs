@@ -474,8 +474,8 @@ namespace MS.Internal.FontCache
 
         internal static bool IsSupportedSchemeForAbsoluteFontFamilyUri(Uri absoluteUri)
         {
-            // The only absolute URIs we allow in font family references are "file:" URIs.
-            return absoluteUri.IsFile;
+            // Allow file: and pack: URIs in font family references.
+            return absoluteUri.IsFile || string.Equals(absoluteUri.Scheme, System.IO.Packaging.PackUriHelper.UriSchemePack, StringComparison.OrdinalIgnoreCase);
         }
 
 
@@ -603,7 +603,12 @@ namespace MS.Internal.FontCache
             else
             {
                 // Unescape commas and then convert to normalized form.
-                return NormalizeFontFamilyReference(friendlyName.Substring(startIndex, length).Replace(",,", ","));
+                string sub = friendlyName.Substring(startIndex, length);
+                if (sub.StartsWith("pack://", StringComparison.OrdinalIgnoreCase) && sub.Contains(",,,/", StringComparison.Ordinal))
+                {
+                    return NormalizeFontFamilyReference(sub);
+                }
+                return NormalizeFontFamilyReference(sub.Replace(",,", ","));
             }
         }
 

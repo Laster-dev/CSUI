@@ -473,13 +473,18 @@ namespace MS.Internal
 
         internal static DependencyObject GetTemplatedParent(DependencyObject d)
         {
-            FrameworkElement fe;
-            FrameworkContentElement fce;
-            DowncastToFEorFCE(d, out fe, out fce, false);
-            if (fe != null)
-                return fe.TemplatedParent;
-            else if (fce != null)
-                return fce.TemplatedParent;
+            for (int depth = 0; d != null && depth < 16; depth++)
+            {
+                FrameworkElement fe;
+                FrameworkContentElement fce;
+                DowncastToFEorFCE(d, out fe, out fce, false);
+                if (fe != null)
+                    return fe.TemplatedParent;
+                if (fce != null)
+                    return fce.TemplatedParent;
+
+                d = d.InheritanceContext;
+            }
 
             return null;
         }

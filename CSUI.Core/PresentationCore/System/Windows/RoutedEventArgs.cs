@@ -131,8 +131,7 @@ namespace System.Windows
                 }
                 else
                 {
-                    throw new NotSupportedException(
-                        $"Handler type '{genericHandler.GetType().Name}' requires either overriding InvokeEventHandler on '{GetType().Name}' or registering with EventManager.RegisterRoutedEvent<THandler> for zero-reflection NativeAOT dispatch.");
+                    genericHandler.DynamicInvoke(genericTarget, this);
                 }
             }
             finally

@@ -5710,6 +5710,70 @@ namespace CSUI.Generators
                                 accessorLines.Add($"global::System.Windows.Data.PropertyAccessorRegistry.Register<{fullT}, {propType}>({ToCSharpStringLiteral(p.Name)}, static s => s.{p.Name});");
                             }
                         }
+
+                        // CommunityToolkit.Mvvm [ObservableProperty] fields and [RelayCommand] methods are generated
+                        // in parallel by another Roslyn source generator, so they are not yet visible as IPropertySymbol.
+                        foreach (ISymbol member in t.GetMembers())
+                        {
+                            if (member is IFieldSymbol f && !f.IsStatic && !f.IsConst &&
+                                HasAttributeNamed(f, "ObservablePropertyAttribute") &&
+                                IsSafePublicType(f.Type, compilation.Assembly))
+                            {
+                                string rawName = f.Name;
+                                if (rawName.StartsWith("m_", StringComparison.Ordinal))
+                                {
+                                    rawName = rawName.Substring(2);
+                                }
+                                else if (rawName.StartsWith("_", StringComparison.Ordinal))
+                                {
+                                    rawName = rawName.TrimStart('_');
+                                }
+                                if (rawName.Length == 0)
+                                {
+                                    continue;
+                                }
+                                string genPropName = char.ToUpperInvariant(rawName[0]) + rawName.Substring(1);
+                                if (!seenProps.Add(genPropName))
+                                {
+                                    continue;
+                                }
+                                string propType = f.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                                if (!t.IsValueType)
+                                {
+                                    accessorLines.Add($"global::System.Windows.Data.PropertyAccessorRegistry.Register<{fullT}, {propType}>({ToCSharpStringLiteral(genPropName)}, static s => s.{genPropName}, static (s, v) => s.{genPropName} = v);");
+                                }
+                                else
+                                {
+                                    accessorLines.Add($"global::System.Windows.Data.PropertyAccessorRegistry.Register<{fullT}, {propType}>({ToCSharpStringLiteral(genPropName)}, static s => s.{genPropName});");
+                                }
+                            }
+                            else if (member is IMethodSymbol m && !m.IsStatic && m.MethodKind == MethodKind.Ordinary &&
+                                HasAttributeNamed(m, "RelayCommandAttribute"))
+                            {
+                                string cmdBase = m.Name;
+                                if (cmdBase.StartsWith("On", StringComparison.Ordinal) &&
+                                    cmdBase.Length > 2 &&
+                                    char.IsUpper(cmdBase[2]))
+                                {
+                                    cmdBase = cmdBase.Substring(2);
+                                }
+                                if (cmdBase.EndsWith("Async", StringComparison.Ordinal) &&
+                                    m.ReturnType.Name.StartsWith("Task", StringComparison.Ordinal))
+                                {
+                                    cmdBase = cmdBase.Substring(0, cmdBase.Length - 5);
+                                }
+                                if (cmdBase.Length == 0)
+                                {
+                                    continue;
+                                }
+                                string cmdName = cmdBase + "Command";
+                                if (!seenProps.Add(cmdName))
+                                {
+                                    continue;
+                                }
+                                accessorLines.Add($"global::System.Windows.Data.PropertyAccessorRegistry.Register<{fullT}, global::System.Windows.Input.ICommand>({ToCSharpStringLiteral(cmdName)}, static s => s.{cmdName});");
+                            }
+                        }
                     }
                 }
             }
@@ -6063,6 +6127,15 @@ namespace CSUI.Generators
             foreach (AttributeData attr in t.GetAttributes())
             {
                 if (attr.AttributeClass?.ToDisplayString() == fullAttrName) return true;
+            }
+            return false;
+        }
+
+        private static bool HasAttributeNamed(ISymbol s, string shortName)
+        {
+            foreach (AttributeData attr in s.GetAttributes())
+            {
+                if (string.Equals(attr.AttributeClass?.Name, shortName, StringComparison.Ordinal)) return true;
             }
             return false;
         }

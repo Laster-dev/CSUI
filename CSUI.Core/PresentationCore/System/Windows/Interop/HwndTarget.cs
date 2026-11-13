@@ -732,7 +732,19 @@ namespace System.Windows.Interop
                 try
                 {
                     void* d2dContext = _dxTarget.D2DContext;
-                    ID2D1DeviceContextVtbl.Clear(d2dContext, BrushDirect2DHelpers.ToD2DColor(_backgroundColor));
+                    Color clearColor = _backgroundColor;
+                    if (clearColor.A == 0)
+                    {
+                        bool darkTheme = false;
+                        if (RootVisual is DependencyObject rootDo &&
+                            rootDo.GetValue(System.Windows.Documents.TextElement.ForegroundProperty) is SolidColorBrush fgBrush)
+                        {
+                            Color c = fgBrush.Color;
+                            darkTheme = (c.R + c.G + c.B) > (128 * 3);
+                        }
+                        clearColor = darkTheme ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF3, 0xF3, 0xF3);
+                    }
+                    ID2D1DeviceContextVtbl.Clear(d2dContext, BrushDirect2DHelpers.ToD2DColor(clearColor));
                     CompileD2D(d2dContext);
                 }
                 finally

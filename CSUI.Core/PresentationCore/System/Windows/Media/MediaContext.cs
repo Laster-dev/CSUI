@@ -481,8 +481,6 @@ namespace System.Windows.Media
                     (InvalidateInputDevicesHook ?? DefaultInvalidateInputDevicesHook)?.Invoke();
 
                     int maxTicks = 100;
-                    _timeManager.LockTickTime();
-                    gotLock = true;
 
                     do
                     {
@@ -492,6 +490,11 @@ namespace System.Windows.Media
                         while (_timeManager.IsDirty || tickIterations == 0)
                         {
                             _timeManager.Tick();
+                            if (!gotLock)
+                            {
+                                _timeManager.LockTickTime();
+                                gotLock = true;
+                            }
                             if (++tickIterations > maxTicks)
                             {
                                 throw new InvalidOperationException(SR.MediaContext_InfiniteTickLoop);

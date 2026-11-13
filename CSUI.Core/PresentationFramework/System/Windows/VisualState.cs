@@ -4,6 +4,7 @@
 
 using System.Windows.Markup;
 using System.Windows.Media.Animation;
+using MS.Internal;
 
 #nullable disable
 using SR = MS.Internal.PresentationFramework.SR;
@@ -40,5 +41,22 @@ namespace System.Windows
             get { return (Storyboard)GetValue(StoryboardProperty); }
             set { SetValue(StoryboardProperty, value); }
         }
+
+        private DependencyObject _inheritanceContext;
+        private bool _hasMultipleInheritanceContexts;
+
+        internal override DependencyObject InheritanceContext => _inheritanceContext;
+
+        internal override void AddInheritanceContext(DependencyObject context, DependencyProperty property)
+        {
+            InheritanceContextHelper.AddInheritanceContext(context, this, ref _hasMultipleInheritanceContexts, ref _inheritanceContext);
+        }
+
+        internal override void RemoveInheritanceContext(DependencyObject context, DependencyProperty property)
+        {
+            InheritanceContextHelper.RemoveInheritanceContext(context, this, ref _hasMultipleInheritanceContexts, ref _inheritanceContext);
+        }
+
+        internal override bool HasMultipleInheritanceContexts => _hasMultipleInheritanceContexts;
     }
 }

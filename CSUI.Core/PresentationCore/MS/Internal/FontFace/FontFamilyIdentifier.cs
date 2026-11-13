@@ -304,7 +304,13 @@ namespace MS.Internal.FontFace
                 {
                     if (friendlyName[i] == FamilyNameDelimiter)
                     {
-                        if (i + 1 < length && friendlyName[i + 1] == FamilyNameDelimiter)
+                        if (i + 3 < length && friendlyName[i + 1] == FamilyNameDelimiter && friendlyName[i + 2] == FamilyNameDelimiter && friendlyName[i + 3] == '/' &&
+                            friendlyName.AsSpan(begin, i - begin).StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Preserve pack://application:,,,/ authority as part of the URI.
+                            i += 3;
+                        }
+                        else if (i + 1 < length && friendlyName[i + 1] == FamilyNameDelimiter)
                         {
                             // Don't treat double commas as the family name delimiter.
                             i += 2;
