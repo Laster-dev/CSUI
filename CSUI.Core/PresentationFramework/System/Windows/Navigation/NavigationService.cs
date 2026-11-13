@@ -149,26 +149,28 @@ namespace System.Windows.Navigation
             NavigateCore(_currentSource, _content, null, NavigationMode.Refresh, recordHistory: false);
         }
 
+        private object EventSender => (object)_host ?? this;
+
         public void StopLoading()
         {
-            NavigationStopped?.Invoke(this, new NavigationEventArgs(_source, _content, null, null, _host, true));
+            NavigationStopped?.Invoke(EventSender, new NavigationEventArgs(_source, _content, null, null, _host, true));
         }
 
         internal void RaiseNavigationProgress(long bytesRead, long maxBytes)
         {
-            NavigationProgress?.Invoke(this, new NavigationProgressEventArgs(_source, bytesRead, maxBytes, _host));
+            NavigationProgress?.Invoke(EventSender, new NavigationProgressEventArgs(_source, bytesRead, maxBytes, _host));
         }
 
         internal void RaiseNavigationFailed(Exception ex)
         {
-            NavigationFailed?.Invoke(this, new NavigationFailedEventArgs(_source, null, _host, null, null, ex));
+            NavigationFailed?.Invoke(EventSender, new NavigationFailedEventArgs(_source, null, _host, null, null, ex));
         }
 
         private bool NavigateCore(Uri source, object content, object extraData, NavigationMode mode, bool recordHistory = true)
         {
             var cancelArgs = new NavigatingCancelEventArgs(
                 source, content, null, null, mode, null, extraData, _host, true);
-            Navigating?.Invoke(this, cancelArgs);
+            Navigating?.Invoke(EventSender, cancelArgs);
             if (cancelArgs.Cancel)
             {
                 return false;
@@ -193,14 +195,14 @@ namespace System.Windows.Navigation
             _host?.OnJournalChanged();
 
             var navArgs = new NavigationEventArgs(_currentSource, _content, extraData, null, _host, true);
-            Navigated?.Invoke(this, navArgs);
-            LoadCompleted?.Invoke(this, navArgs);
+            Navigated?.Invoke(EventSender, navArgs);
+            LoadCompleted?.Invoke(EventSender, navArgs);
 
             if (source != null && !string.IsNullOrEmpty(source.OriginalString) && source.OriginalString.Contains('#'))
             {
                 int idx = source.OriginalString.IndexOf('#');
                 string fragment = source.OriginalString.Substring(idx + 1);
-                FragmentNavigation?.Invoke(this, new FragmentNavigationEventArgs(fragment, _host));
+                FragmentNavigation?.Invoke(EventSender, new FragmentNavigationEventArgs(fragment, _host));
             }
 
             return true;

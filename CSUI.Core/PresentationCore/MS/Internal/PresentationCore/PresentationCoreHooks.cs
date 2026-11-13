@@ -18,11 +18,43 @@ namespace MS.Internal.PresentationCore
     /// </summary>
     internal static class PresentationCoreHooks
     {
+        private sealed class CsuiFallbackComWrappers : System.Runtime.InteropServices.ComWrappers
+        {
+            protected override unsafe ComInterfaceEntry* ComputeVtables(
+                object obj,
+                System.Runtime.InteropServices.CreateComInterfaceFlags flags,
+                out int count)
+            {
+                count = 0;
+                return null;
+            }
+
+            protected override object CreateObject(
+                IntPtr externalComObject,
+                System.Runtime.InteropServices.CreateObjectFlags flags)
+                => new object();
+
+            protected override void ReleaseObjects(System.Collections.IEnumerable objects)
+            {
+            }
+        }
 #pragma warning disable CA2255
         [ModuleInitializer]
         internal static void Initialize()
 #pragma warning restore CA2255
         {
+            if (!RuntimeFeature.IsDynamicCodeSupported)
+            {
+                try
+                {
+                    System.Runtime.InteropServices.ComWrappers.RegisterForMarshalling(
+                        new CsuiFallbackComWrappers());
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
             Visual.PropagateResumeLayoutHook = static (parent, child) =>
                 UIElement.PropagateResumeLayout(parent, child);
 

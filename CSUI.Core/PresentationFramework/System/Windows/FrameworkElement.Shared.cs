@@ -587,6 +587,10 @@ namespace System.Windows
 
         internal override void AddInheritanceContext(DependencyObject context, DependencyProperty property)
         {
+            if (this is Window || property == DataContextProperty)
+            {
+                return;
+            }
             if (Parent == null && VisualTreeHelper.GetParent(this) == null &&
                 (property == null || (property != ContentControl.ContentProperty && property != Window.IWindowServiceProperty)) &&
                 !FrameworkObject.IsEffectiveAncestor(this, context))

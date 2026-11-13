@@ -2076,7 +2076,7 @@ namespace System.Windows.Interop
                     if (IsProcessPerMonitorDpiAware == true)
                     {
                         DpiFlags dpiFlags = DpiUtil.UpdateDpiScalesAndGetIndex(CurrentDpiScale.PixelsPerInchX, CurrentDpiScale.PixelsPerInchY);
-                        DpiScale newDpiScale = new DpiScale(UIElement.DpiScaleXValues[dpiFlags.Index], UIElement.DpiScaleYValues[dpiFlags.Index]);
+                        DpiScale newDpiScale = new DpiScale(DpiUtil.DpiScaleXValues[dpiFlags.Index], DpiUtil.DpiScaleYValues[dpiFlags.Index]);
                         RootVisual.RecursiveSetDpiScaleVisualFlags(new DpiRecursiveChangeArgs( dpiFlags, RootVisual.GetDpi(), newDpiScale));
                     }
 

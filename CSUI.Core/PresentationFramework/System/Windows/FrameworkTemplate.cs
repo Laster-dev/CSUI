@@ -505,6 +505,10 @@ namespace System.Windows
 
             if (VisualTree != null)
             {
+                if (!IsSealed)
+                {
+                    Seal();
+                }
                 FrameworkObject frameworkObject = VisualTree.InstantiateUnoptimizedTree();
                 return frameworkObject.DO;
             }

@@ -1924,6 +1924,24 @@ namespace CSUI.Markup
             RegisterProperty(typeof(FrameworkElement), nameof(FrameworkElement.ToolTip), FrameworkElement.ToolTipProperty);
             RegisterProperty(typeof(ToolTipService), "ToolTip", ToolTipService.ToolTipProperty);
 
+            // Application
+            RegisterType<Application>();
+            RegisterClrProperty<Application, ResourceDictionary>(
+                nameof(Application.Resources),
+                static (a, v) => a.Resources = v,
+                static a => a.Resources);
+            RegisterClrProperty<Application, Uri>(
+                nameof(Application.StartupUri),
+                static (a, v) => a.StartupUri = v,
+                static a => a.StartupUri);
+            RegisterClrProperty<Application, ShutdownMode>(
+                nameof(Application.ShutdownMode),
+                static (a, v) => a.ShutdownMode = v,
+                static a => a.ShutdownMode);
+            RegisterEvent<Application>(nameof(Application.Startup), static (a, d) => a.Startup += (StartupEventHandler)d);
+            RegisterEvent<Application>(nameof(Application.Exit), static (a, d) => a.Exit += (ExitEventHandler)d);
+            RegisterEvent<Application>(nameof(Application.DispatcherUnhandledException), static (a, d) => a.DispatcherUnhandledException += (System.Windows.Threading.DispatcherUnhandledExceptionEventHandler)d);
+
             // Window, Popup & ToolTip
             RegisterType<Window>(contentProperty: ContentControl.ContentProperty);
             RegisterProperty(typeof(Window), nameof(Window.Title), Window.TitleProperty);

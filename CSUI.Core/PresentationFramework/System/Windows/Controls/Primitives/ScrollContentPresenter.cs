@@ -210,6 +210,20 @@ namespace System.Windows.Controls
             set { SetValue(CanContentScrollProperty, value); }
         }
 
+        public static readonly DependencyProperty CanHorizontallyScrollProperty =
+            DependencyProperty.Register(
+                nameof(CanHorizontallyScroll),
+                typeof(bool),
+                typeof(ScrollContentPresenter),
+                new FrameworkPropertyMetadata(false, (d, e) => ((ScrollContentPresenter)d).CanHorizontallyScroll = (bool)e.NewValue));
+
+        public static readonly DependencyProperty CanVerticallyScrollProperty =
+            DependencyProperty.Register(
+                nameof(CanVerticallyScroll),
+                typeof(bool),
+                typeof(ScrollContentPresenter),
+                new FrameworkPropertyMetadata(false, (d, e) => ((ScrollContentPresenter)d).CanVerticallyScroll = (bool)e.NewValue));
+
         /// <summary>
         /// ScrollContentPresenter reacts to this property by changing it's child measurement algorithm.
         /// If scrolling in a dimension, infinite space is allowed the child; otherwise, available size is preserved.

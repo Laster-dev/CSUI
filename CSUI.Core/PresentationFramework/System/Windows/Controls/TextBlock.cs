@@ -17,6 +17,7 @@ namespace System.Windows.Controls
     /// Provides a lightweight, high-performance element for displaying small to large amounts of text.
     /// Direct2D DirectWrite hardware-accelerated text layout with sub-pixel and 1px snap alignment.
     /// </summary>
+    [System.Windows.Markup.ContentProperty("Inlines")]
     public partial class TextBlock : FrameworkElement, MS.Internal.Controls.ITextDisplayElement
     {
         static partial void RegisterDefaultTheme();
@@ -34,44 +35,24 @@ namespace System.Windows.Controls
                 new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty FontFamilyProperty =
-            TextElement.FontFamilyProperty.AddOwner(
-                typeof(TextBlock),
-                new FrameworkPropertyMetadata(
-                    SystemFonts.MessageFontFamily,
-                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
-                    OnFormattedTextInvalidated));
+            TextElement.FontFamilyProperty.AddOwner(typeof(TextBlock));
 
         public static readonly DependencyProperty FontSizeProperty =
-            TextElement.FontSizeProperty.AddOwner(
-                typeof(TextBlock),
-                new FrameworkPropertyMetadata(
-                    SystemFonts.ThemeMessageFontSize,
-                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
-                    OnFormattedTextInvalidated));
+            TextElement.FontSizeProperty.AddOwner(typeof(TextBlock));
 
         public static readonly DependencyProperty FontWeightProperty =
-            TextElement.FontWeightProperty.AddOwner(
-                typeof(TextBlock),
-                new FrameworkPropertyMetadata(
-                    SystemFonts.MessageFontWeight,
-                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
-                    OnFormattedTextInvalidated));
+            TextElement.FontWeightProperty.AddOwner(typeof(TextBlock));
 
         public static readonly DependencyProperty FontStyleProperty =
-            TextElement.FontStyleProperty.AddOwner(
-                typeof(TextBlock),
-                new FrameworkPropertyMetadata(
-                    SystemFonts.MessageFontStyle,
-                    FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.Inherits,
-                    OnFormattedTextInvalidated));
+            TextElement.FontStyleProperty.AddOwner(typeof(TextBlock));
 
         public static readonly DependencyProperty ForegroundProperty =
-            TextElement.ForegroundProperty.AddOwner(
+            TextElement.ForegroundProperty.AddOwner(typeof(TextBlock));
+
+        public static readonly DependencyProperty TextDecorationsProperty =
+            Inline.TextDecorationsProperty.AddOwner(
                 typeof(TextBlock),
-                new FrameworkPropertyMetadata(
-                    Brushes.Black,
-                    FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.SubPropertiesDoNotAffectRender | FrameworkPropertyMetadataOptions.Inherits,
-                    OnFormattedTextInvalidated));
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, OnFormattedTextInvalidated));
 
         public static readonly DependencyProperty BackgroundProperty =
             DependencyProperty.Register(
@@ -128,6 +109,19 @@ namespace System.Windows.Controls
             set => SetValue(FontFamilyProperty, value);
         }
 
+        public static readonly DependencyProperty BaselineOffsetProperty =
+            DependencyProperty.Register(
+                nameof(BaselineOffset),
+                typeof(double),
+                typeof(TextBlock),
+                new FrameworkPropertyMetadata(double.NaN, FrameworkPropertyMetadataOptions.AffectsMeasure));
+
+        public double BaselineOffset
+        {
+            get => (double)GetValue(BaselineOffsetProperty);
+            set => SetValue(BaselineOffsetProperty, value);
+        }
+
         public double FontSize
         {
             get => (double)GetValue(FontSizeProperty);
@@ -150,6 +144,12 @@ namespace System.Windows.Controls
         {
             get => (Brush)GetValue(ForegroundProperty);
             set => SetValue(ForegroundProperty, value);
+        }
+
+        public TextDecorationCollection TextDecorations
+        {
+            get => (TextDecorationCollection)GetValue(TextDecorationsProperty);
+            set => SetValue(TextDecorationsProperty, value);
         }
 
         public Brush Background
@@ -276,6 +276,19 @@ namespace System.Windows.Controls
         public TextBlock(string text) : this()
         {
             Text = text;
+        }
+
+        protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+        {
+            base.OnPropertyChanged(e);
+            if (e.Property == FontFamilyProperty || e.Property == FontSizeProperty ||
+                e.Property == FontWeightProperty || e.Property == FontStyleProperty ||
+                e.Property == ForegroundProperty)
+            {
+                _cachedFormattedText = null;
+                InvalidateMeasure();
+                InvalidateVisual();
+            }
         }
 
         private static void OnFormattedTextInvalidated(DependencyObject d, DependencyPropertyChangedEventArgs e)

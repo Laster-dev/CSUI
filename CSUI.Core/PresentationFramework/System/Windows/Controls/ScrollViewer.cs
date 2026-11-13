@@ -221,6 +221,25 @@ namespace System.Windows.Controls
             }
         }
 
+        public static readonly DependencyProperty IsDeferredScrollingEnabledProperty =
+            DependencyProperty.RegisterAttached(
+                "IsDeferredScrollingEnabled",
+                typeof(bool),
+                typeof(ScrollViewer),
+                new FrameworkPropertyMetadata(false));
+
+        public bool IsDeferredScrollingEnabled
+        {
+            get => (bool)GetValue(IsDeferredScrollingEnabledProperty);
+            set => SetValue(IsDeferredScrollingEnabledProperty, value);
+        }
+
+        public static bool GetIsDeferredScrollingEnabled(DependencyObject element) =>
+            (bool)element.GetValue(IsDeferredScrollingEnabledProperty);
+
+        public static void SetIsDeferredScrollingEnabled(DependencyObject element, bool value) =>
+            element.SetValue(IsDeferredScrollingEnabledProperty, value);
+
         public static ScrollBarVisibility GetHorizontalScrollBarVisibility(DependencyObject element) =>
             (ScrollBarVisibility)element.GetValue(HorizontalScrollBarVisibilityProperty);
 

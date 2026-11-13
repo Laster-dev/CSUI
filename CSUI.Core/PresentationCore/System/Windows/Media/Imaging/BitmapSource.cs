@@ -887,11 +887,14 @@ namespace System.Windows.Media.Imaging
                     {
                         bool conversionSuccess = false;
                         bool badColorContext = false;
+                        BitmapSource colorSource = ReferenceEquals(frame._wicSource, wicSource)
+                            ? frame
+                            : new UnmanagedBitmapWrapper(wicSource);
 
                         try
                         {
                             ColorConvertedBitmap colorConvertedBitmap = new ColorConvertedBitmap(
-                                frame,
+                                colorSource,
                                 colorContexts[0],
                                 destinationColorContext,
                                 destFmt);
@@ -913,7 +916,7 @@ namespace System.Windows.Media.Imaging
                         {
                             changeFormat = false;
 
-                            FormatConvertedBitmap formatConvertedBitmap = new FormatConvertedBitmap(frame, destFmt, null, 0.0);
+                            FormatConvertedBitmap formatConvertedBitmap = new FormatConvertedBitmap(colorSource, destFmt, null, 0.0);
 
                             ColorConvertedBitmap colorConvertedBitmap = new ColorConvertedBitmap(
                                 formatConvertedBitmap,

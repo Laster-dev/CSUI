@@ -1,8 +1,9 @@
 <Solution>
   <Project Path="CSUI.Core/CSUI.Core.csproj" />
-  <Project Path="CSUI.Markup/CSUI.Markup.csproj" />
   <Project Path="CSUI.Generators/CSUI.Generators.csproj" />
-  <Project Path="CSUI.Tests/CSUI.Tests.csproj" />
-  <Project Path="CSUI.SampleApp/CSUI.SampleApp.csproj" />
+  <Project Path="CSUI.Markup/CSUI.Markup.csproj" />
   <Project Path="CSUI.Previewer/CSUI.Previewer.csproj" />
+  <Project Path="CSUI.SampleApp/CSUI.SampleApp.csproj" />
+  <Project Path="CSUI.Tests/CSUI.Tests.csproj" />
+  <Project Path="ExternalWpfLocalDemo/Calculator.csproj" />
 </Solution>

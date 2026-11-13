@@ -923,10 +923,23 @@ namespace System.Windows
             return new NonSharedResourceFactory(factory);
         }
 
+        public static object CreateDeferred(Func<object> factory)
+        {
+            ArgumentNullException.ThrowIfNull(factory);
+            return new DeferredSharedResourceFactory(factory);
+        }
+
         private sealed class NonSharedResourceFactory
         {
             private readonly Func<object> _factory;
             public NonSharedResourceFactory(Func<object> factory) => _factory = factory;
+            public object Create() => _factory();
+        }
+
+        private sealed class DeferredSharedResourceFactory
+        {
+            private readonly Func<object> _factory;
+            public DeferredSharedResourceFactory(Func<object> factory) => _factory = factory;
             public object Create() => _factory();
         }
 
@@ -936,6 +949,12 @@ namespace System.Windows
             {
                 value = nonShared.Create();
                 canCache = false;
+                return;
+            }
+            if (value is DeferredSharedResourceFactory deferred)
+            {
+                value = deferred.Create();
+                canCache = true;
                 return;
             }
             canCache = true;

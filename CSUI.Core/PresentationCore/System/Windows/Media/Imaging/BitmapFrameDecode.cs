@@ -437,6 +437,7 @@ namespace System.Windows.Media.Imaging
 
             if (_frameSource != null)
             {
+                _wicSource = _frameSource;
                 _wicSource = CreateCachedBitmap(
                     this,
                     _frameSource,
