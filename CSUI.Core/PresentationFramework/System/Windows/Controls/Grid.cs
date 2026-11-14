@@ -230,36 +230,201 @@ namespace System.Windows.Controls
             UIElementCollection children = InternalChildren;
             int childCount = children.Count;
 
-            // Pass 1: Measure non-spanning items, accumulate Auto and Star desired sizes
-            for (int i = 0; i < childCount; i++)
+            bool finiteW = !double.IsPositiveInfinity(constraint.Width);
+            bool finiteH = !double.IsPositiveInfinity(constraint.Height);
+
+            Span<double> starDesiredCols = colCount <= 32 ? stackalloc double[colCount] : new double[colCount];
+            Span<double> starDesiredRows = rowCount <= 32 ? stackalloc double[rowCount] : new double[rowCount];
+            starDesiredCols.Clear();
+            starDesiredRows.Clear();
+
+            // Helper to compute available size along an axis before or after Star resolution
+            static double ComputeAvail(int start, int span, bool axisResolved, Span<GridUnitType> types, Span<double> sizes, Span<double> mins, Span<double> maxs)
             {
-                UIElement child = children[i];
-                if (child == null) continue;
-
-                int row = Math.Clamp(GetRow(child), 0, rowCount - 1);
-                int col = Math.Clamp(GetColumn(child), 0, colCount - 1);
-                int rowSpan = Math.Max(1, GetRowSpan(child));
-                int colSpan = Math.Max(1, GetColumnSpan(child));
-
-                if (rowSpan == 1 && colSpan == 1)
+                double total = 0.0;
+                for (int k = 0; k < span; k++)
                 {
-                    double availW = colTypes[col] == GridUnitType.Pixel ? Math.Clamp(colSizes[col], colMins[col], colMaxs[col]) : double.PositiveInfinity;
-                    double availH = rowTypes[row] == GridUnitType.Pixel ? Math.Clamp(rowSizes[row], rowMins[row], rowMaxs[row]) : double.PositiveInfinity;
-                    child.Measure(new Size(availW, availH));
-
-                    Size desired = child.DesiredSize;
-                    if (colTypes[col] == GridUnitType.Auto || colTypes[col] == GridUnitType.Star)
+                    int idx = start + k;
+                    if (axisResolved)
                     {
-                        colSizes[col] = Math.Max(colSizes[col], desired.Width);
+                        total += sizes[idx];
                     }
-                    if (rowTypes[row] == GridUnitType.Auto || rowTypes[row] == GridUnitType.Star)
+                    else if (types[idx] == GridUnitType.Pixel)
                     {
-                        rowSizes[row] = Math.Max(rowSizes[row], desired.Height);
+                        total += Math.Clamp(sizes[idx], mins[idx], maxs[idx]);
+                    }
+                    else
+                    {
+                        return double.PositiveInfinity;
+                    }
+                }
+                return total;
+            }
+
+            static bool SpanHasStar(int start, int span, Span<GridUnitType> types)
+            {
+                for (int k = 0; k < span; k++)
+                {
+                    if (types[start + k] == GridUnitType.Star) return true;
+                }
+                return false;
+            }
+
+            // Native WPF Grid measures cells in 4 groups so Star-constrained cells (e.g. VirtualizingPanels)
+            // are measured ONLY AFTER Star tracks are resolved to finite slot sizes, never with Infinity.
+
+            // Group 1 (!starCol && !starRow): non-spanning first, then spanning
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < childCount; i++)
+                {
+                    UIElement child = children[i];
+                    if (child == null) continue;
+
+                    int row = Math.Clamp(GetRow(child), 0, rowCount - 1);
+                    int col = Math.Clamp(GetColumn(child), 0, colCount - 1);
+                    int rowSpan = Math.Min(Math.Max(1, GetRowSpan(child)), rowCount - row);
+                    int colSpan = Math.Min(Math.Max(1, GetColumnSpan(child)), colCount - col);
+                    bool isSpanning = rowSpan > 1 || colSpan > 1;
+                    if ((pass == 0) == isSpanning) continue;
+
+                    bool starCol = finiteW && SpanHasStar(col, colSpan, colTypes);
+                    bool starRow = finiteH && SpanHasStar(row, rowSpan, rowTypes);
+                    if (starCol || starRow) continue;
+
+                    double availW = ComputeAvail(col, colSpan, false, colTypes, colSizes, colMins, colMaxs);
+                    double availH = ComputeAvail(row, rowSpan, false, rowTypes, rowSizes, rowMins, rowMaxs);
+                    child.Measure(new Size(availW, availH));
+                    Size desired = child.DesiredSize;
+
+                    if (!isSpanning)
+                    {
+                        if (colTypes[col] == GridUnitType.Auto || colTypes[col] == GridUnitType.Star)
+                            colSizes[col] = Math.Max(colSizes[col], desired.Width);
+                        if (rowTypes[row] == GridUnitType.Auto || rowTypes[row] == GridUnitType.Star)
+                            rowSizes[row] = Math.Max(rowSizes[row], desired.Height);
+                    }
+                    else
+                    {
+                        DistributeSpanDeficit(col, colSpan, desired.Width, colTypes, colSizes);
+                        DistributeSpanDeficit(row, rowSpan, desired.Height, rowTypes, rowSizes);
                     }
                 }
             }
 
-            // Pass 2: Measure spanning items and distribute deficit to Auto (or Star) tracks
+            // Group 2 (!starCol && starRow): determine Auto column widths before resolving Star columns
+            bool hasGroup2 = false;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < childCount; i++)
+                {
+                    UIElement child = children[i];
+                    if (child == null) continue;
+
+                    int row = Math.Clamp(GetRow(child), 0, rowCount - 1);
+                    int col = Math.Clamp(GetColumn(child), 0, colCount - 1);
+                    int rowSpan = Math.Min(Math.Max(1, GetRowSpan(child)), rowCount - row);
+                    int colSpan = Math.Min(Math.Max(1, GetColumnSpan(child)), colCount - col);
+                    bool isSpanning = rowSpan > 1 || colSpan > 1;
+                    if ((pass == 0) == isSpanning) continue;
+
+                    bool starCol = finiteW && SpanHasStar(col, colSpan, colTypes);
+                    bool starRow = finiteH && SpanHasStar(row, rowSpan, rowTypes);
+                    if (starCol || !starRow) continue;
+
+                    hasGroup2 = true;
+                    double availW = ComputeAvail(col, colSpan, false, colTypes, colSizes, colMins, colMaxs);
+                    double availH = ComputeAvail(row, rowSpan, false, rowTypes, rowSizes, rowMins, rowMaxs);
+                    child.Measure(new Size(availW, availH));
+                    Size desired = child.DesiredSize;
+
+                    if (colSpan == 1)
+                    {
+                        if (colTypes[col] == GridUnitType.Auto || colTypes[col] == GridUnitType.Star)
+                            colSizes[col] = Math.Max(colSizes[col], desired.Width);
+                    }
+                    else
+                    {
+                        DistributeSpanDeficit(col, colSpan, desired.Width, colTypes, colSizes);
+                    }
+
+                    if (rowSpan == 1 && rowTypes[row] == GridUnitType.Star)
+                        starDesiredRows[row] = Math.Max(starDesiredRows[row], desired.Height);
+                }
+            }
+
+            // Clamp non-Star columns and resolve Star columns
+            for (int c = 0; c < colCount; c++)
+            {
+                if (colTypes[c] != GridUnitType.Star)
+                {
+                    colSizes[c] = Math.Clamp(colSizes[c], colMins[c], colMaxs[c]);
+                    starDesiredCols[c] = colSizes[c];
+                }
+                else if (!finiteW)
+                {
+                    starDesiredCols[c] = colSizes[c];
+                }
+            }
+            ResolveStars(constraint.Width, colCount, colTypes, colWeights, colMins, colMaxs, colSizes);
+
+            // Group 3 (starCol && !starRow): measure with resolved Star column widths to determine Auto row heights
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < childCount; i++)
+                {
+                    UIElement child = children[i];
+                    if (child == null) continue;
+
+                    int row = Math.Clamp(GetRow(child), 0, rowCount - 1);
+                    int col = Math.Clamp(GetColumn(child), 0, colCount - 1);
+                    int rowSpan = Math.Min(Math.Max(1, GetRowSpan(child)), rowCount - row);
+                    int colSpan = Math.Min(Math.Max(1, GetColumnSpan(child)), colCount - col);
+                    bool isSpanning = rowSpan > 1 || colSpan > 1;
+                    if ((pass == 0) == isSpanning) continue;
+
+                    bool starCol = finiteW && SpanHasStar(col, colSpan, colTypes);
+                    bool starRow = finiteH && SpanHasStar(row, rowSpan, rowTypes);
+                    if (!starCol || starRow) continue;
+
+                    double availW = ComputeAvail(col, colSpan, true, colTypes, colSizes, colMins, colMaxs);
+                    double availH = ComputeAvail(row, rowSpan, false, rowTypes, rowSizes, rowMins, rowMaxs);
+                    child.Measure(new Size(availW, availH));
+                    Size desired = child.DesiredSize;
+
+                    if (rowSpan == 1)
+                    {
+                        if (rowTypes[row] == GridUnitType.Auto || rowTypes[row] == GridUnitType.Star)
+                            rowSizes[row] = Math.Max(rowSizes[row], desired.Height);
+                    }
+                    else
+                    {
+                        DistributeSpanDeficit(row, rowSpan, desired.Height, rowTypes, rowSizes);
+                    }
+
+                    if (colSpan == 1 && colTypes[col] == GridUnitType.Star)
+                        starDesiredCols[col] = Math.Max(starDesiredCols[col], desired.Width);
+                    else
+                        DistributeSpanDeficit(col, colSpan, desired.Width, colTypes, starDesiredCols);
+                }
+            }
+
+            // Clamp non-Star rows and resolve Star rows
+            for (int r = 0; r < rowCount; r++)
+            {
+                if (rowTypes[r] != GridUnitType.Star)
+                {
+                    rowSizes[r] = Math.Clamp(rowSizes[r], rowMins[r], rowMaxs[r]);
+                    starDesiredRows[r] = rowSizes[r];
+                }
+                else if (!finiteH)
+                {
+                    starDesiredRows[r] = Math.Max(starDesiredRows[r], rowSizes[r]);
+                }
+            }
+            ResolveStars(constraint.Height, rowCount, rowTypes, rowWeights, rowMins, rowMaxs, rowSizes);
+
+            // Group 4 (starCol && starRow): measure once with resolved finite Star column & row sizes
             for (int i = 0; i < childCount; i++)
             {
                 UIElement child = children[i];
@@ -270,65 +435,29 @@ namespace System.Windows.Controls
                 int rowSpan = Math.Min(Math.Max(1, GetRowSpan(child)), rowCount - row);
                 int colSpan = Math.Min(Math.Max(1, GetColumnSpan(child)), colCount - col);
 
-                if (rowSpan > 1 || colSpan > 1)
-                {
-                    double availW = 0.0;
-                    for (int c = 0; c < colSpan; c++)
-                    {
-                        availW += colTypes[col + c] == GridUnitType.Pixel
-                            ? Math.Clamp(colSizes[col + c], colMins[col + c], colMaxs[col + c])
-                            : double.PositiveInfinity;
-                    }
-                    double availH = 0.0;
-                    for (int r = 0; r < rowSpan; r++)
-                    {
-                        availH += rowTypes[row + r] == GridUnitType.Pixel
-                            ? Math.Clamp(rowSizes[row + r], rowMins[row + r], rowMaxs[row + r])
-                            : double.PositiveInfinity;
-                    }
+                bool starCol = finiteW && SpanHasStar(col, colSpan, colTypes);
+                bool starRow = finiteH && SpanHasStar(row, rowSpan, rowTypes);
+                if (!starCol || !starRow) continue;
 
-                    child.Measure(new Size(availW, availH));
-                    Size desired = child.DesiredSize;
+                double availW = ComputeAvail(col, colSpan, true, colTypes, colSizes, colMins, colMaxs);
+                double availH = ComputeAvail(row, rowSpan, true, rowTypes, rowSizes, rowMins, rowMaxs);
+                child.Measure(new Size(availW, availH));
+                Size desired = child.DesiredSize;
 
-                    DistributeSpanDeficit(col, colSpan, desired.Width, colTypes, colSizes);
-                    DistributeSpanDeficit(row, rowSpan, desired.Height, rowTypes, rowSizes);
-                }
+                if (colSpan == 1 && colTypes[col] == GridUnitType.Star)
+                    starDesiredCols[col] = Math.Max(starDesiredCols[col], desired.Width);
+                else
+                    DistributeSpanDeficit(col, colSpan, desired.Width, colTypes, starDesiredCols);
+
+                if (rowSpan == 1 && rowTypes[row] == GridUnitType.Star)
+                    starDesiredRows[row] = Math.Max(starDesiredRows[row], desired.Height);
+                else
+                    DistributeSpanDeficit(row, rowSpan, desired.Height, rowTypes, starDesiredRows);
             }
 
-            // Clamp non-Star tracks with Min/Max
-            for (int c = 0; c < colCount; c++)
+            // Re-measure Group 2 children with resolved finite Star row heights
+            if (hasGroup2)
             {
-                if (colTypes[c] != GridUnitType.Star)
-                {
-                    colSizes[c] = Math.Clamp(colSizes[c], colMins[c], colMaxs[c]);
-                }
-            }
-            for (int r = 0; r < rowCount; r++)
-            {
-                if (rowTypes[r] != GridUnitType.Star)
-                {
-                    rowSizes[r] = Math.Clamp(rowSizes[r], rowMins[r], rowMaxs[r]);
-                }
-            }
-
-            // Preserve Star children's desired sizes before ResolveStars overwrites Star tracks under finite constraints
-            Span<double> starDesiredCols = colCount <= 32 ? stackalloc double[colCount] : new double[colCount];
-            Span<double> starDesiredRows = rowCount <= 32 ? stackalloc double[rowCount] : new double[rowCount];
-            colSizes.CopyTo(starDesiredCols);
-            rowSizes.CopyTo(starDesiredRows);
-
-            // Pass 3: Resolve Star tracks against constraint
-            ResolveStars(constraint.Width, colCount, colTypes, colWeights, colMins, colMaxs, colSizes);
-            ResolveStars(constraint.Height, rowCount, rowTypes, rowWeights, rowMins, rowMaxs, rowSizes);
-
-            // Pass 4: Re-measure children in Star tracks with resolved finite track sizes
-            bool finiteW = !double.IsPositiveInfinity(constraint.Width);
-            bool finiteH = !double.IsPositiveInfinity(constraint.Height);
-            if (finiteW || finiteH)
-            {
-                bool autoColChanged = false;
-                bool autoRowChanged = false;
-
                 for (int i = 0; i < childCount; i++)
                 {
                     UIElement child = children[i];
@@ -339,92 +468,19 @@ namespace System.Windows.Controls
                     int rowSpan = Math.Min(Math.Max(1, GetRowSpan(child)), rowCount - row);
                     int colSpan = Math.Min(Math.Max(1, GetColumnSpan(child)), colCount - col);
 
-                    bool hasStarCol = false;
-                    for (int c = 0; c < colSpan; c++)
-                    {
-                        if (colTypes[col + c] == GridUnitType.Star) { hasStarCol = true; break; }
-                    }
-                    bool hasStarRow = false;
-                    for (int r = 0; r < rowSpan; r++)
-                    {
-                        if (rowTypes[row + r] == GridUnitType.Star) { hasStarRow = true; break; }
-                    }
+                    bool starCol = finiteW && SpanHasStar(col, colSpan, colTypes);
+                    bool starRow = finiteH && SpanHasStar(row, rowSpan, rowTypes);
+                    if (starCol || !starRow) continue;
 
-                    if ((!hasStarCol || !finiteW) && (!hasStarRow || !finiteH))
-                    {
-                        continue;
-                    }
-
-                    double availW = 0.0;
-                    if (hasStarCol && finiteW)
-                    {
-                        for (int c = 0; c < colSpan; c++) availW += colSizes[col + c];
-                    }
-                    else
-                    {
-                        for (int c = 0; c < colSpan; c++)
-                        {
-                            availW += colTypes[col + c] == GridUnitType.Pixel ? colSizes[col + c] : double.PositiveInfinity;
-                        }
-                    }
-
-                    double availH = 0.0;
-                    if (hasStarRow && finiteH)
-                    {
-                        for (int r = 0; r < rowSpan; r++) availH += rowSizes[row + r];
-                    }
-                    else
-                    {
-                        for (int r = 0; r < rowSpan; r++)
-                        {
-                            availH += rowTypes[row + r] == GridUnitType.Pixel ? rowSizes[row + r] : double.PositiveInfinity;
-                        }
-                    }
-
+                    double availW = ComputeAvail(col, colSpan, true, colTypes, colSizes, colMins, colMaxs);
+                    double availH = ComputeAvail(row, rowSpan, true, rowTypes, rowSizes, rowMins, rowMaxs);
                     child.Measure(new Size(availW, availH));
                     Size desired = child.DesiredSize;
 
-                    if (rowSpan == 1 && colSpan == 1)
-                    {
-                        if (colTypes[col] == GridUnitType.Auto)
-                        {
-                            double updated = Math.Clamp(Math.Max(colSizes[col], desired.Width), colMins[col], colMaxs[col]);
-                            if (updated > colSizes[col])
-                            {
-                                colSizes[col] = updated;
-                                starDesiredCols[col] = updated;
-                                autoColChanged = true;
-                            }
-                        }
-                        else if (colTypes[col] == GridUnitType.Star)
-                        {
-                            starDesiredCols[col] = Math.Max(starDesiredCols[col], desired.Width);
-                        }
-
-                        if (rowTypes[row] == GridUnitType.Auto)
-                        {
-                            double updated = Math.Clamp(Math.Max(rowSizes[row], desired.Height), rowMins[row], rowMaxs[row]);
-                            if (updated > rowSizes[row])
-                            {
-                                rowSizes[row] = updated;
-                                starDesiredRows[row] = updated;
-                                autoRowChanged = true;
-                            }
-                        }
-                        else if (rowTypes[row] == GridUnitType.Star)
-                        {
-                            starDesiredRows[row] = Math.Max(starDesiredRows[row], desired.Height);
-                        }
-                    }
-                }
-
-                if (autoColChanged)
-                {
-                    ResolveStars(constraint.Width, colCount, colTypes, colWeights, colMins, colMaxs, colSizes);
-                }
-                if (autoRowChanged)
-                {
-                    ResolveStars(constraint.Height, rowCount, rowTypes, rowWeights, rowMins, rowMaxs, rowSizes);
+                    if (rowSpan == 1 && rowTypes[row] == GridUnitType.Star)
+                        starDesiredRows[row] = Math.Max(starDesiredRows[row], desired.Height);
+                    else
+                        DistributeSpanDeficit(row, rowSpan, desired.Height, rowTypes, starDesiredRows);
                 }
             }
 

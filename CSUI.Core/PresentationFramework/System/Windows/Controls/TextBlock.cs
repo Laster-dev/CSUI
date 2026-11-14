@@ -322,11 +322,16 @@ namespace System.Windows.Controls
             if (TextWrapping != TextWrapping.NoWrap && !double.IsInfinity(availableWidth))
             {
                 ft.MaxTextWidth = Math.Max(0.0, availableWidth);
+                ft.TextAlignment = TextAlignment;
+            }
+            else
+            {
+                // When MaxTextWidth == 0, FormattedText centers/right-aligns around x=0 (negative X).
+                // Keep Left alignment on FormattedText and offset origin.X in OnRender instead.
+                ft.TextAlignment = TextAlignment.Left;
             }
 
             ft.Trimming = TextTrimming;
-
-            ft.TextAlignment = TextAlignment;
 
             if (s_lineHeightProperty != null)
             {
@@ -411,7 +416,24 @@ namespace System.Windows.Controls
             double availableWidth = Math.Max(0.0, RenderSize.Width - pad.Left - pad.Right);
             FormattedText ft = GetOrCreateFormattedText(availableWidth);
 
-            Point origin = new Point(pad.Left, pad.Top);
+            double x = pad.Left;
+            if (TextWrapping == TextWrapping.NoWrap && TextAlignment != TextAlignment.Left)
+            {
+                double textW = ft.WidthIncludingTrailingWhitespace;
+                if (availableWidth > textW)
+                {
+                    if (TextAlignment == TextAlignment.Center)
+                    {
+                        x += (availableWidth - textW) * 0.5;
+                    }
+                    else if (TextAlignment == TextAlignment.Right)
+                    {
+                        x += availableWidth - textW;
+                    }
+                }
+            }
+
+            Point origin = new Point(x, pad.Top);
             dc.DrawText(ft, origin);
         }
 

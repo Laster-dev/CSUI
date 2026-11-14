@@ -445,8 +445,25 @@ namespace System.Windows.Controls
                 {
                     return 0.0;
                 }
-                // Chromium InverseDelta / Impulse distance-scaled duration bounds
-                return Math.Clamp(0.12 + 0.012 * Math.Sqrt(absDelta), 0.16, 0.36);
+                // Chromium Impulse distance-scaled duration bounds (snappy 140ms-240ms)
+                return Math.Clamp(0.10 + 0.009 * Math.Sqrt(absDelta), 0.14, 0.24);
+            }
+
+            public double PeekOffset(long nowTimestamp)
+            {
+                if (!IsActive || DurationSeconds <= 0.0)
+                {
+                    return TargetOffset;
+                }
+
+                double elapsed = Math.Max(0.0, (double)(nowTimestamp - StartTimestamp) / Stopwatch.Frequency);
+                if (elapsed >= DurationSeconds)
+                {
+                    return TargetOffset;
+                }
+
+                double t = elapsed / DurationSeconds;
+                return StartOffset + (TargetOffset - StartOffset) * Curve.Sample(t);
             }
 
             public void UpdateTarget(double currentOffset, double newTarget, long nowTimestamp)
@@ -479,26 +496,32 @@ namespace System.Windows.Controls
                 double duration = SegmentDuration(delta);
                 if (Math.Abs(currentVelocity) < 1e-3)
                 {
-                    Curve = new ChromiumScrollCubicBezier(0.25, 0.1, 0.25, 1.0);
+                    // Chromium Impulse curve: immediate initial launch, smooth deceleration
+                    Curve = new ChromiumScrollCubicBezier(0.20, 0.95, 0.35, 1.0);
                 }
                 else
                 {
                     double normalizedSlope = (currentVelocity * duration) / delta;
                     if (normalizedSlope > 0.0)
                     {
-                        // EaseInOutWithInitialSlope: preserve instantaneous velocity C1-continuously
-                        double x1 = 0.25;
+                        // C1-continuous continuation, floored at Impulse's fast launch
+                        double x1 = 0.20;
                         double y1 = x1 * normalizedSlope;
                         if (y1 > 1.0)
                         {
                             y1 = 1.0;
                             x1 = 1.0 / normalizedSlope;
                         }
-                        Curve = new ChromiumScrollCubicBezier(x1, y1, 0.25, 1.0);
+                        else if (y1 < 0.95)
+                        {
+                            y1 = 0.95;
+                        }
+                        Curve = new ChromiumScrollCubicBezier(x1, y1, 0.35, 1.0);
                     }
                     else
                     {
-                        Curve = new ChromiumScrollCubicBezier(0.25, 0.0, 0.25, 1.0);
+                        // Direction reversal: immediately interrupt old momentum and launch Impulse
+                        Curve = new ChromiumScrollCubicBezier(0.20, 0.95, 0.35, 1.0);
                     }
                 }
 
@@ -1165,13 +1188,15 @@ namespace System.Windows.Controls
 
             if (IsSmoothScrollingEnabled)
             {
+                long now = Stopwatch.GetTimestamp();
                 double maxV = Math.Max(0, ExtentHeight - ViewportHeight);
                 double scrollAmount = -step;
+                double effectiveOffset = _vScrollAnim.IsActive ? _vScrollAnim.PeekOffset(now) : VerticalOffset;
                 double currentTarget = _vScrollAnim.IsActive ? _vScrollAnim.TargetOffset : VerticalOffset;
-                bool reversing = _vScrollAnim.IsActive && ((currentTarget - VerticalOffset) * scrollAmount < 0.0);
-                double baseTarget = reversing ? VerticalOffset : currentTarget;
+                bool reversing = _vScrollAnim.IsActive && ((currentTarget - effectiveOffset) * scrollAmount < 0.0);
+                double baseTarget = reversing ? effectiveOffset : currentTarget;
                 double nextTarget = Math.Clamp(baseTarget + scrollAmount, 0, maxV);
-                _vScrollAnim.UpdateTarget(VerticalOffset, nextTarget, Stopwatch.GetTimestamp());
+                _vScrollAnim.UpdateTarget(effectiveOffset, nextTarget, now);
                 if (_vScrollAnim.IsActive)
                 {
                     StartSmoothScroll();

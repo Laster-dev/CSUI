@@ -22,6 +22,7 @@ internal static class PresentationCoreTests
         TestDirectWriteFormattedTextAndGlyphRasterization();
         TestWicImagingWriteableCropAndPngRoundtrip();
         TestDirect2DCombinedGeometryAndCombineModes();
+        TestAutonomousCompositionTargetRendering();
     }
 
     // PC-1: 2D Visual Tree Bounds, Transform, Clip & Point/Geometry Hit-Testing
@@ -445,5 +446,60 @@ internal static class PresentationCoreTests
 
         Pass("PC-7. Direct2D CombinedGeometry & CombineWithGeometry Modes (empty/null handling, D2DERR_WRONG_STATE prevention)",
             $"bounds={bounds}, unionBounds={gCombined2.Bounds}");
+    }
+
+    // PC-8: Autonomous CompositionTarget.Rendering without mouse input
+    private static void TestAutonomousCompositionTargetRendering()
+    {
+        var parameters = new System.Windows.Interop.HwndSourceParameters("CSUI_PC8_RenderLoop", 200, 100)
+        {
+            WindowStyle = 0x00800000 // WS_BORDER (no WS_VISIBLE needed, or WS_POPUP)
+        };
+        using var hwndSource = new System.Windows.Interop.HwndSource(parameters);
+        var canvas = new System.Windows.Controls.Canvas { Width = 200, Height = 100 };
+        var transform = new TranslateTransform(0, 0);
+        var ellipse = new System.Windows.Shapes.Ellipse
+        {
+            Width = 4,
+            Height = 4,
+            Fill = Brushes.White,
+            RenderTransform = transform
+        };
+        canvas.Children.Add(ellipse);
+        hwndSource.RootVisual = canvas;
+
+        int renderCount = 0;
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        void OnRendering(object? sender, EventArgs e)
+        {
+            renderCount++;
+            transform.SetCurrentValue(TranslateTransform.XProperty, (double)renderCount);
+            if (renderCount >= 5)
+            {
+                frame.Continue = false;
+            }
+        }
+
+        var timeout = new System.Windows.Threading.DispatcherTimer(
+            TimeSpan.FromMilliseconds(500),
+            System.Windows.Threading.DispatcherPriority.Normal,
+            (_, _) => frame.Continue = false,
+            System.Windows.Threading.Dispatcher.CurrentDispatcher);
+
+        CompositionTarget.Rendering += OnRendering;
+        timeout.Start();
+        try
+        {
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+        finally
+        {
+            timeout.Stop();
+            CompositionTarget.Rendering -= OnRendering;
+        }
+
+        Assert(renderCount >= 5, $"CompositionTarget.Rendering must fire autonomously without mouse input, got {renderCount}");
+        Pass("PC-8. Autonomous CompositionTarget.Rendering & Transform Loop without Mouse Input",
+            $"renderCount={renderCount}");
     }
 }

@@ -1,0 +1,28 @@
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata>
+    <Identity Id="CSUI.VisualStudio.9F3A7B1C-4D2E-4E8A-9C10-2A6B5C8D1E3F" Version="1.0.0" Language="en-US" Publisher="CSUI" />
+    <DisplayName>CSUI for Visual Studio</DisplayName>
+    <Description xml:space="preserve">Embedded split-view Live XAML Designer and Previewer for CSUI (powered by CSUI.Core Direct2D/DirectWrite).</Description>
+    <Tags>CSUI;XAML;Designer;Previewer</Tags>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0, 19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0, 19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0, 19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" Version="[4.7.2,)" />
+  </Dependencies>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0, 19.0)" DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage" Path="CSUI.VisualStudio.pkgdef" />
+  </Assets>
+</PackageManifest>

@@ -866,6 +866,8 @@ namespace CSUI.Generators
             public INamedTypeSymbol? RootClassType { get; set; }
             public bool HasExternalStaticResource { get; set; }
             public string? CurrentNameScopeExpr { get; set; }
+            public string? PerInstanceNameScopeExpr { get; set; }
+            public bool InsideTemplate { get; set; }
 
             public bool Fail(string reason)
             {
@@ -988,13 +990,18 @@ namespace CSUI.Generators
                     }
                     if (attrLocal == "Name")
                     {
-                        if (!isRoot && ctx.HasInstanceClass)
+                        bool inTemplate = ctx.InsideTemplate || !string.IsNullOrEmpty(ctx.PerInstanceNameScopeExpr);
+                        if (!isRoot && ctx.HasInstanceClass && !inTemplate)
                         {
                             sb.Append("this.").Append(attr.Value).Append(" = ").Append(targetExpr).AppendLine(";");
                         }
-                        if (ctx.HasInstanceClass && ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
+                        if (ctx.HasInstanceClass && !inTemplate && ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
                         {
                             sb.Append("this.RegisterName(").Append(ToCSharpStringLiteral(attr.Value)).Append(", ").Append(targetExpr).AppendLine(");");
+                        }
+                        if (!string.IsNullOrEmpty(ctx.PerInstanceNameScopeExpr))
+                        {
+                            sb.Append(ctx.PerInstanceNameScopeExpr).Append("?.RegisterName(").Append(ToCSharpStringLiteral(attr.Value)).Append(", ").Append(targetExpr).AppendLine(");");
                         }
                         if (FindProperty(targetType, "Name") is IPropertySymbol nameProp && nameProp.SetMethod is not null)
                         {
@@ -1032,13 +1039,18 @@ namespace CSUI.Generators
 
                 if (attrLocal == "Name")
                 {
-                    if (!isRoot && ctx.HasInstanceClass)
+                    bool inTemplate = ctx.InsideTemplate || !string.IsNullOrEmpty(ctx.PerInstanceNameScopeExpr);
+                    if (!isRoot && ctx.HasInstanceClass && !inTemplate)
                     {
                         sb.Append("this.").Append(attr.Value).Append(" = ").Append(targetExpr).AppendLine(";");
                     }
-                    if (ctx.HasInstanceClass && ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
+                    if (ctx.HasInstanceClass && !inTemplate && ctx.RootIsFrameworkElement && InheritsFrom(targetType, "System.Windows.DependencyObject"))
                     {
                         sb.Append("this.RegisterName(").Append(ToCSharpStringLiteral(attr.Value)).Append(", ").Append(targetExpr).AppendLine(");");
+                    }
+                    if (!string.IsNullOrEmpty(ctx.PerInstanceNameScopeExpr))
+                    {
+                        sb.Append(ctx.PerInstanceNameScopeExpr).Append("?.RegisterName(").Append(ToCSharpStringLiteral(attr.Value)).Append(", ").Append(targetExpr).AppendLine(");");
                     }
                 }
 
@@ -2872,7 +2884,47 @@ namespace CSUI.Generators
             return true;
         }
 
+        private static bool HasAnyNameAttributeInSubtree(XElement el, string xamlNs)
+        {
+            string? local = el.Name.LocalName;
+            if (local == "ControlTemplate" || local == "DataTemplate" || local == "ItemsPanelTemplate")
+            {
+                return false;
+            }
+            if (el.Attribute(XName.Get("Name", xamlNs)) is not null || el.Attribute("Name") is not null)
+            {
+                return true;
+            }
+            foreach (XElement child in el.Elements())
+            {
+                if (HasAnyNameAttributeInSubtree(child, xamlNs))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private static bool TryEmitFrameworkElementFactoryTree(
+            StringBuilder sb,
+            XElement el,
+            INamedTypeSymbol? templateTargetType,
+            XamlCompileContext ctx,
+            out string fefVar)
+        {
+            bool prevInsideTemplate = ctx.InsideTemplate;
+            ctx.InsideTemplate = true;
+            try
+            {
+                return TryEmitFrameworkElementFactoryTreeCore(sb, el, templateTargetType, ctx, out fefVar);
+            }
+            finally
+            {
+                ctx.InsideTemplate = prevInsideTemplate;
+            }
+        }
+
+        private static bool TryEmitFrameworkElementFactoryTreeCore(
             StringBuilder sb,
             XElement el,
             INamedTypeSymbol? templateTargetType,
@@ -3150,11 +3202,10 @@ namespace CSUI.Generators
                     if (childLocal == "VisualStateManager.VisualStateGroups")
                     {
                         var vsgSb = new StringBuilder();
-                        var dummyBind = new StringBuilder();
                         vsgSb.AppendLine("var __vsgList = global::System.Windows.VisualStateManager.GetVisualStateGroups((global::System.Windows.FrameworkElement)__feObj);");
                         foreach (XElement vsgEl in child.Elements())
                         {
-                            if (!TryEmitAnyValueElement(vsgSb, dummyBind, vsgEl, ctx, out string vsgVar) || dummyBind.Length > 0)
+                            if (!TryEmitAnyValueElement(vsgSb, vsgSb, vsgEl, ctx, out string vsgVar))
                             {
                                 return ctx.Fail($"VisualStateGroups child '{vsgEl.Name.LocalName}' failed");
                             }
@@ -3213,22 +3264,50 @@ namespace CSUI.Generators
                             continue;
                         }
                         var dummyBind = new StringBuilder();
-                        if (!TryEmitAnyValueElement(sb, dummyBind, valEl, ctx, out string valVar) || dummyBind.Length > 0)
+                        bool isBindingVal = valElemType is not null && InheritsFrom(valElemType, "System.Windows.Data.BindingBase");
+                        bool hasNestedNames = !isBindingVal && HasAnyNameAttributeInSubtree(valEl, ctx.XamlNs);
+                        if (hasNestedNames)
+                        {
+                            string nsVar = ctx.NextVar("__ns");
+                            string curVar = ctx.NextVar("__cur");
+                            sb.Append(fefVar).AppendLine(".AddPostInstantiateAction(__feObj =>");
+                            sb.AppendLine("{");
+                            sb.Append("global::System.Windows.Markup.INameScope? ").Append(nsVar).AppendLine(" = null;");
+                            sb.Append("for (global::System.Windows.DependencyObject? ").Append(curVar).Append(" = __feObj; ").Append(curVar)
+                              .Append(" != null; ").Append(curVar).Append(" = global::System.Windows.Media.VisualTreeHelper.GetParent(").Append(curVar)
+                              .Append(") ?? global::System.Windows.LogicalTreeHelper.GetParent(").Append(curVar).AppendLine("))");
+                            sb.AppendLine("{");
+                            sb.Append(nsVar).Append(" = global::System.Windows.NameScope.GetNameScope(").Append(curVar).AppendLine(");");
+                            sb.Append("if (").Append(nsVar).AppendLine(" != null) break;");
+                            sb.AppendLine("}");
+                            string? prevInstNs = ctx.PerInstanceNameScopeExpr;
+                            ctx.PerInstanceNameScopeExpr = nsVar;
+                            bool ok = TryEmitAnyValueElement(sb, dummyBind, valEl, ctx, out string valVar) && dummyBind.Length == 0;
+                            ctx.PerInstanceNameScopeExpr = prevInstNs;
+                            if (!ok)
+                            {
+                                return ctx.Fail($"FEF prop element '{childLocal}' val '{valEl.Name.LocalName}' failed");
+                            }
+                            sb.Append("((global::System.Windows.DependencyObject)__feObj).SetValue(").Append(dpExpr).Append(", ").Append(valVar).AppendLine(");");
+                            sb.AppendLine("});");
+                            continue;
+                        }
+                        if (!TryEmitAnyValueElement(sb, dummyBind, valEl, ctx, out string valVar2) || dummyBind.Length > 0)
                         {
                             return ctx.Fail($"FEF prop element '{childLocal}' val '{valEl.Name.LocalName}' failed");
                         }
-                        if (valElemType is not null && InheritsFrom(valElemType, "System.Windows.Data.BindingBase"))
+                        if (isBindingVal)
                         {
-                            sb.Append(fefVar).Append(".SetBinding(").Append(dpExpr).Append(", ").Append(valVar).AppendLine(");");
+                            sb.Append(fefVar).Append(".SetBinding(").Append(dpExpr).Append(", ").Append(valVar2).AppendLine(");");
                         }
                         else if (valElemType is not null && (InheritsFrom(valElemType, "System.Windows.Media.Visual") || InheritsFrom(valElemType, "System.Windows.ContentElement")))
                         {
                             sb.Append(fefVar).Append(".AddPostInstantiateAction(__feObj => ((global::System.Windows.DependencyObject)__feObj).SetValue(")
-                              .Append(dpExpr).Append(", ").Append(valVar).AppendLine("));");
+                              .Append(dpExpr).Append(", ").Append(valVar2).AppendLine("));");
                         }
                         else
                         {
-                            sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", ").Append(valVar).AppendLine(");");
+                            sb.Append(fefVar).Append(".SetValue(").Append(dpExpr).Append(", ").Append(valVar2).AppendLine(");");
                         }
                         continue;
                     }

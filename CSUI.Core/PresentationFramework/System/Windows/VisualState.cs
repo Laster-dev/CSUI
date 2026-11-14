@@ -58,5 +58,11 @@ namespace System.Windows
         }
 
         internal override bool HasMultipleInheritanceContexts => _hasMultipleInheritanceContexts;
+
+        internal override void OnInheritanceContextChangedCore(EventArgs args)
+        {
+            base.OnInheritanceContextChangedCore(args);
+            Storyboard?.OnInheritanceContextChanged(args);
+        }
     }
 }

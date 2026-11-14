@@ -92,7 +92,8 @@ namespace Microsoft.Web.WebView2.Wpf
                 _controller = await env.CreateCoreWebView2ControllerAsync(_hostHwnd);
                 _controller.DefaultBackgroundColor = DefaultBackgroundColor;
                 _controller.ZoomFactor = ZoomFactor;
-                UpdateControllerBounds(RenderSize);
+                UpdateWindowPos();
+                UpdateControllerBounds(_lastControllerBounds);
 
                 _coreWebView2 = _controller.CoreWebView2;
                 _coreWebView2.NavigationStarting += (s, e) => NavigationStarting?.Invoke(this, e);
@@ -185,22 +186,27 @@ namespace Microsoft.Web.WebView2.Wpf
             DisposeCore();
         }
 
+        private Rect _lastControllerBounds;
+
         protected override void OnWindowPositionChanged(Rect rcBoundingBox)
         {
             base.OnWindowPositionChanged(rcBoundingBox);
-            UpdateControllerBounds(rcBoundingBox.Size);
+            UpdateControllerBounds(rcBoundingBox);
         }
 
-        private void UpdateControllerBounds(System.Windows.Size size)
+        private void UpdateControllerBounds(Rect bounds)
         {
+            _lastControllerBounds = bounds;
             if (_controller == null)
             {
                 return;
             }
 
-            int w = Math.Max(0, (int)Math.Round(size.Width));
-            int h = Math.Max(0, (int)Math.Round(size.Height));
-            _controller.Bounds = new Rectangle(0, 0, w, h);
+            int x = (int)Math.Round(bounds.X);
+            int y = (int)Math.Round(bounds.Y);
+            int w = Math.Max(0, (int)Math.Round(bounds.Width));
+            int h = Math.Max(0, (int)Math.Round(bounds.Height));
+            _controller.Bounds = new Rectangle(x, y, w, h);
         }
 
         private void DisposeCore()

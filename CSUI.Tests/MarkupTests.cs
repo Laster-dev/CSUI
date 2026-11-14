@@ -44,6 +44,7 @@ internal static class MarkupTests
         TestModernGestureEngineAndPinchPan();
         TestPerMonitorV2DpiHotPlug();
         TestXamlMarkupExtensionsAndResourceFeatures();
+        TestControlTemplateNamedTransformAndVsmCompact();
     }
 
     public sealed class MarkupCard : Decorator
@@ -1746,6 +1747,326 @@ internal static class MarkupTests
 
     private static void TestXamlMarkupExtensionsAndResourceFeatures()
         => MarkupTestsExtensionHelper.RunMarkupExtensionsTest(Pass, Assert);
+
+    private static void TestControlTemplateNamedTransformAndVsmCompact()
+    {
+        var view = new ZeroModWpfView();
+        view.Measure(new Size(800, 600));
+        view.Arrange(new Rect(0, 0, 800, 600));
+
+        var scaleBtn = view.FindName("ScaleTransformBtn") as Button;
+        Assert(scaleBtn != null, "ScaleTransformBtn found in ZeroModWpfView");
+        Assert(scaleBtn!.ApplyTemplate() || scaleBtn.Template != null, "ScaleTransformBtn template applied");
+
+        var iconScale = scaleBtn.Template?.FindName("IconScaleTransform", scaleBtn) as ScaleTransform;
+        Assert(iconScale != null, "IconScaleTransform registered in ControlTemplate NameScope");
+
+        var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+        {
+            RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent,
+            Source = scaleBtn
+        };
+        scaleBtn.RaiseEvent(args);
+
+        var vsmCtrl = view.FindName("VsmCompactCtrl") as Control;
+        Assert(vsmCtrl != null, "VsmCompactCtrl found in ZeroModWpfView");
+        Assert(vsmCtrl!.ApplyTemplate() || vsmCtrl.Template != null, "VsmCompactCtrl template applied");
+
+        var paneGrid = vsmCtrl.Template?.FindName("PaneGrid", vsmCtrl) as Grid;
+        var searchPresenter = vsmCtrl.Template?.FindName("SearchPresenter", vsmCtrl) as ContentPresenter;
+        Assert(paneGrid != null && searchPresenter != null, "VsmCompactCtrl template parts found");
+
+        bool wentInitOpen = VisualStateManager.GoToState(vsmCtrl, "PaneOpen", true);
+        Assert(wentInitOpen, "Initial VisualStateManager.GoToState(PaneOpen) returned true");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 250)
+        {
+            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+            System.Threading.Thread.Sleep(15);
+        }
+        Assert(Math.Abs(paneGrid!.Width - 240.0) < 1.0, $"Initial PaneOpen animated PaneGrid.Width to 240 (got {paneGrid.Width})");
+
+        bool went = VisualStateManager.GoToState(vsmCtrl, "PaneCompact", true);
+        Assert(went, "VisualStateManager.GoToState(PaneCompact) returned true");
+
+        // Pump dispatcher for ~250ms so 50ms animations and BeginTime=50ms keyframe complete
+        sw.Restart();
+        while (sw.ElapsedMilliseconds < 250)
+        {
+            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+            System.Threading.Thread.Sleep(15);
+        }
+
+        Assert(Math.Abs(paneGrid!.Width - 40.0) < 1.0, $"PaneCompact animated PaneGrid.Width to 40 (got {paneGrid.Width})");
+        Assert(searchPresenter!.Opacity < 0.05, $"PaneCompact animated SearchPresenter.Opacity to 0 (got {searchPresenter.Opacity})");
+        Assert(searchPresenter.Visibility == Visibility.Hidden, $"PaneCompact hid SearchPresenter (got {searchPresenter.Visibility})");
+
+        bool wentOpen = VisualStateManager.GoToState(vsmCtrl, "PaneOpen", true);
+        Assert(wentOpen, "VisualStateManager.GoToState(PaneOpen) returned true");
+        sw.Restart();
+        while (sw.ElapsedMilliseconds < 250)
+        {
+            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+            System.Threading.Thread.Sleep(15);
+        }
+        Assert(Math.Abs(paneGrid.Width - 240.0) < 1.0, $"PaneOpen animated PaneGrid.Width via TemplatedParent binding to 240 (got {paneGrid.Width})");
+        Assert(searchPresenter.Visibility == Visibility.Visible, $"PaneOpen restored SearchPresenter Visibility (got {searchPresenter.Visibility})");
+
+        // Verify NavigationView-like compiled ControlTemplate (outer Grid with VSM, child PaneGrid with Width={TemplateBinding Tag}, PART_ToggleButton Click)
+        var navCtrl = view.FindName("NavLikeCtrl") as Control;
+        Assert(navCtrl != null, "NavLikeCtrl found in ZeroModWpfView");
+        navCtrl!.Tag = 310.0;
+        Assert(navCtrl.ApplyTemplate() || navCtrl.Template != null, "NavLikeCtrl template applied");
+        var navPaneGrid = navCtrl.Template!.FindName("PaneGrid", navCtrl) as Grid;
+        var navToggleBtn = navCtrl.Template.FindName("PART_ToggleButton", navCtrl) as Button;
+        Assert(navPaneGrid != null && navToggleBtn != null, "NavigationView-like template parts found");
+        bool navIsOpen = true;
+        navToggleBtn!.Click += (_, _) =>
+        {
+            navIsOpen = !navIsOpen;
+            VisualStateManager.GoToState(navCtrl, navIsOpen ? "PaneOpen" : "PaneCompact", true);
+        };
+        Assert(VisualStateManager.GoToState(navCtrl, "PaneOpen", true), "Nav-like initial PaneOpen returned true");
+        navIsOpen = false;
+        Assert(VisualStateManager.GoToState(navCtrl, "PaneCompact", true), "Nav-like PaneCompact returned true");
+        sw.Restart();
+        while (sw.ElapsedMilliseconds < 250)
+        {
+            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+            System.Threading.Thread.Sleep(15);
+        }
+        Assert(Math.Abs(navPaneGrid!.Width - 40.0) < 1.0, $"Nav-like PaneCompact animated PaneGrid.Width to 40 (got {navPaneGrid.Width})");
+        navToggleBtn.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, navToggleBtn));
+        sw.Restart();
+        while (sw.ElapsedMilliseconds < 250)
+        {
+            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+            System.Threading.Thread.Sleep(15);
+        }
+        Assert(Math.Abs(navPaneGrid.Width - 310.0) < 1.0, $"Nav-like PART_ToggleButton Click expanded PaneGrid.Width to 310 (got {navPaneGrid.Width})");
+
+        // Verify TextBlock TextAlignment.Center with TextWrapping.NoWrap centers inside [0, Width] instead of around x=0
+        var centeredTb = new TextBlock
+        {
+            Text = "X",
+            FontSize = 48,
+            Foreground = Brushes.White,
+            Background = Brushes.Black,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.NoWrap,
+            Width = 200,
+            Height = 80
+        };
+        centeredTb.Measure(new Size(200, 80));
+        centeredTb.Arrange(new Rect(0, 0, 200, 80));
+        var tbBmp = new System.Windows.Media.Imaging.RenderTargetBitmap(200, 80, 96, 96, PixelFormats.Pbgra32);
+        tbBmp.Render(centeredTb);
+        byte[] tbPx = new byte[200 * 80 * 4];
+        tbBmp.CopyPixels(tbPx, 200 * 4, 0);
+        int minLitX = 200, maxLitX = -1;
+        for (int y = 0; y < 80; y++)
+        {
+            for (int x = 0; x < 200; x++)
+            {
+                int idx = (y * 200 + x) * 4;
+                if (tbPx[idx] > 128 && tbPx[idx + 1] > 128 && tbPx[idx + 2] > 128)
+                {
+                    if (x < minLitX) minLitX = x;
+                    if (x > maxLitX) maxLitX = x;
+                }
+            }
+        }
+        Assert(minLitX > 50 && maxLitX < 150, $"Centered NoWrap TextBlock drew glyph near center (minX={minLitX}, maxX={maxLitX})");
+
+        // Verify HwndHost transforms bounding box to ancestor HwndSource client coordinates (not hardcoded 0,0)
+        var hostWin = new Window { Width = 400, Height = 300, ShowInTaskbar = false, WindowStyle = WindowStyle.None, AllowsTransparency = false };
+        var probeHost = new ProbeHwndHost { Margin = new Thickness(120, 80, 0, 0), Width = 100, Height = 60, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        hostWin.Content = probeHost;
+        hostWin.Show();
+        Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Loaded, new Action(() => { }));
+        Rect lastHostRect = probeHost.LastRect;
+        hostWin.Close();
+        Assert(lastHostRect.X >= 100 && lastHostRect.Y >= 60, $"HwndHost OnWindowPositionChanged received non-zero ancestor-relative coords ({lastHostRect})");
+
+        // Verify FluentSystemIcons FontSize=100 in StackPanel renders within [0, Width] without negative-X left clipping
+        var iconFont = new FontFamily("file:///D:/CSUI/ExternalWpfUiDemo/src/Wpf.Ui/Resources/Fonts/#FluentSystemIcons-Regular");
+        var iconTb = new TextBlock
+        {
+            Text = "\uE001",
+            FontFamily = iconFont,
+            FontSize = 100,
+            Foreground = Brushes.White,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextAlignment = TextAlignment.Center
+        };
+        var titleTb = new TextBlock
+        {
+            Text = "Dialogs & flyouts",
+            FontSize = 28,
+            Foreground = Brushes.White,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        var bannerStack = new StackPanel { Background = Brushes.Black };
+        bannerStack.Children.Add(iconTb);
+        bannerStack.Children.Add(titleTb);
+        bannerStack.Measure(new Size(400, 200));
+        bannerStack.Arrange(new Rect(0, 0, bannerStack.DesiredSize.Width, bannerStack.DesiredSize.Height));
+        int bw = Math.Max(1, (int)Math.Ceiling(bannerStack.RenderSize.Width));
+        int bh = Math.Max(1, (int)Math.Ceiling(bannerStack.RenderSize.Height));
+        var iconBmp = new System.Windows.Media.Imaging.RenderTargetBitmap(bw, bh, 96, 96, PixelFormats.Pbgra32);
+        iconBmp.Render(bannerStack);
+        byte[] iconPx = new byte[bw * bh * 4];
+        iconBmp.CopyPixels(iconPx, bw * 4, 0);
+        int iconMinX = bw, iconMaxX = -1;
+        int iconScanH = Math.Min(bh, (int)Math.Ceiling(iconTb.RenderSize.Height));
+        for (int y = 0; y < iconScanH; y++)
+        {
+            for (int x = 0; x < bw; x++)
+            {
+                int idx = (y * bw + x) * 4;
+                if (iconPx[idx] > 128 && iconPx[idx + 1] > 128 && iconPx[idx + 2] > 128)
+                {
+                    if (x < iconMinX) iconMinX = x;
+                    if (x > iconMaxX) iconMaxX = x;
+                }
+            }
+        }
+        Assert(iconMinX > 20 && iconMaxX < bw, $"Banner StackPanel FontSize=100 icon did not clip left (litX=[{iconMinX},{iconMaxX}], bw={bw})");
+
+        // Verify NoWrap centered TextBlock with RenderSize.Width < textW does not shift negative X
+        var narrowTb = new TextBlock
+        {
+            Text = "\uE001",
+            FontFamily = iconFont,
+            FontSize = 100,
+            Foreground = Brushes.White,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.NoWrap,
+            Width = 40,
+            Height = 110
+        };
+        narrowTb.Measure(new Size(40, 110));
+        narrowTb.Arrange(new Rect(0, 0, 40, 110));
+        var narrowDraw = VisualTreeHelper.GetDrawing(narrowTb);
+        Assert(narrowDraw == null || narrowDraw.Bounds.X >= -10, $"Narrow centered NoWrap TextBlock did not shift far left (drawBounds={narrowDraw?.Bounds})");
+
+        // Test IconElement-style VisualChild Grid + TextBlock when Text changes from "" to "\uE001" after initial layout
+        var delayedIcon = new DiagIconHost(iconFont) { FontSize = 100, HorizontalAlignment = HorizontalAlignment.Left };
+        var delayedStack = new StackPanel { Background = Brushes.Black };
+        delayedStack.Children.Add(delayedIcon);
+        delayedStack.Children.Add(new TextBlock { Text = "Date & time", FontSize = 28, Foreground = Brushes.White });
+        delayedStack.Measure(new Size(400, 200));
+        delayedStack.Arrange(new Rect(0, 0, 400, 200));
+        delayedIcon.SetGlyph("\uE001");
+        delayedStack.UpdateLayout();
+        var delayedBmp = new System.Windows.Media.Imaging.RenderTargetBitmap(400, 200, 96, 96, PixelFormats.Pbgra32);
+        delayedBmp.Render(delayedStack);
+        byte[] delayedPx = new byte[400 * 200 * 4];
+        delayedBmp.CopyPixels(delayedPx, 400 * 4, 0);
+        int dMinX = 400, dMaxX = -1;
+        for (int y = 0; y < 110; y++)
+        {
+            for (int x = 0; x < 400; x++)
+            {
+                int idx = (y * 400 + x) * 4;
+                if (delayedPx[idx] > 128 && delayedPx[idx + 1] > 128 && delayedPx[idx + 2] > 128)
+                {
+                    if (x < dMinX) dMinX = x;
+                    if (x > dMaxX) dMaxX = x;
+                }
+            }
+        }
+        Assert(dMinX >= 0 && dMaxX > dMinX, $"Delayed IconElement glyph rendered without negative-X clipping (litX=[{dMinX},{dMaxX}])");
+
+        // Verify HwndHost returning hwndParent (WebView2 pattern) does not move/resize the host Window
+        var parentRetWin = new Window { Left = 150, Top = 120, Width = 420, Height = 320, ShowInTaskbar = false, WindowStyle = WindowStyle.None, AllowsTransparency = false };
+        var parentRetHost = new ParentReturnHwndHost { Margin = new Thickness(90, 70, 0, 0), Width = 180, Height = 120, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        parentRetWin.Content = parentRetHost;
+        parentRetWin.Show();
+        Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Loaded, new Action(() => { }));
+        double winWAfter = parentRetWin.ActualWidth;
+        double winHAfter = parentRetWin.ActualHeight;
+        Rect parentRetRect = parentRetHost.LastRect;
+        parentRetWin.Close();
+        Assert(Math.Abs(winWAfter - 420) < 2 && Math.Abs(winHAfter - 320) < 2, $"HwndHost returning hwndParent did not resize host Window ({winWAfter}x{winHAfter})");
+        Assert(parentRetRect.X >= 80 && parentRetRect.Y >= 60, $"HwndHost returning hwndParent still reported container-relative bounds ({parentRetRect})");
+
+        Pass("MK-9. ControlTemplate Non-FE x:Name, VSM PaneOpen/Compact, Centered NoWrap TextBlock & HwndHost Positioning",
+            $"iconScaleOK=True, openW={paneGrid.Width:F1}, tbX=[{minLitX},{maxLitX}], hwndPos=({lastHostRect.X:F0},{lastHostRect.Y:F0})");
+    }
+
+    private sealed class ParentReturnHwndHost : HwndHost
+    {
+        public Rect LastRect { get; private set; }
+
+        protected override System.Runtime.InteropServices.HandleRef BuildWindowCore(System.Runtime.InteropServices.HandleRef hwndParent)
+            => hwndParent;
+
+        protected override void DestroyWindowCore(System.Runtime.InteropServices.HandleRef hwnd) { }
+
+        protected override void OnWindowPositionChanged(Rect rcBoundingBox)
+        {
+            LastRect = rcBoundingBox;
+            base.OnWindowPositionChanged(rcBoundingBox);
+        }
+    }
+
+    private sealed class ProbeHwndHost : HwndHost
+    {
+        public Rect LastRect { get; private set; }
+
+        protected override System.Runtime.InteropServices.HandleRef BuildWindowCore(System.Runtime.InteropServices.HandleRef hwndParent)
+            => new System.Runtime.InteropServices.HandleRef(this, new IntPtr(1));
+
+        protected override void DestroyWindowCore(System.Runtime.InteropServices.HandleRef hwnd) { }
+
+        protected override void OnWindowPositionChanged(Rect rcBoundingBox)
+        {
+            LastRect = rcBoundingBox;
+            base.OnWindowPositionChanged(rcBoundingBox);
+        }
+    }
+
+    private sealed class DiagIconHost : FrameworkElement
+    {
+        private readonly Grid _root;
+        public TextBlock InnerTextBlock { get; }
+        public double FontSize { get => InnerTextBlock.FontSize; set => InnerTextBlock.FontSize = value; }
+
+        public DiagIconHost(FontFamily ff)
+        {
+            InnerTextBlock = new TextBlock
+            {
+                Style = null,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                FontFamily = ff,
+                FontSize = 16,
+                Foreground = Brushes.White,
+                Text = string.Empty
+            };
+            _root = new Grid { Background = Brushes.Transparent, SnapsToDevicePixels = true };
+            _root.Children.Add(InnerTextBlock);
+            AddVisualChild(_root);
+        }
+
+        public void SetGlyph(string g) => InnerTextBlock.SetCurrentValue(TextBlock.TextProperty, g);
+
+        protected override int VisualChildrenCount => 1;
+        protected override Visual GetVisualChild(int index) => _root;
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            _root.Measure(availableSize);
+            return _root.DesiredSize;
+        }
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            _root.Arrange(new Rect(default, finalSize));
+            return finalSize;
+        }
+    }
 }
 
 [AotBindable]

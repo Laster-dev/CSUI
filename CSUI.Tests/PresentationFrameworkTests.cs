@@ -21,6 +21,7 @@ internal static class PresentationFrameworkTests
         TestAotReflectionFreeDataBinding();
         TestContentAndItemsControlsWithCollectionView();
         TestScrollViewerAndVirtualizingPanelHookup();
+        TestGridStarSpanningScrollViewerVirtualizingPanel();
     }
 
     private sealed class HorizontalStackTestPanel : Panel
@@ -385,5 +386,121 @@ internal static class PresentationFrameworkTests
 
         Pass("PF-6. ScrollViewer & ItemsPresenter Virtualizing IScrollInfo Delegation",
             $"isScrollHost={sv is MS.Internal.Controls.IScrollHost}, measuredHeight={panel.LastMeasuredAvailableSize.Height}");
+    }
+
+    private sealed class WrapPanelProbe : Panel, IScrollInfo
+    {
+        public int MeasureCallCount { get; private set; }
+        public bool SawInfiniteWidth { get; private set; }
+        public Size LastAvailableSize { get; private set; }
+
+        public bool CanVerticallyScroll { get; set; }
+        public bool CanHorizontallyScroll { get; set; }
+        public double ExtentWidth { get; private set; }
+        public double ExtentHeight { get; private set; }
+        public double ViewportWidth { get; private set; }
+        public double ViewportHeight { get; private set; }
+        public double HorizontalOffset { get; private set; }
+        public double VerticalOffset { get; private set; }
+        public ScrollViewer? ScrollOwner { get; set; }
+
+        public void LineUp() { }
+        public void LineDown() { }
+        public void LineLeft() { }
+        public void LineRight() { }
+        public void PageUp() { }
+        public void PageDown() { }
+        public void PageLeft() { }
+        public void PageRight() { }
+        public void MouseWheelUp() { }
+        public void MouseWheelDown() { }
+        public void MouseWheelLeft() { }
+        public void MouseWheelRight() { }
+        public void SetHorizontalOffset(double offset) { HorizontalOffset = offset; }
+        public void SetVerticalOffset(double offset) { VerticalOffset = offset; }
+        public Rect MakeVisible(Visual visual, Rect rectangle) => rectangle;
+
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            MeasureCallCount++;
+            LastAvailableSize = availableSize;
+            if (double.IsInfinity(availableSize.Width))
+            {
+                SawInfiniteWidth = true;
+                ExtentWidth = 370320;
+                ExtentHeight = 80;
+                return new Size(370320, 80);
+            }
+
+            double w = availableSize.Width;
+            ViewportWidth = w;
+            ViewportHeight = double.IsInfinity(availableSize.Height) ? 600 : availableSize.Height;
+            ExtentWidth = w;
+            ExtentHeight = 3000;
+            ScrollOwner?.InvalidateScrollInfo();
+            return new Size(w, Math.Min(ViewportHeight, ExtentHeight));
+        }
+
+        protected override Size ArrangeOverride(Size finalSize) => finalSize;
+    }
+
+    // PF-7: Grid Star + Spanning ScrollViewer VirtualizingWrapPanel Finite-Width Measure
+    private static void TestGridStarSpanningScrollViewerVirtualizingPanel()
+    {
+        var probe = new WrapPanelProbe();
+        var sv = new ScrollViewer
+        {
+            CanContentScroll = true,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = probe
+        };
+
+        // Replicate Wpf.Ui ScrollViewer.xaml structure: Grid (*, Auto) with <Grid RowSpan=2 ColumnSpan=2><ScrollContentPresenter/></Grid>
+        var innerSpanGrid = new Grid();
+        Grid.SetRow(innerSpanGrid, 0);
+        Grid.SetRowSpan(innerSpanGrid, 2);
+        Grid.SetColumn(innerSpanGrid, 0);
+        Grid.SetColumnSpan(innerSpanGrid, 2);
+        var scp = new ScrollContentPresenter { CanContentScroll = true, Content = probe };
+        sv.Content = null;
+        innerSpanGrid.Children.Add(scp);
+
+        var svGrid = new Grid();
+        svGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        svGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        svGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        svGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        svGrid.Children.Add(innerSpanGrid);
+
+        var vScrollBar = new ScrollBar { Orientation = Orientation.Vertical, Width = 12 };
+        Grid.SetRow(vScrollBar, 0);
+        Grid.SetColumn(vScrollBar, 1);
+        svGrid.Children.Add(vScrollBar);
+
+        var outerGrid = new Grid();
+        outerGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        outerGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        outerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        outerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200, GridUnitType.Pixel) });
+
+        var header = new Border { Height = 50 };
+        Grid.SetRow(header, 0);
+        Grid.SetColumnSpan(header, 2);
+        outerGrid.Children.Add(header);
+
+        Grid.SetRow(svGrid, 1);
+        Grid.SetColumn(svGrid, 0);
+        outerGrid.Children.Add(svGrid);
+
+        outerGrid.Measure(new Size(800, 600));
+        outerGrid.Arrange(new Rect(0, 0, 800, 600));
+
+        Assert(!probe.SawInfiniteWidth, "Virtualizing panel inside Star Grid + spanning ScrollViewer Grid must NEVER be measured with Infinite width");
+        AssertEqual(probe.MeasureCallCount, 1, "Virtualizing panel inside Star Grid must be measured only once");
+        AssertEqual(probe.LastAvailableSize.Width, 600.0, "Virtualizing panel must receive exact resolved Star column width (800 - 200 = 600)");
+
+        Pass("PF-7. Grid Star + Spanning ScrollViewer VirtualizingWrapPanel Finite-Width Measure",
+            $"calls={probe.MeasureCallCount}, sawInfW={probe.SawInfiniteWidth}, width={probe.LastAvailableSize.Width}");
     }
 }

@@ -20,6 +20,78 @@
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
             </ControlTemplate>
+            <ControlTemplate x:Key="ScaleTransformBtnTpl" TargetType="Button">
+                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="8,4">
+                    <ContentPresenter x:Name="IconPresenter" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ContentPresenter.RenderTransform>
+                            <ScaleTransform x:Name="IconScaleTransform" ScaleX="1" ScaleY="1" />
+                        </ContentPresenter.RenderTransform>
+                    </ContentPresenter>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <EventTrigger RoutedEvent="PreviewMouseLeftButtonDown">
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="IconScaleTransform"
+                                                 Storyboard.TargetProperty="ScaleX"
+                                                 To="0.8"
+                                                 Duration="0:0:0.05" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+            <ControlTemplate x:Key="VsmCompactTpl" TargetType="Control">
+                <Grid x:Name="PaneGrid" Width="200">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup Name="PaneStates">
+                            <VisualState Name="PaneOpen">
+                                <Storyboard>
+                                    <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SearchPresenter" Storyboard.TargetProperty="Visibility">
+                                        <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{x:Static Visibility.Visible}" />
+                                    </ObjectAnimationUsingKeyFrames>
+                                    <DoubleAnimation Storyboard.TargetName="PaneGrid" Storyboard.TargetProperty="Width" From="40" To="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Duration="0:0:0.05" />
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState Name="PaneCompact">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="SearchPresenter" Storyboard.TargetProperty="Opacity" From="1" To="0" Duration="0:0:0.05" />
+                                    <DoubleAnimation Storyboard.TargetName="PaneGrid" Storyboard.TargetProperty="Width" From="200" To="40" Duration="0:0:0.05" />
+                                    <ObjectAnimationUsingKeyFrames BeginTime="0:0:0.05" Storyboard.TargetName="SearchPresenter" Storyboard.TargetProperty="Visibility">
+                                        <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{x:Static Visibility.Hidden}" />
+                                    </ObjectAnimationUsingKeyFrames>
+                                </Storyboard>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                    <ContentPresenter x:Name="SearchPresenter" Content="SearchBox" />
+                </Grid>
+            </ControlTemplate>
+            <ControlTemplate x:Key="NavLikeTpl" TargetType="Control">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid x:Name="PaneGrid" Grid.Column="0" Width="{TemplateBinding Tag}">
+                        <Button x:Name="PART_ToggleButton" Width="40" Height="40" HorizontalAlignment="Left" />
+                    </Grid>
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup Name="PaneStates">
+                            <VisualState Name="PaneOpen">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="PaneGrid" Storyboard.TargetProperty="Width" From="40" To="{TemplateBinding Tag}" Duration="0:0:0.05" />
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState Name="PaneCompact">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="PaneGrid" Storyboard.TargetProperty="Width" From="{TemplateBinding Tag}" To="40" Duration="0:0:0.05" />
+                                </Storyboard>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </Grid>
+            </ControlTemplate>
             <DataTemplate DataType="{x:Type local:ZeroModItem}">
                 <TextBlock Text="{Binding Label}" FontWeight="Bold" />
             </DataTemplate>
@@ -61,5 +133,13 @@
                 Template="{StaticResource ZeroModBtnTpl}"
                 Background="{StaticResource ZeroModAccent}"
                 Content="Execute" />
+        <Button Grid.Row="2" x:Name="ScaleTransformBtn"
+                Template="{StaticResource ScaleTransformBtnTpl}"
+                Content="Icon" />
+        <Control Grid.Row="2" x:Name="VsmCompactCtrl"
+                 Tag="240"
+                 Template="{StaticResource VsmCompactTpl}" />
+        <Control Grid.Row="2" x:Name="NavLikeCtrl"
+                 Template="{StaticResource NavLikeTpl}" />
     </Grid>
 </UserControl>

@@ -17,10 +17,13 @@ namespace System.Windows.Interop
     public abstract class HwndHost : FrameworkElement, IDisposable, IWin32Window, IKeyboardInputSink
     {
         private HandleRef _hwnd;
+        private IntPtr _parentHwnd;
         private List<HwndSourceHook> _hooks;
         private IKeyboardInputSite _keyboardInputSite;
         private bool _disposed;
         private bool _built;
+        private bool _layoutHooked;
+        private Rect _lastBoundingBox;
 
         public static readonly RoutedEvent DpiChangedEvent = Window.DpiChangedEvent.AddOwner(typeof(HwndHost));
 
@@ -32,6 +35,9 @@ namespace System.Windows.Interop
 
         protected HwndHost()
         {
+            Loaded += OnHostLoaded;
+            Unloaded += OnHostUnloaded;
+            IsVisibleChanged += OnHostIsVisibleChanged;
         }
 
         ~HwndHost()
@@ -63,7 +69,12 @@ namespace System.Windows.Interop
         {
             if (_hwnd.Handle != IntPtr.Zero)
             {
-                OnWindowPositionChanged(new Rect(new Point(0, 0), RenderSize));
+                Rect rc = ComputeBoundingBox(RenderSize);
+                if (rc != _lastBoundingBox)
+                {
+                    _lastBoundingBox = rc;
+                    OnWindowPositionChanged(rc);
+                }
             }
         }
 
@@ -72,6 +83,12 @@ namespace System.Windows.Interop
             if (_disposed)
             {
                 return;
+            }
+
+            if (_layoutHooked)
+            {
+                LayoutUpdated -= OnHostLayoutUpdated;
+                _layoutHooked = false;
             }
 
             if (disposing && _hwnd.Handle != IntPtr.Zero)
@@ -85,6 +102,17 @@ namespace System.Windows.Interop
 
         protected virtual void OnWindowPositionChanged(Rect rcBoundingBox)
         {
+            if (_hwnd.Handle != IntPtr.Zero && _hwnd.Handle != _parentHwnd)
+            {
+                Standard.NativeMethods.SetWindowPos(
+                    _hwnd.Handle,
+                    IntPtr.Zero,
+                    (int)Math.Round(rcBoundingBox.X),
+                    (int)Math.Round(rcBoundingBox.Y),
+                    Math.Max(0, (int)Math.Round(rcBoundingBox.Width)),
+                    Math.Max(0, (int)Math.Round(rcBoundingBox.Height)),
+                    Standard.SWP.NOZORDER | Standard.SWP.NOACTIVATE | Standard.SWP.ASYNCWINDOWPOS);
+            }
         }
 
         protected override Size MeasureOverride(Size constraint)
@@ -98,7 +126,12 @@ namespace System.Windows.Interop
         protected override Size ArrangeOverride(Size arrangeBounds)
         {
             EnsureBuilt();
-            OnWindowPositionChanged(new Rect(0, 0, arrangeBounds.Width, arrangeBounds.Height));
+            if (_hwnd.Handle != IntPtr.Zero)
+            {
+                Rect rc = ComputeBoundingBox(arrangeBounds);
+                _lastBoundingBox = rc;
+                OnWindowPositionChanged(rc);
+            }
             return arrangeBounds;
         }
 
@@ -149,8 +182,81 @@ namespace System.Windows.Interop
                 {
                     parent = hs.Handle;
                 }
+
+                _parentHwnd = parent;
                 _hwnd = BuildWindowCore(new HandleRef(this, parent));
+                if (!_layoutHooked)
+                {
+                    LayoutUpdated += OnHostLayoutUpdated;
+                    _layoutHooked = true;
+                }
             }
+        }
+
+        private void OnHostLoaded(object sender, RoutedEventArgs e)
+        {
+            EnsureBuilt();
+            UpdateWindowPos();
+        }
+
+        private void OnHostUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (_layoutHooked)
+            {
+                LayoutUpdated -= OnHostLayoutUpdated;
+                _layoutHooked = false;
+            }
+            if (_hwnd.Handle != IntPtr.Zero && _hwnd.Handle != _parentHwnd)
+            {
+                Standard.NativeMethods.ShowWindow(_hwnd.Handle, Standard.SW.HIDE);
+            }
+        }
+
+        private void OnHostIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (_hwnd.Handle != IntPtr.Zero)
+            {
+                if ((bool)e.NewValue)
+                {
+                    if (_hwnd.Handle != _parentHwnd)
+                    {
+                        Standard.NativeMethods.ShowWindow(_hwnd.Handle, Standard.SW.SHOWNA);
+                    }
+                    UpdateWindowPos();
+                }
+                else if (_hwnd.Handle != _parentHwnd)
+                {
+                    Standard.NativeMethods.ShowWindow(_hwnd.Handle, Standard.SW.HIDE);
+                }
+            }
+        }
+
+        private void OnHostLayoutUpdated(object sender, EventArgs e)
+        {
+            UpdateWindowPos();
+        }
+
+        private Rect ComputeBoundingBox(Size size)
+        {
+            Rect local = new Rect(0, 0, Math.Max(0.0, size.Width), Math.Max(0.0, size.Height));
+            if (PresentationSource.FromVisual(this) is HwndSource hs && hs.RootVisual != null)
+            {
+                try
+                {
+                    GeneralTransform gt = TransformToAncestor(hs.RootVisual);
+                    Rect clientDip = gt.TransformBounds(local);
+                    DpiScale dpi = VisualTreeHelper.GetDpi(this);
+                    return new Rect(
+                        clientDip.X * dpi.DpiScaleX,
+                        clientDip.Y * dpi.DpiScaleY,
+                        clientDip.Width * dpi.DpiScaleX,
+                        clientDip.Height * dpi.DpiScaleY);
+                }
+                catch
+                {
+                }
+            }
+            return local;
         }
 
         protected virtual bool TranslateAcceleratorCore(ref MSG msg, ModifierKeys modifiers) => false;
