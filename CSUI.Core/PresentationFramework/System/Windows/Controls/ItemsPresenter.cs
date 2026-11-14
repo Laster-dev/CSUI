@@ -282,13 +282,13 @@ namespace System.Windows.Controls
             // be updated to work with the new panel.
             //
 
-            MS.Internal.Controls.IScrollHost parent = Parent as MS.Internal.Controls.IScrollHost;
-            if (parent != null)
+            for (DependencyObject cur = VisualTreeHelper.GetParent(this); cur != null; cur = VisualTreeHelper.GetParent(cur))
             {
-                // If our logical parent is a ScrollViewer then the visual parent is a ScrollContentPresenter.
-                MS.Internal.Controls.IScrollContentPresenterHost scp = VisualTreeHelper.GetParent(this) as MS.Internal.Controls.IScrollContentPresenterHost;
-
-                scp?.HookupScrollingComponents();
+                if (cur is MS.Internal.Controls.IScrollContentPresenterHost scpHost)
+                {
+                    scpHost.HookupScrollingComponents();
+                    break;
+                }
             }
         }
 

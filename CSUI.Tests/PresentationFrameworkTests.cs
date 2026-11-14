@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
 using static CSUI.Tests.TestHelpers;
@@ -19,6 +20,7 @@ internal static class PresentationFrameworkTests
         TestStylesTriggersAndControlTemplate();
         TestAotReflectionFreeDataBinding();
         TestContentAndItemsControlsWithCollectionView();
+        TestScrollViewerAndVirtualizingPanelHookup();
     }
 
     private sealed class HorizontalStackTestPanel : Panel
@@ -287,5 +289,101 @@ internal static class PresentationFrameworkTests
 
         Pass("PF-5. HeaderedContentControl, ItemsControl & live CollectionView filtering",
             $"filteredCount={ic.Items.Count}");
+    }
+
+    private sealed class MockVirtualizingScrollInfoPanel : Panel, IScrollInfo
+    {
+        public bool CanVerticallyScroll { get; set; }
+        public bool CanHorizontallyScroll { get; set; }
+        public double ExtentWidth { get; set; } = 500;
+        public double ExtentHeight { get; set; } = 2000;
+        public double ViewportWidth { get; set; } = 300;
+        public double ViewportHeight { get; set; } = 400;
+        public double HorizontalOffset { get; set; }
+        public double VerticalOffset { get; set; }
+        public ScrollViewer? ScrollOwner { get; set; }
+
+        public Size LastMeasuredAvailableSize { get; private set; }
+
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            LastMeasuredAvailableSize = availableSize;
+            return new Size(
+                Math.Min(availableSize.Width, ExtentWidth),
+                Math.Min(availableSize.Height, ExtentHeight));
+        }
+
+        public void LineUp() => SetVerticalOffset(VerticalOffset - 16);
+        public void LineDown() => SetVerticalOffset(VerticalOffset + 16);
+        public void LineLeft() => SetHorizontalOffset(HorizontalOffset - 16);
+        public void LineRight() => SetHorizontalOffset(HorizontalOffset + 16);
+        public void PageUp() => SetVerticalOffset(VerticalOffset - ViewportHeight);
+        public void PageDown() => SetVerticalOffset(VerticalOffset + ViewportHeight);
+        public void PageLeft() => SetHorizontalOffset(HorizontalOffset - ViewportWidth);
+        public void PageRight() => SetHorizontalOffset(HorizontalOffset + ViewportWidth);
+        public void MouseWheelUp() => LineUp();
+        public void MouseWheelDown() => LineDown();
+        public void MouseWheelLeft() => LineLeft();
+        public void MouseWheelRight() => LineRight();
+        public void SetHorizontalOffset(double offset)
+        {
+            HorizontalOffset = Math.Max(0, Math.Min(offset, ExtentWidth - ViewportWidth));
+            ScrollOwner?.InvalidateScrollInfo();
+        }
+        public void SetVerticalOffset(double offset)
+        {
+            VerticalOffset = Math.Max(0, Math.Min(offset, ExtentHeight - ViewportHeight));
+            ScrollOwner?.InvalidateScrollInfo();
+        }
+        public Rect MakeVisible(Visual visual, Rect rectangle) => rectangle;
+    }
+
+    // PF-6: ScrollViewer & ItemsPresenter Virtualizing IScrollInfo Delegation
+    private static void TestScrollViewerAndVirtualizingPanelHookup()
+    {
+        var sv = new ScrollViewer
+        {
+            CanContentScroll = true,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+
+        // 1. Verify IScrollHost contract implementation
+        Assert(sv is MS.Internal.Controls.IScrollHost, "ScrollViewer must implement IScrollHost");
+        var scrollHost = (MS.Internal.Controls.IScrollHost)sv;
+        AssertEqual(scrollHost.AsFrameworkElement, sv, "IScrollHost.AsFrameworkElement must return ScrollViewer instance");
+
+        // 2. Direct IScrollInfo panel inside ScrollViewer
+        var panel = new MockVirtualizingScrollInfoPanel();
+        sv.Content = panel;
+
+        // Force template instantiation and layout
+        sv.ApplyTemplate();
+        sv.Measure(new Size(300, 400));
+        sv.Arrange(new Rect(0, 0, 300, 400));
+
+        AssertEqual(panel.ScrollOwner, sv, "Virtualizing panel ScrollOwner hooked up to ScrollViewer");
+        Assert(panel.CanVerticallyScroll, "Virtualizing panel CanVerticallyScroll is true");
+        Assert(panel.CanHorizontallyScroll, "Virtualizing panel CanHorizontallyScroll is true");
+        Assert(!double.IsInfinity(panel.LastMeasuredAvailableSize.Height) && panel.LastMeasuredAvailableSize.Height <= 400.0,
+            "Available height passed to virtualizing panel must be constrained finite viewport height, not infinity");
+        AssertEqual(panel.LastMeasuredAvailableSize.Height, 390.0, "Available height equals viewport height after subtracting horizontal scrollbar thickness");
+
+        // 3. ItemsControl with ItemsPresenter and MockVirtualizingScrollInfoPanel
+        var itemsControl = new ItemsControl();
+        var template = new ItemsPanelTemplate(FrameworkElementFactory.Create<MockVirtualizingScrollInfoPanel>());
+        itemsControl.ItemsPanel = template;
+
+        var svItems = new ScrollViewer
+        {
+            CanContentScroll = true,
+            Content = itemsControl
+        };
+        svItems.ApplyTemplate();
+        svItems.Measure(new Size(300, 400));
+        svItems.Arrange(new Rect(0, 0, 300, 400));
+
+        Pass("PF-6. ScrollViewer & ItemsPresenter Virtualizing IScrollInfo Delegation",
+            $"isScrollHost={sv is MS.Internal.Controls.IScrollHost}, measuredHeight={panel.LastMeasuredAvailableSize.Height}");
     }
 }

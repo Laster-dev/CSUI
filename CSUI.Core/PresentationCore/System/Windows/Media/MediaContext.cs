@@ -576,20 +576,23 @@ namespace System.Windows.Media
                     }
 
                     TimeSpan nextTick = _timeManager.GetNextTickNeeded();
+                    bool hasActiveAnimations = (Rendering != null) || (_timeManager.State == TimeState.Running && nextTick >= TimeSpan.Zero);
+
                     if ((_postRenderDuringRender || (_invokeOnRenderCallbacks != null && _invokeOnRenderCallbacks.Count > 0))
                         && resizedCompositionTarget == null)
                     {
                         scheduleImmediateRender = true;
                     }
-                    else if (nextTick >= TimeSpan.Zero && resizedCompositionTarget == null)
+                    else if (hasActiveAnimations && resizedCompositionTarget == null)
                     {
                         long framePeriod = _animationRenderRate > 0
                             ? TimeSpan.TicksPerSecond / _animationRenderRate
                             : TimeSpan.FromMilliseconds(16).Ticks;
-                        TimeSpan delay = nextTick.Ticks > framePeriod
-                            ? nextTick
-                            : TimeSpan.FromTicks(framePeriod);
-                        ScheduleNextRenderOp(delay);
+                        ScheduleNextRenderOp(TimeSpan.FromTicks(framePeriod));
+                    }
+                    else if (nextTick >= TimeSpan.Zero && resizedCompositionTarget == null)
+                    {
+                        ScheduleNextRenderOp(nextTick);
                     }
                     _postRenderDuringRender = false;
                 }
@@ -635,7 +638,7 @@ namespace System.Windows.Media
             TimeSpan nextTick = _timeManager.GetNextTickNeeded();
             if (nextTick >= TimeSpan.Zero)
             {
-                ScheduleNextRenderOp(nextTick);
+                ScheduleNextRenderOp(TimeSpan.Zero);
             }
         }
 

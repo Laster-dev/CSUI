@@ -21,6 +21,7 @@ internal static class PresentationCoreTests
         TestDirect2DBrushesGeometriesAndOpacityMask();
         TestDirectWriteFormattedTextAndGlyphRasterization();
         TestWicImagingWriteableCropAndPngRoundtrip();
+        TestDirect2DCombinedGeometryAndCombineModes();
     }
 
     // PC-1: 2D Visual Tree Bounds, Transform, Clip & Point/Geometry Hit-Testing
@@ -402,5 +403,47 @@ internal static class PresentationCoreTests
 
         Pass("PC-6. WIC WriteableBitmap, CroppedBitmap & PNG encode/decode lossless roundtrip",
             $"pngBytes={ms.Length}, left={leftSample}, right={rightSample}");
+    }
+
+    // PC-7: Direct2D CombinedGeometry & CombineWithGeometry Modes
+    private static void TestDirect2DCombinedGeometryAndCombineModes()
+    {
+        // 1. CombinedGeometry with null operand (AdornerLayer.UpdateElementAdorners scenario)
+        var rectGeom = new RectangleGeometry(new Rect(10, 20, 100, 50));
+        var combinedWithNull = new CombinedGeometry(GeometryCombineMode.Union, rectGeom, null);
+        Rect bounds = combinedWithNull.Bounds;
+        AssertNear(bounds.X, 10.0, 1e-4, "CombinedGeometry with null second operand bounds.X");
+        AssertNear(bounds.Y, 20.0, 1e-4, "CombinedGeometry with null second operand bounds.Y");
+        AssertNear(bounds.Width, 100.0, 1e-4, "CombinedGeometry with null second operand bounds.Width");
+        AssertNear(bounds.Height, 50.0, 1e-4, "CombinedGeometry with null second operand bounds.Height");
+
+        // 2. CombinedGeometry with null first operand
+        var combinedFirstNull = new CombinedGeometry(GeometryCombineMode.Union, null, rectGeom);
+        Rect bounds2 = combinedFirstNull.Bounds;
+        AssertNear(bounds2.Width, 100.0, 1e-4, "CombinedGeometry with null first operand bounds.Width");
+
+        // 3. Geometry.Combine modes with empty / null operand
+        var gUnion = Geometry.Combine(rectGeom, null, GeometryCombineMode.Union, null);
+        Assert(!gUnion.IsEmpty(), "Geometry.Combine Union with null operand should not be empty");
+        AssertNear(gUnion.Bounds.Width, 100.0, 1e-4, "Geometry.Combine Union bounds.Width");
+
+        var gIntersect = Geometry.Combine(rectGeom, null, GeometryCombineMode.Intersect, null);
+        Assert(gIntersect.IsEmpty(), "Geometry.Combine Intersect with null operand should be empty");
+
+        var gExclude = Geometry.Combine(rectGeom, null, GeometryCombineMode.Exclude, null);
+        Assert(!gExclude.IsEmpty(), "Geometry.Combine Exclude with null operand should preserve first operand");
+        AssertNear(gExclude.Bounds.Width, 100.0, 1e-4, "Geometry.Combine Exclude bounds.Width");
+
+        var gXor = Geometry.Combine(rectGeom, null, GeometryCombineMode.Xor, null);
+        Assert(!gXor.IsEmpty(), "Geometry.Combine Xor with null operand should preserve first operand");
+
+        // 4. Combine two non-empty geometries
+        var rectGeom2 = new RectangleGeometry(new Rect(50, 20, 100, 50));
+        var gCombined2 = Geometry.Combine(rectGeom, rectGeom2, GeometryCombineMode.Union, null);
+        Assert(!gCombined2.IsEmpty(), "Geometry.Combine Union of two rects");
+        AssertNear(gCombined2.Bounds.Width, 140.0, 1e-4, "Union bounds width (10..150)");
+
+        Pass("PC-7. Direct2D CombinedGeometry & CombineWithGeometry Modes (empty/null handling, D2DERR_WRONG_STATE prevention)",
+            $"bounds={bounds}, unionBounds={gCombined2.Bounds}");
     }
 }

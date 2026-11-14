@@ -420,6 +420,11 @@ namespace System.Windows.Controls
                 // The AdornerLayer is always the size of our surface, and does not contribute to our own size.
                 _adornerLayer.Measure(constraint);
 
+                if (IsScrollClient && CanContentScroll)
+                {
+                    HookupScrollingComponents();
+                }
+
                 if (!IsScrollClient)
                 {
                     desiredSize = base.MeasureOverride(constraint);
@@ -751,6 +756,8 @@ namespace System.Windows.Controls
                 if (si != null)
                 {
                     _scrollInfo = si;                   // At this point, we pass IsScrollClient if si == this.
+                    si.CanHorizontallyScroll = scrollContainer.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                    si.CanVerticallyScroll = scrollContainer.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
                     si.ScrollOwner = scrollContainer;
                     scrollContainer.ScrollInfo = si;
                 }

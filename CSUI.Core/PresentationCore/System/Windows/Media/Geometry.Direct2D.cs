@@ -502,17 +502,37 @@ namespace System.Windows.Media
             bool empty1 = geometry1 == null || geometry1.IsObviouslyEmpty();
             bool empty2 = geometry2 == null || geometry2.IsObviouslyEmpty();
 
-            if (mode == GeometryCombineMode.Intersect && (empty1 || empty2))
-            {
-                return new PathGeometry();
-            }
-            if (mode == GeometryCombineMode.Exclude && empty1)
-            {
-                return new PathGeometry();
-            }
             if (empty1 && empty2)
             {
                 return new PathGeometry();
+            }
+
+            if (empty1)
+            {
+                switch (mode)
+                {
+                    case GeometryCombineMode.Union:
+                    case GeometryCombineMode.Xor:
+                        return ApplyCombineTransform(geometry2!.GetAsPathGeometry(), transform);
+                    case GeometryCombineMode.Intersect:
+                    case GeometryCombineMode.Exclude:
+                    default:
+                        return new PathGeometry();
+                }
+            }
+
+            if (empty2)
+            {
+                switch (mode)
+                {
+                    case GeometryCombineMode.Union:
+                    case GeometryCombineMode.Xor:
+                    case GeometryCombineMode.Exclude:
+                        return ApplyCombineTransform(geometry1!.GetAsPathGeometry(), transform);
+                    case GeometryCombineMode.Intersect:
+                    default:
+                        return new PathGeometry();
+                }
             }
 
             DxSharedDevice device = MediaSystem.EnsureSharedDevice();
@@ -526,40 +546,98 @@ namespace System.Windows.Media
                 return new PathGeometry();
             }
 
-            PathGeometry result;
-            if (g1.IsNull || g2.IsNull)
+            if (g1.IsNull)
             {
-                // Empty placeholder PathGeometry for Direct2D CombineWithGeometry semantics
-                void* emptyPath = null;
-                int hrEmpty = ID2D1FactoryExVtbl.CreatePathGeometry(factory, &emptyPath);
-                HResult.ThrowIfFailed(hrEmpty, "ID2D1Factory.CreatePathGeometry");
-                using var emptyCom = new ComPtr<byte>((byte*)emptyPath);
-                void* lhs = g1.IsNull ? emptyPath : g1.Ptr;
-                void* rhs = g2.IsNull ? emptyPath : g2.Ptr;
-                float tolEmpty = ToD2DTolerance(tolerance, type, lhs);
-                result = ManagedD2DSimplifiedGeometrySink.ReadBack(nativeSink =>
-                    ID2D1GeometryVtbl.CombineWithGeometry(lhs, rhs, ToD2DCombineMode(mode), null, tolEmpty, (void*)nativeSink));
-            }
-            else
-            {
-                float tol = ToD2DTolerance(tolerance, type, g1.Ptr);
-                result = ManagedD2DSimplifiedGeometrySink.ReadBack(nativeSink =>
-                    ID2D1GeometryVtbl.CombineWithGeometry(g1.Ptr, g2.Ptr, ToD2DCombineMode(mode), null, tol, (void*)nativeSink));
+                switch (mode)
+                {
+                    case GeometryCombineMode.Union:
+                    case GeometryCombineMode.Xor:
+                        return ApplyCombineTransform(geometry2.GetAsPathGeometry(), transform);
+                    case GeometryCombineMode.Intersect:
+                    case GeometryCombineMode.Exclude:
+                    default:
+                        return new PathGeometry();
+                }
             }
 
-            if (transform != null && !transform.IsIdentity)
+            if (g2.IsNull)
             {
-                Matrix m = transform.Value;
-                PathFigureCollection transformedFigures = new PathFigureCollection();
-                PathFigureCollection src = result.Figures;
+                switch (mode)
+                {
+                    case GeometryCombineMode.Union:
+                    case GeometryCombineMode.Xor:
+                    case GeometryCombineMode.Exclude:
+                        return ApplyCombineTransform(geometry1.GetAsPathGeometry(), transform);
+                    case GeometryCombineMode.Intersect:
+                    default:
+                        return new PathGeometry();
+                }
+            }
+
+            float tol = ToD2DTolerance(tolerance, type, g1.Ptr);
+            PathGeometry result = ManagedD2DSimplifiedGeometrySink.ReadBack(nativeSink =>
+                ID2D1GeometryVtbl.CombineWithGeometry(g1.Ptr, g2.Ptr, ToD2DCombineMode(mode), null, tol, (void*)nativeSink));
+
+            return ApplyCombineTransform(result, transform);
+        }
+
+        private static PathGeometry ApplyCombineTransform(PathGeometry geometry, Transform transform)
+        {
+            if (geometry == null)
+            {
+                return new PathGeometry();
+            }
+
+            if (transform == null || transform.IsIdentity)
+            {
+                return geometry;
+            }
+
+            PathGeometry result = geometry.Clone();
+            Matrix m = transform.Value;
+            PathFigureCollection transformedFigures = new PathFigureCollection();
+            PathFigureCollection src = result.Figures;
+            if (src != null)
+            {
                 for (int i = 0; i < src.Count; i++)
                 {
                     transformedFigures.Add(src.Internal_GetItem(i).GetTransformedCopy(m));
                 }
-                result.Figures = transformedFigures;
             }
-
+            result.Figures = transformedFigures;
             return result;
+        }
+
+        internal static unsafe void* CreateClosedEmptyPathGeometry(void* d2dFactory)
+        {
+            if (d2dFactory == null) return null;
+            void* rawPath = null;
+            int hr = ID2D1FactoryExVtbl.CreatePathGeometry(d2dFactory, &rawPath);
+            HResult.ThrowIfFailed(hr, "ID2D1Factory.CreatePathGeometry");
+
+            try
+            {
+                void* sink = null;
+                hr = ID2D1PathGeometryVtbl.Open(rawPath, &sink);
+                HResult.ThrowIfFailed(hr, "ID2D1PathGeometry.Open");
+
+                try
+                {
+                    hr = ID2D1GeometrySinkVtbl.Close(sink);
+                    HResult.ThrowIfFailed(hr, "ID2D1GeometrySink.Close");
+                }
+                finally
+                {
+                    using var sinkCom = new ComPtr<byte>((byte*)sink);
+                }
+
+                return rawPath;
+            }
+            catch
+            {
+                using var pathCom = new ComPtr<byte>((byte*)rawPath);
+                throw;
+            }
         }
 
         internal static void GetPointAtFractionLength(

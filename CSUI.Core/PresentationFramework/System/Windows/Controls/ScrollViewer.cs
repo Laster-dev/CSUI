@@ -19,7 +19,7 @@ namespace System.Windows.Controls
     /// Features modern smooth physics inertia, full IScrollInfo virtualization delegation,
     /// and zero-allocation high-performance viewport management.
     /// </summary>
-    public partial class ScrollViewer : ContentControl
+    public partial class ScrollViewer : ContentControl, MS.Internal.Controls.IScrollHost
     {
         static partial void RegisterDefaultTheme();
         public static readonly DependencyProperty HorizontalScrollBarVisibilityProperty =
@@ -323,7 +323,19 @@ namespace System.Windows.Controls
         internal IScrollInfo ScrollInfo
         {
             get => _scrollInfo;
-            set => _scrollInfo = value;
+            set
+            {
+                _scrollInfo = value;
+                if (_scrollInfo != null)
+                {
+                    _scrollInfo.CanHorizontallyScroll = HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                    _scrollInfo.CanVerticallyScroll = VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                    if (_scrollInfo is ScrollContentPresenter scp)
+                    {
+                        _scrollContentPresenter = scp;
+                    }
+                }
+            }
         }
 
         // Chromium cc::ScrollOffsetAnimationCurve smooth scroll state
@@ -561,20 +573,54 @@ namespace System.Windows.Controls
             if (_templateHScrollBar != null) _templateHScrollBar.Scroll -= OnHScroll;
             if (_templateVScrollBar != null) _templateVScrollBar.Scroll -= OnVScroll;
 
-            _scrollContentPresenter = GetTemplateChild(ScrollContentPresenterTemplateName) as ScrollContentPresenter;
-            _templateHScrollBar = GetTemplateChild("PART_HorizontalScrollBar") as ScrollBar;
-            _templateVScrollBar = GetTemplateChild("PART_VerticalScrollBar") as ScrollBar;
+            _scrollContentPresenter = GetTemplateChild(ScrollContentPresenterTemplateName) as ScrollContentPresenter
+                ?? FindScrollContentPresenter(this);
+            _templateHScrollBar = (GetTemplateChild("PART_HorizontalScrollBar") as ScrollBar)
+                ?? FindScrollBar(this, Orientation.Horizontal);
+            _templateVScrollBar = (GetTemplateChild("PART_VerticalScrollBar") as ScrollBar)
+                ?? FindScrollBar(this, Orientation.Vertical);
 
             if (_templateHScrollBar != null) _templateHScrollBar.Scroll += OnHScroll;
             if (_templateVScrollBar != null) _templateVScrollBar.Scroll += OnVScroll;
 
             if (_scrollContentPresenter != null)
             {
-                _scrollInfo = _scrollContentPresenter;
+                if (_scrollInfo == null || _scrollInfo is ScrollContentPresenter)
+                {
+                    _scrollInfo = _scrollContentPresenter;
+                }
                 _scrollContentPresenter.ScrollOwner = this;
                 _scrollContentPresenter.CanHorizontallyScroll = HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
                 _scrollContentPresenter.CanVerticallyScroll = VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
             }
+        }
+
+        private static ScrollContentPresenter FindScrollContentPresenter(DependencyObject root)
+        {
+            if (root == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is ScrollContentPresenter scp) return scp;
+                ScrollContentPresenter found = FindScrollContentPresenter(child);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private static ScrollBar FindScrollBar(DependencyObject root, Orientation orientation)
+        {
+            if (root == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is ScrollBar sb && sb.Orientation == orientation) return sb;
+                ScrollBar found = FindScrollBar(child, orientation);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         private void OnScrollViewerUnloaded(object sender, RoutedEventArgs e)
@@ -735,10 +781,11 @@ namespace System.Windows.Controls
                     RemoveVisualChild(_directContentVisual);
                     _directContentVisual = null;
                 }
-                if (_scrollContentPresenter != null)
+                IScrollInfo currentSi = _scrollInfo ?? _scrollContentPresenter;
+                if (currentSi != null)
                 {
-                    _scrollContentPresenter.CanHorizontallyScroll = HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
-                    _scrollContentPresenter.CanVerticallyScroll = VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                    currentSi.CanHorizontallyScroll = HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                    currentSi.CanVerticallyScroll = VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
                 }
                 return base.MeasureOverride(constraint);
             }
@@ -761,8 +808,8 @@ namespace System.Windows.Controls
 
             // First pass: measure content
             Size contentConstraint = new Size(
-                canScrollH ? double.PositiveInfinity : availableW,
-                canScrollV ? double.PositiveInfinity : availableH);
+                (_scrollInfo == null && canScrollH) ? double.PositiveInfinity : availableW,
+                (_scrollInfo == null && canScrollV) ? double.PositiveInfinity : availableH);
 
             content?.Measure(contentConstraint);
 
@@ -792,11 +839,13 @@ namespace System.Windows.Controls
             }
 
             // Re-measure content if a scrollbar reduced the constrained dimension
-            if (content != null && ((!canScrollH && showV && !double.IsInfinity(vpW)) || (!canScrollV && showH && !double.IsInfinity(vpH))))
+            if (content != null && (
+                ((!canScrollH || _scrollInfo != null) && showV && !double.IsInfinity(vpW)) ||
+                ((!canScrollV || _scrollInfo != null) && showH && !double.IsInfinity(vpH))))
             {
                 Size refinedConstraint = new Size(
-                    canScrollH ? double.PositiveInfinity : vpW,
-                    canScrollV ? double.PositiveInfinity : vpH);
+                    (_scrollInfo == null && canScrollH) ? double.PositiveInfinity : vpW,
+                    (_scrollInfo == null && canScrollV) ? double.PositiveInfinity : vpH);
                 content.Measure(refinedConstraint);
                 contentDesired = content.DesiredSize;
                 extW = _scrollInfo != null ? _scrollInfo.ExtentWidth : contentDesired.Width;
@@ -1096,6 +1145,20 @@ namespace System.Windows.Controls
             base.OnMouseWheel(e);
             if (e.Handled) return;
 
+            if (CanContentScroll && _scrollInfo != null && !(_scrollInfo is ScrollContentPresenter))
+            {
+                if (e.Delta > 0)
+                {
+                    _scrollInfo.MouseWheelUp();
+                }
+                else
+                {
+                    _scrollInfo.MouseWheelDown();
+                }
+                e.Handled = true;
+                return;
+            }
+
             double delta = e.Delta;
             // Chromium Windows desktop wheel notch delta (~100 DIPs per 120 wheel units)
             double step = (delta / 120.0) * 100.0;
@@ -1195,5 +1258,10 @@ namespace System.Windows.Controls
                 MediaContext.From(Dispatcher)?.PostRender();
             }
         }
+
+        #region IScrollHost Implementation
+        FrameworkElement MS.Internal.Controls.IScrollHost.AsFrameworkElement => this;
+        FrameworkElement MS.Internal.Controls.IScrollHost.GetViewportContentHost() => _scrollContentPresenter;
+        #endregion
     }
 }
